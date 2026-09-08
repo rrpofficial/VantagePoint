@@ -16,6 +16,9 @@ export const SECTIONS = [
   // tracked by who owes it and what they have paid, which is a different shape
   // from a portfolio of instruments.
   'Loans',
+  // Also its own section: a chit is a monthly commitment with a term and a
+  // draw, tracked by instalments paid rather than by units held.
+  'Chits',
   'Import',
   'Snapshots',
   'Tax',

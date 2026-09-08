@@ -26,6 +26,7 @@ import type {
   AcquisitionLot,
   Asset,
   AssetClass,
+  ChitFund,
   CorporateAction,
   DualRate,
   ExitTransaction,
@@ -112,6 +113,34 @@ interface HandLoanRow {
   readonly interest_rate_pct: string;
   readonly interest_basis: string;
   readonly start_date: string;
+}
+
+interface ChitFundRow {
+  readonly asset_id: string;
+  readonly org: string;
+  readonly label: string;
+  readonly target_amount: string;
+  readonly currency: string;
+  readonly start_date: string;
+  readonly end_date: string;
+  readonly duration_months: number;
+  readonly emi_type: string;
+  readonly schedule_label: string | null;
+  readonly status: string;
+  readonly withdrawn_date: string | null;
+  readonly withdrawn_amount: string | null;
+  readonly comments: string | null;
+}
+
+interface ChitEmiRow {
+  readonly emi_id: string;
+  readonly asset_id: string;
+  readonly date: string;
+  readonly amount: string;
+  readonly currency: string;
+  readonly mode: string;
+  readonly paid_to: string;
+  readonly comments: string | null;
 }
 
 interface RepaymentRow {
@@ -223,6 +252,34 @@ function toCorporateAction(row: ActionRow): CorporateAction {
   };
 }
 
+function toChitFund(row: ChitFundRow, emis: readonly ChitEmiRow[]): ChitFund {
+  return {
+    assetId: row.asset_id,
+    org: row.org,
+    label: row.label,
+    targetAmount: money(row.target_amount, row.currency),
+    startDate: row.start_date,
+    endDate: row.end_date,
+    durationMonths: row.duration_months,
+    emiType: row.emi_type as ChitFund['emiType'],
+    status: row.status as ChitFund['status'],
+    ...(row.schedule_label === null ? {} : { scheduleLabel: row.schedule_label }),
+    ...(row.withdrawn_date === null ? {} : { withdrawnDate: row.withdrawn_date }),
+    ...(row.withdrawn_amount === null
+      ? {}
+      : { withdrawnAmount: money(row.withdrawn_amount, row.currency) }),
+    ...(row.comments === null ? {} : { comments: row.comments }),
+    emis: emis.map((emi) => ({
+      emiId: emi.emi_id,
+      date: emi.date,
+      amount: money(emi.amount, emi.currency),
+      mode: emi.mode as PaymentMode,
+      paidTo: emi.paid_to,
+      ...(emi.comments === null ? {} : { comments: emi.comments }),
+    })),
+  };
+}
+
 function toHandLoan(
   row: HandLoanRow,
   repayments: readonly RepaymentRow[],
@@ -282,6 +339,16 @@ function hydrate(row: AssetRow): Asset {
           )
           .all(row.asset_id) as InterestPaymentRow[]);
 
+  const chit = db.prepare('SELECT * FROM chit_funds WHERE asset_id = ?').get(row.asset_id) as
+    | ChitFundRow
+    | undefined;
+  const emis =
+    chit === undefined
+      ? []
+      : (db
+          .prepare('SELECT * FROM chit_emis WHERE asset_id = ? ORDER BY date, emi_id')
+          .all(row.asset_id) as ChitEmiRow[]);
+
   return {
     assetId: row.asset_id,
     assetClass: row.asset_class as AssetClass,
@@ -296,6 +363,7 @@ function hydrate(row: AssetRow): Asset {
     ...(row.liquidity === null ? {} : { liquidity: row.liquidity as Liquidity }),
     ...(row.position_closed === 1 ? { positionClosed: true } : {}),
     ...(loan === undefined ? {} : { handLoan: toHandLoan(loan, repayments, interestPayments) }),
+    ...(chit === undefined ? {} : { chitFund: toChitFund(chit, emis) }),
     ...(row.scheme_category === null
       ? {}
       : { schemeCategory: row.scheme_category as MfSchemeCategory }),
@@ -348,10 +416,12 @@ function writeAsset(asset: Asset): void {
     'corporate_actions',
     'hand_loan_repayments',
     'hand_loan_interest_payments',
+    'chit_emis',
   ]) {
     db.prepare(`DELETE FROM ${table} WHERE asset_id = ?`).run(asset.assetId);
   }
   db.prepare('DELETE FROM hand_loans WHERE asset_id = ?').run(asset.assetId);
+  db.prepare('DELETE FROM chit_funds WHERE asset_id = ?').run(asset.assetId);
 
   const insertLot = db.prepare(
     `INSERT INTO lots
@@ -476,6 +546,48 @@ function writeAsset(asset: Asset): void {
         payment.amount.currency,
         payment.mode,
         payment.notes ?? null,
+      );
+    }
+  }
+
+  if (asset.chitFund !== undefined) {
+    const chit = asset.chitFund;
+    db.prepare(
+      `INSERT INTO chit_funds
+         (asset_id, org, label, target_amount, currency, start_date, end_date, duration_months,
+          emi_type, schedule_label, status, withdrawn_date, withdrawn_amount, comments)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      asset.assetId,
+      chit.org,
+      chit.label,
+      chit.targetAmount.amount,
+      chit.targetAmount.currency,
+      chit.startDate,
+      chit.endDate,
+      chit.durationMonths,
+      chit.emiType,
+      chit.scheduleLabel ?? null,
+      chit.status,
+      chit.withdrawnDate ?? null,
+      chit.withdrawnAmount?.amount ?? null,
+      chit.comments ?? null,
+    );
+
+    const insertEmi = db.prepare(
+      `INSERT INTO chit_emis (emi_id, asset_id, date, amount, currency, mode, paid_to, comments)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    );
+    for (const instalment of chit.emis) {
+      insertEmi.run(
+        instalment.emiId,
+        asset.assetId,
+        instalment.date,
+        instalment.amount.amount,
+        instalment.amount.currency,
+        instalment.mode,
+        instalment.paidTo,
+        instalment.comments ?? null,
       );
     }
   }

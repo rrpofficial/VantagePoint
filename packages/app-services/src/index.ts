@@ -6,6 +6,7 @@
  */
 export {
   AuditUC,
+  ChitUC,
   CompareSnapshotsUC,
   ComputeAdvanceTaxUC,
   GenerateComplianceUC,
@@ -28,7 +29,11 @@ export {
   recordLogLine,
   clearApplicationLog,
   type CalendarYearOption,
+  type ChitQuery,
+  type EditChitInput,
   type FinancialYearOption,
+  type OpenChitInput,
+  type RecordChitEmiInput,
   type DuplicateLoanMatch,
   type GenerateComplianceUCOps,
   type LoanQuery,

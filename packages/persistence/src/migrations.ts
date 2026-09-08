@@ -252,6 +252,72 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_hand_loan_audit_time ON hand_loan_audit(recorded_at);
     `,
   },
+  {
+    version: 7,
+    name: 'chit-fund-register',
+    up: `
+      -- A chit is a commitment to an instalment every month for a fixed term.
+      --
+      -- target_amount is the chit's FACE value — what the pot pays out — and is
+      -- deliberately NOT what the asset is worth. A chit is carried at what has
+      -- been paid into it; storing the two in one column would guarantee the
+      -- face value eventually reached net worth.
+      CREATE TABLE chit_funds (
+        asset_id         TEXT PRIMARY KEY REFERENCES assets(asset_id) ON DELETE CASCADE,
+        org              TEXT NOT NULL,
+        label            TEXT NOT NULL,
+        target_amount    TEXT NOT NULL,
+        currency         TEXT NOT NULL,
+        start_date       TEXT NOT NULL,
+        end_date         TEXT NOT NULL,
+        duration_months  INTEGER NOT NULL,
+        emi_type         TEXT NOT NULL CHECK (emi_type IN ('CONSTANT','VARYING')),
+        schedule_label   TEXT,
+        status           TEXT NOT NULL CHECK (status IN ('ACTIVE','WITHDRAWN')),
+        withdrawn_date   TEXT,
+        withdrawn_amount TEXT,
+        comments         TEXT
+      );
+      CREATE INDEX idx_chit_funds_status ON chit_funds(status);
+      CREATE INDEX idx_chit_funds_org ON chit_funds(org);
+
+      -- Instalments actually paid. These continue AFTER a withdrawal: drawing
+      -- the pot in month 6 of 25 ends the chit as an asset but not the
+      -- obligation, and a schema that stopped recording them would lose a real
+      -- outgoing.
+      CREATE TABLE chit_emis (
+        emi_id   TEXT PRIMARY KEY,
+        asset_id TEXT NOT NULL REFERENCES assets(asset_id) ON DELETE CASCADE,
+        date     TEXT NOT NULL,
+        amount   TEXT NOT NULL,
+        currency TEXT NOT NULL,
+        mode     TEXT NOT NULL,
+        paid_to  TEXT NOT NULL,
+        comments TEXT
+      );
+      CREATE INDEX idx_chit_emis_asset ON chit_emis(asset_id);
+      CREATE INDEX idx_chit_emis_date ON chit_emis(date);
+
+      -- What the chit company pays out for a withdrawal in a given month.
+      --
+      -- Reference data in its own table rather than columns on each chit: every
+      -- chit of the same shape shares one schedule, and copying it per chit
+      -- would let two "5L / 25 months" chits disagree about what month 12 is
+      -- worth.
+      CREATE TABLE chit_withdrawal_schedules (
+        label      TEXT PRIMARY KEY,
+        currency   TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+
+      CREATE TABLE chit_withdrawal_schedule_rows (
+        label  TEXT NOT NULL REFERENCES chit_withdrawal_schedules(label) ON DELETE CASCADE,
+        month  INTEGER NOT NULL,
+        amount TEXT NOT NULL,
+        PRIMARY KEY (label, month)
+      );
+    `,
+  },
 ];
 
 const SCHEMA_TABLE = `

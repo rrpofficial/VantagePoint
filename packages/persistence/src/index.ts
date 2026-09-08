@@ -80,3 +80,4 @@ export {
   SettingsRepository,
 } from './asset-repository.js';
 export { LoanAuditRepository } from './loan-audit-repository.js';
+export { ChitScheduleRepository } from './chit-schedule-repository.js';

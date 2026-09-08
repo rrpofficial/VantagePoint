@@ -49,6 +49,24 @@ export {
   type SortDirection,
 } from './loan-book.js';
 export {
+  ChitLedger,
+  register as chitRegister,
+  viewOf as chitViewOf,
+  totalsOf as chitTotalsOf,
+  sortViews as sortChitViews,
+  withdrawalAmountFor as chitWithdrawalAmountFor,
+  type ChitEmi,
+  type ChitEmiType,
+  type ChitFilter,
+  type ChitFund,
+  type ChitRegister,
+  type ChitSortKey,
+  type ChitStatus,
+  type ChitTotals,
+  type ChitView,
+  type ChitWithdrawalSchedule,
+} from './chit-book.js';
+export {
   applyEdit as applyLoanEdit,
   duplicatesOf as loanDuplicatesOf,
   type LoanAuditAction,

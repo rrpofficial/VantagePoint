@@ -927,6 +927,190 @@ test.describe('US-4.8 Scenario: A trade is typed in rather than imported', () =>
   });
 });
 
+test.describe('US-1.12 Scenario: The chit-fund register, end to end', () => {
+  const CHITS = {
+    journey: 'E2E Journey Chit',
+    withdrawn: 'E2E Withdrawn Chit',
+    scheduled: 'E2E Scheduled Chit',
+  } as const;
+  const ORG = 'E2E Chit Company';
+
+  async function openChit(
+    page: Page,
+    label: string,
+    values: {
+      target?: string;
+      start?: string;
+      months?: string;
+      emiType?: string;
+      schedule?: string;
+    } = {},
+  ): Promise<void> {
+    await page.getByRole('button', { name: 'Record a chit' }).click();
+    const form = page.getByTestId('new-chit-form');
+    await form.getByLabel('Chit fund organisation').fill(ORG);
+    await form.getByLabel('Chit label').fill(label);
+    await form.getByLabel('Chit amount').fill(values.target ?? '500000');
+    await form.getByLabel('Start date').fill(values.start ?? '2025-04-01');
+    await form.getByLabel('Duration in months').fill(values.months ?? '25');
+    if (values.emiType !== undefined) {
+      await form.getByLabel('Instalment').selectOption({ label: values.emiType });
+    }
+    if (values.schedule !== undefined) {
+      await form.getByLabel('Withdrawal schedule').selectOption({ label: values.schedule });
+    }
+    await form.getByRole('button', { name: 'Save chit' }).click();
+    await expect(page.getByTestId('chit-table')).toContainText(label);
+  }
+
+  async function payInstalment(page: Page, label: string, amount: string, date: string) {
+    await page.getByRole('button', { name: label, exact: true }).click();
+    const detail = page.locator('[data-testid^="chit-detail-"]');
+    await expect(detail).toBeVisible();
+    const form = detail.locator('[data-testid^="chit-emi-form-"]');
+    await form.getByLabel('Amount').fill(amount);
+    await form.getByLabel('Date').fill(date);
+    await form.getByRole('button', { name: 'Record instalment' }).click();
+    return detail;
+  }
+
+  test('records a chit and carries it at what has been paid in', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Chits');
+
+    await openChit(page, CHITS.journey, { target: '500000' });
+    await payInstalment(page, CHITS.journey, '20000', '2025-04-05');
+
+    const table = page.getByTestId('chit-table');
+    // ₹20,000 counted, against a ₹5,00,000 chit. The face value must never be
+    // the asset figure.
+    await expect(table).toContainText('20,000');
+    await expect(page.getByTestId('chit-carrying')).toContainText('20,000');
+    await expect(page.getByTestId('chit-carrying')).not.toContainText('5,00,000');
+  });
+
+  test('adds the chit to net worth on the Dashboard', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Dashboard');
+    const netWorth = page.getByTestId('net-worth');
+    const before = (await netWorth.textContent()) ?? '';
+
+    await goToSection(page, 'Chits');
+    await openChit(page, CHITS.scheduled, { target: '1000000' });
+    await payInstalment(page, CHITS.scheduled, '35000', '2025-04-05');
+
+    await goToSection(page, 'Dashboard');
+    await expect(netWorth).not.toHaveText(before);
+    await expect(page.getByTestId('allocation-breakdown')).toContainText('chit fund');
+  });
+
+  /*
+   * The tiles are portfolio-wide totals, and the suite is cumulative, so a
+   * per-chit assertion has to read the chit's OWN row. Asserting on the tile
+   * made this test depend on every chit recorded before it.
+   */
+  const rowFor = (page: Page, label: string) =>
+    page.getByTestId('chit-table').locator('tr', { hasText: label }).first();
+
+  test('drops out of net worth once marked withdrawn, and comes back if reversed', async ({
+    page,
+  }) => {
+    await unlock(page);
+    await goToSection(page, 'Chits');
+
+    await openChit(page, CHITS.withdrawn, { target: '500000', start: '2025-05-01' });
+    const detail = await payInstalment(page, CHITS.withdrawn, '25000', '2025-05-05');
+    await expect(rowFor(page, CHITS.withdrawn)).toContainText('25,000');
+
+    /* ------------------------------------------------------------ withdraw */
+    const status = detail.locator('[data-testid^="chit-status-form-"]');
+    await status.getByLabel('Amount received').fill('420000');
+    await status.getByLabel('Date drawn').fill('2025-08-01');
+    await detail.locator('[data-testid^="chit-withdraw-"]').click();
+
+    // The pot is now cash elsewhere; counting the instalments too would count
+    // the same money twice. Paid-in still reads ₹25,000 — only the asset
+    // column goes to nil.
+    const row = rowFor(page, CHITS.withdrawn);
+    await expect(row).toContainText('Withdrawn');
+    await expect(row.locator('td').last()).toHaveText('₹0');
+
+    /* ------------------------------------------------------------- reverse */
+    await page.getByRole('button', { name: CHITS.withdrawn, exact: true }).click();
+    await page.locator('[data-testid^="chit-reactivate-"]').click();
+    await expect(rowFor(page, CHITS.withdrawn).locator('td').last()).not.toHaveText('₹0');
+  });
+
+  test('keeps recording instalments after the pot is drawn', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Chits');
+
+    // Its own chit: reusing another test's left the status form showing the
+    // reactivate branch instead of the withdraw one, depending on run order.
+    const label = 'E2E Still Paying Chit';
+    await openChit(page, label, { target: '500000', start: '2025-06-01' });
+    const detail = await payInstalment(page, label, '25000', '2025-06-05');
+
+    const status = detail.locator('[data-testid^="chit-status-form-"]');
+    await status.getByLabel('Amount received').fill('420000');
+    await status.getByLabel('Date drawn').fill('2025-08-01');
+    await detail.locator('[data-testid^="chit-withdraw-"]').click();
+    await expect(rowFor(page, label)).toContainText('Withdrawn');
+
+    // Drawing early does not end the obligation, so the form must stay usable.
+    await page.getByRole('button', { name: label, exact: true }).click();
+    const form = page.locator('[data-testid^="chit-emi-form-"]');
+    await form.getByLabel('Amount').fill('25000');
+    await form.getByLabel('Date').fill('2025-09-05');
+    await form.getByRole('button', { name: 'Record instalment' }).click();
+
+    await expect(page.locator('[data-testid^="chit-emis-"]')).toContainText('2025-09-05');
+    // Still nil as an asset, despite the further instalment.
+    await expect(rowFor(page, label).locator('td').last()).toHaveText('₹0');
+  });
+
+  test('sets up an agreed payout table and shows what a draw would pay', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Chits');
+
+    await page.getByRole('button', { name: /set up|Hide/ }).click();
+    const scheduleForm = page.getByTestId('chit-schedule-form');
+    await scheduleForm.getByLabel('Schedule label').fill('E2E 5L / 25');
+    await scheduleForm
+      .getByLabel('Month and payout, one per line')
+      .fill('1, 350000\n9, 420000\n25, 500000');
+    await scheduleForm.getByRole('button', { name: 'Save schedule' }).click();
+
+    await expect(page.getByTestId('chit-schedule-table')).toContainText('E2E 5L / 25');
+  });
+
+  test('offers no payout table for a varying-instalment chit', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Chits');
+
+    await page.getByRole('button', { name: 'Record a chit' }).click();
+    const form = page.getByTestId('new-chit-form');
+    await expect(form.getByLabel('Withdrawal schedule')).toBeVisible();
+
+    await form.getByLabel('Instalment').selectOption({ label: 'Varying' });
+
+    // Showing a payout selector here would imply a figure nobody agreed to.
+    await expect(form.getByLabel('Withdrawal schedule')).toHaveCount(0);
+  });
+
+  test('filters by status', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Chits');
+
+    await page.getByLabel('Withdrawn').check();
+    const table = page.getByTestId('chit-table');
+    await expect(table).not.toContainText(CHITS.journey);
+
+    await page.getByLabel('Withdrawn').uncheck();
+    await expect(table).toContainText(CHITS.journey);
+  });
+});
+
 test.describe('US-8.10 Scenario: Egress is visible and empty by default', () => {
   test('reports no outbound calls, and labels that as expected', async ({ page }) => {
     await unlock(page);

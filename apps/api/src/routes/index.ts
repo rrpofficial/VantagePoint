@@ -13,6 +13,8 @@
 import type { FastifyInstance } from 'fastify';
 import {
   AuditUC,
+  ChitUC,
+  type ChitQuery,
   CompareSnapshotsUC,
   ComputeAdvanceTaxUC,
   GenerateComplianceUC,
@@ -91,6 +93,188 @@ export function registerRoutes(app: FastifyInstance): void {
       LedgerUC.exits(),
     ]);
     return reply.send({ assets, liabilities, exits });
+  });
+
+  /* --------------------------------------------------------- chit funds */
+
+  app.get('/api/chits', async (request, reply) => {
+    const raw = request.query as {
+      status?: string;
+      org?: string;
+      sortBy?: string;
+      direction?: string;
+      asOf?: string;
+    };
+    const list = (value: string | undefined) =>
+      value === undefined || value.length === 0 ? undefined : value.split(',').filter(Boolean);
+
+    const statuses = list(raw.status) as ChitQuery['statuses'];
+    const orgs = list(raw.org);
+
+    const result = await ChitUC.register({
+      ...(statuses === undefined ? {} : { statuses }),
+      ...(orgs === undefined ? {} : { orgs }),
+      ...(raw.sortBy === undefined ? {} : { sortBy: raw.sortBy as ChitQuery['sortBy'] }),
+      ...(raw.direction === undefined
+        ? {}
+        : { direction: raw.direction as ChitQuery['direction'] }),
+      ...(raw.asOf === undefined ? {} : { asOf: raw.asOf }),
+    });
+    return result.ok
+      ? reply.send(result.value)
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post('/api/chits', async (request, reply) => {
+    const body = request.body as {
+      org?: string;
+      label?: string;
+      targetAmount?: { amount?: string; currency?: string };
+      startDate?: string;
+      endDate?: string;
+      // A form posts this as text; typing it `number` would be a claim about
+      // the wire that nothing enforces.
+      durationMonths?: number | string;
+      emiType?: string;
+      scheduleLabel?: string;
+      comments?: string;
+    };
+
+    const result = await ChitUC.open({
+      org: body.org ?? '',
+      label: body.label ?? '',
+      targetAmount: {
+        amount: body.targetAmount?.amount ?? '0',
+        currency: (body.targetAmount?.currency ?? 'INR') as 'INR',
+      },
+      startDate: body.startDate ?? '',
+      durationMonths: Number(body.durationMonths ?? 0),
+      emiType: body.emiType === 'VARYING' ? 'VARYING' : 'CONSTANT',
+      ...(body.endDate === undefined ? {} : { endDate: body.endDate }),
+      ...(body.scheduleLabel === undefined ? {} : { scheduleLabel: body.scheduleLabel }),
+      ...(body.comments === undefined ? {} : { comments: body.comments }),
+    });
+    return result.ok
+      ? reply.code(201).send({ chitId: result.value })
+      : reply.code(422).send(failure(result.error.code, result.error.message));
+  });
+
+  app.put<{ Params: { id: string } }>('/api/chits/:id', async (request, reply) => {
+    const body = request.body as {
+      org?: string;
+      label?: string;
+      targetAmount?: { amount?: string; currency?: string };
+      startDate?: string;
+      endDate?: string;
+      durationMonths?: number | string;
+      emiType?: string;
+      scheduleLabel?: string | null;
+      comments?: string;
+    };
+
+    const result = await ChitUC.edit(request.params.id, {
+      ...(body.org === undefined ? {} : { org: body.org }),
+      ...(body.label === undefined ? {} : { label: body.label }),
+      ...(body.targetAmount?.amount === undefined
+        ? {}
+        : {
+            targetAmount: {
+              amount: body.targetAmount.amount,
+              currency: (body.targetAmount.currency ?? 'INR') as 'INR',
+            },
+          }),
+      ...(body.startDate === undefined ? {} : { startDate: body.startDate }),
+      ...(body.endDate === undefined ? {} : { endDate: body.endDate }),
+      ...(body.durationMonths === undefined
+        ? {}
+        : { durationMonths: Number(body.durationMonths) }),
+      ...(body.emiType === undefined
+        ? {}
+        : { emiType: body.emiType === 'VARYING' ? ('VARYING' as const) : ('CONSTANT' as const) }),
+      ...(body.scheduleLabel === undefined ? {} : { scheduleLabel: body.scheduleLabel }),
+      ...(body.comments === undefined ? {} : { comments: body.comments }),
+    });
+    return result.ok
+      ? reply.send({ updated: true })
+      : reply.code(422).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post<{ Params: { id: string } }>('/api/chits/:id/emis', async (request, reply) => {
+    const body = request.body as {
+      date?: string;
+      amount?: { amount?: string; currency?: string };
+      mode?: string;
+      paidTo?: string;
+      comments?: string;
+    };
+
+    const result = await ChitUC.recordEmi({
+      chitId: request.params.id,
+      date: body.date ?? '',
+      amount: {
+        amount: body.amount?.amount ?? '0',
+        currency: (body.amount?.currency ?? 'INR') as 'INR',
+      },
+      mode: (body.mode ?? 'OTHER') as Parameters<typeof ChitUC.recordEmi>[0]['mode'],
+      paidTo: body.paidTo ?? '',
+      ...(body.comments === undefined ? {} : { comments: body.comments }),
+    });
+    return result.ok
+      ? reply.code(201).send({ recorded: true })
+      : reply.code(422).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post<{ Params: { id: string } }>('/api/chits/:id/status', async (request, reply) => {
+    const body = request.body as {
+      status?: string;
+      date?: string;
+      amount?: { amount?: string; currency?: string };
+    };
+
+    // Withdrawing carries the date and the amount actually received; going back
+    // to active clears both, because a draw recorded in error left no money.
+    const result =
+      body.status === 'WITHDRAWN'
+        ? await ChitUC.withdraw(request.params.id, {
+            date: body.date ?? '',
+            amount: {
+              amount: body.amount?.amount ?? '0',
+              currency: (body.amount?.currency ?? 'INR') as 'INR',
+            },
+          })
+        : await ChitUC.setStatus(request.params.id, 'ACTIVE');
+
+    return result.ok
+      ? reply.send({ updated: true })
+      : reply.code(422).send(failure(result.error.code, result.error.message));
+  });
+
+  app.get('/api/chits/schedules', async (_request, reply) => {
+    const result = await ChitUC.schedules();
+    return result.ok
+      ? reply.send({ schedules: result.value })
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post('/api/chits/schedules', async (request, reply) => {
+    const body = request.body as {
+      label?: string;
+      rows?: readonly { month?: number | string; amount?: { amount?: string; currency?: string } }[];
+    };
+
+    const result = await ChitUC.saveSchedule({
+      label: body.label ?? '',
+      rows: (body.rows ?? []).map((row) => ({
+        month: Number(row.month ?? 0),
+        amount: {
+          amount: row.amount?.amount ?? '0',
+          currency: (row.amount?.currency ?? 'INR') as 'INR',
+        },
+      })),
+    });
+    return result.ok
+      ? reply.code(201).send({ saved: true })
+      : reply.code(422).send(failure(result.error.code, result.error.message));
   });
 
   /* ------------------------------------------------------------- trades */

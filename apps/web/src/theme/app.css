@@ -154,7 +154,8 @@ body {
 .pt-form { display: grid; gap: var(--pt-space-2); margin-top: var(--pt-space-4); }
 .pt-form label { font: var(--pt-text-label); }
 
-.pt-form input {
+.pt-form input,
+.pt-form textarea {
   font: var(--pt-text-body);
   padding: var(--pt-space-3);
   border: 1px solid var(--pt-border-strong);
@@ -163,7 +164,15 @@ body {
   color: var(--pt-ink);
 }
 
-.pt-form input:focus-visible { outline: 2px solid var(--pt-accent); outline-offset: 1px; }
+/* A schedule is entered a line per month, so it must not be a one-line box. */
+.pt-form textarea {
+  font: var(--pt-text-mono, var(--pt-text-body));
+  resize: vertical;
+  width: 100%;
+}
+
+.pt-form input:focus-visible,
+.pt-form textarea:focus-visible { outline: 2px solid var(--pt-accent); outline-offset: 1px; }
 
 .pt-form button {
   font: var(--pt-text-label);
@@ -323,6 +332,8 @@ body {
 .pt-status--active { background: var(--pt-info-wash); color: var(--pt-info); }
 .pt-status--partially_repaid { background: var(--pt-warn-wash); color: var(--pt-warn); }
 .pt-status--repaid { background: var(--pt-gain-wash); color: var(--pt-gain); }
+/* Drawn: out of net worth, but not an error — neutral rather than red. */
+.pt-status--withdrawn { background: var(--pt-surface-muted); color: var(--pt-ink-muted); }
 
 .pt-check {
   display: inline-flex;

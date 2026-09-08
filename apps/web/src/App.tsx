@@ -19,6 +19,7 @@ import { Dashboard } from './views/Dashboard.js';
 import { Import } from './views/Import.js';
 import { Ledger } from './views/Ledger.js';
 import { Loans } from './views/Loans.js';
+import { Chits } from './views/Chits.js';
 import { Settings } from './views/Settings.js';
 import { Snapshots } from './views/Snapshots.js';
 import { Tax } from './views/Tax.js';
@@ -174,6 +175,7 @@ export function App() {
         )}
         {section === 'Ledger' && <Ledger />}
         {section === 'Loans' && <Loans />}
+        {section === 'Chits' && <Chits />}
         {/* Also re-valued after an import, so the Dashboard is already correct
             by the time the user navigates back to it. */}
         {section === 'Import' && <Import onImported={() => void refresh()} />}

@@ -24,12 +24,19 @@ import {
 } from '@porttrack/shared-kernel';
 import { createHash } from 'node:crypto';
 import {
+  ChitLedger,
   HandLoanLedger,
   LoanExporter,
   ValuationEngine,
   applyLoanEdit,
   loanDuplicatesOf,
   type Asset,
+  type ChitEmiType,
+  type ChitFund,
+  type ChitRegister,
+  type ChitSortKey,
+  type ChitStatus,
+  type ChitWithdrawalSchedule,
   type ExitTransaction,
   type HandLoan,
   type Liability,
@@ -80,6 +87,7 @@ import {
 } from '@porttrack/ingestion';
 import {
   AssetRepository,
+  ChitScheduleRepository,
   ExitRepository,
   LiabilityRepository,
   LoanAuditRepository,
@@ -405,6 +413,343 @@ export const ImportStatementUC = {
       // overridden in either direction.
       reconciliation: projected.value.reconciliation,
     });
+  },
+};
+
+/* -------------------------------------------------------------- chit funds */
+
+export interface OpenChitInput {
+  readonly org: string;
+  readonly label: string;
+  readonly targetAmount: MoneyValue;
+  readonly startDate: IsoDate;
+  readonly durationMonths: number;
+  readonly emiType: ChitEmiType;
+  /** Optional override; derived from the start date and term when absent. */
+  readonly endDate?: IsoDate;
+  readonly scheduleLabel?: string;
+  readonly comments?: string;
+}
+
+export interface RecordChitEmiInput {
+  readonly chitId: string;
+  readonly date: IsoDate;
+  readonly amount: MoneyValue;
+  readonly mode: PaymentMode;
+  readonly paidTo: string;
+  readonly comments?: string;
+}
+
+export interface ChitQuery {
+  readonly statuses?: readonly ChitStatus[] | undefined;
+  readonly orgs?: readonly string[] | undefined;
+  readonly sortBy?: ChitSortKey | undefined;
+  readonly direction?: SortDirection | undefined;
+  readonly asOf?: IsoDate | undefined;
+}
+
+export interface EditChitInput {
+  readonly org?: string;
+  readonly label?: string;
+  readonly targetAmount?: MoneyValue;
+  readonly startDate?: IsoDate;
+  readonly endDate?: IsoDate;
+  readonly durationMonths?: number;
+  readonly emiType?: ChitEmiType;
+  readonly scheduleLabel?: string | null;
+  readonly comments?: string;
+}
+
+const isChit = (asset: Asset): boolean =>
+  asset.assetClass === 'CHIT_FUND' && asset.chitFund !== undefined;
+
+const chitsOf = (assets: readonly Asset[]): readonly ChitFund[] =>
+  assets.filter(isChit).map((asset) => asset.chitFund as ChitFund);
+
+/** Months added to a date, so a 25-month chit ends where the passbook says. */
+function addMonths(date: IsoDate, months: number): IsoDate {
+  const [year = 0, month = 1, day = 1] = date.split('-').map(Number);
+  const zeroBased = (month - 1) + months;
+  const endYear = year + Math.floor(zeroBased / 12);
+  const endMonth = (zeroBased % 12) + 1;
+  return `${String(endYear).padStart(4, '0')}-${String(endMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * Derived from the chit's own terms, so re-recording the same chit resolves to
+ * the same asset rather than duplicating it — the rule the rest of the ledger
+ * uses.
+ */
+function chitIdFor(input: { org: string; label: string; startDate: IsoDate }): string {
+  const digest = createHash('sha256')
+    .update([input.org.trim().toLowerCase(), input.label.trim().toLowerCase(), input.startDate].join('|'))
+    .digest('hex')
+    .slice(0, 16);
+  return `ast_chit_fund_${digest}`;
+}
+
+async function mutateChit(
+  chitId: string,
+  change: (chit: ChitFund) => ChitFund,
+): Promise<Result<void>> {
+  const guard = requireUnlocked();
+  if (!guard.ok) return guard;
+
+  const asset = await AssetRepository.findById(chitId);
+  if (asset?.chitFund === undefined) {
+    return Err(new VaultStateError(`no chit fund ${chitId} was found`));
+  }
+  return AssetRepository.save({ ...asset, chitFund: change(asset.chitFund) });
+}
+
+export const ChitUC = {
+  /**
+   * The register: filtered, sorted, and totalled over the FILTERED set.
+   *
+   * Computed here rather than in the browser for the same reason the loan
+   * register is: summing decimal strings in JavaScript reintroduces the float
+   * drift ADR-002 exists to prevent.
+   */
+  async register(query: ChitQuery = {}): Promise<Result<ChitRegister>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    const [assets, schedules] = await Promise.all([
+      AssetRepository.all(),
+      ChitScheduleRepository.all(),
+    ]);
+
+    return Ok(
+      ChitLedger.register({
+        chits: chitsOf(assets),
+        asOf: query.asOf ?? currentPorts().clock.today(),
+        schedules,
+        filter: {
+          ...(query.statuses === undefined ? {} : { statuses: query.statuses }),
+          ...(query.orgs === undefined ? {} : { orgs: query.orgs }),
+        },
+        ...(query.sortBy === undefined ? {} : { sortBy: query.sortBy }),
+        ...(query.direction === undefined ? {} : { direction: query.direction }),
+      }),
+    );
+  },
+
+  async open(input: OpenChitInput): Promise<Result<string>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    const org = input.org.trim();
+    const label = input.label.trim();
+    if (org.length === 0) return Err(new VaultStateError('a chit needs the organisation running it'));
+    if (label.length === 0) return Err(new VaultStateError('a chit needs a label'));
+    if (!ISO_DATE.test(input.startDate)) {
+      return Err(new VaultStateError('a chit needs a start date, as YYYY-MM-DD'));
+    }
+    if (!Number.isInteger(input.durationMonths) || input.durationMonths <= 0) {
+      return Err(new VaultStateError('a chit runs for a whole number of months, at least one'));
+    }
+
+    const target = Money.parse(input.targetAmount.amount, input.targetAmount.currency);
+    if (!target.ok) return target;
+    if (Money.compare(target.value, Money.zero(target.value.currency)) <= 0) {
+      return Err(new VaultStateError('a chit amount must be greater than zero'));
+    }
+
+    const chitId = chitIdFor({ org, label, startDate: input.startDate });
+
+    const saved = await AssetRepository.save({
+      assetId: chitId,
+      assetClass: 'CHIT_FUND',
+      jurisdiction: 'DOMESTIC',
+      currency: target.value.currency,
+      lots: [],
+      incomeEvents: [],
+      corporateActions: [],
+      liquidity: 'ILLIQUID',
+      chitFund: {
+        assetId: chitId,
+        org,
+        label,
+        targetAmount: target.value,
+        startDate: input.startDate,
+        endDate: input.endDate ?? addMonths(input.startDate, input.durationMonths),
+        durationMonths: input.durationMonths,
+        emiType: input.emiType,
+        status: 'ACTIVE',
+        emis: [],
+        ...(input.scheduleLabel === undefined || input.scheduleLabel.length === 0
+          ? {}
+          : { scheduleLabel: input.scheduleLabel }),
+        ...(input.comments === undefined || input.comments.length === 0
+          ? {}
+          : { comments: input.comments }),
+      },
+    });
+    return saved.ok ? Ok(chitId) : saved;
+  },
+
+  /** A monthly instalment. Recorded whether or not the chit has been drawn. */
+  async recordEmi(input: RecordChitEmiInput): Promise<Result<void>> {
+    if (!ISO_DATE.test(input.date)) {
+      return Err(new VaultStateError('an instalment needs a date, as YYYY-MM-DD'));
+    }
+    const paidTo = input.paidTo.trim();
+    if (paidTo.length === 0) {
+      return Err(new VaultStateError('an instalment needs to say who it was paid to'));
+    }
+
+    // Parsed before it can reach the vault: an unparseable amount stored
+    // verbatim made every later read of the whole register throw.
+    const amount = Money.parse(input.amount.amount, input.amount.currency);
+    if (!amount.ok) return amount;
+    if (Money.compare(amount.value, Money.zero(amount.value.currency)) <= 0) {
+      return Err(new VaultStateError('an instalment must be greater than zero'));
+    }
+
+    // Derived from the instalment itself, so recording it twice cannot
+    // double-count a month's payment.
+    const emiId = `cemi_${createHash('sha256')
+      .update([input.chitId, input.date, amount.value.amount, input.mode].join('|'))
+      .digest('hex')
+      .slice(0, 16)}`;
+
+    return mutateChit(input.chitId, (chit) => ({
+      ...chit,
+      emis: [
+        ...chit.emis.filter((existing) => existing.emiId !== emiId),
+        {
+          emiId,
+          date: input.date,
+          amount: amount.value,
+          mode: input.mode,
+          paidTo,
+          ...(input.comments === undefined || input.comments.length === 0
+            ? {}
+            : { comments: input.comments }),
+        },
+      ],
+    }));
+  },
+
+  /**
+   * Marks the pot as drawn. The chit leaves the asset side from this moment —
+   * the money is now cash elsewhere — but the instalments carry on.
+   */
+  async withdraw(
+    chitId: string,
+    input: { readonly date: IsoDate; readonly amount: MoneyValue },
+  ): Promise<Result<void>> {
+    if (!ISO_DATE.test(input.date)) {
+      return Err(new VaultStateError('a withdrawal needs a date, as YYYY-MM-DD'));
+    }
+    const amount = Money.parse(input.amount.amount, input.amount.currency);
+    if (!amount.ok) return amount;
+
+    return mutateChit(chitId, (chit) => ({
+      ...chit,
+      status: 'WITHDRAWN',
+      withdrawnDate: input.date,
+      withdrawnAmount: amount.value,
+    }));
+  },
+
+  /** Status is editable in both directions: a draw can be recorded in error. */
+  setStatus(chitId: string, status: ChitStatus): Promise<Result<void>> {
+    return mutateChit(chitId, (chit) => {
+      if (status === 'ACTIVE') {
+        const { withdrawnDate: _date, withdrawnAmount: _amount, ...rest } = chit;
+        return { ...rest, status };
+      }
+      return { ...chit, status };
+    });
+  },
+
+  async edit(chitId: string, edit: EditChitInput): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    if (edit.targetAmount !== undefined) {
+      const target = Money.parse(edit.targetAmount.amount, edit.targetAmount.currency);
+      if (!target.ok) return target;
+    }
+    if (edit.startDate !== undefined && !ISO_DATE.test(edit.startDate)) {
+      return Err(new VaultStateError('a chit start date must be written as YYYY-MM-DD'));
+    }
+    if (
+      edit.durationMonths !== undefined &&
+      (!Number.isInteger(edit.durationMonths) || edit.durationMonths <= 0)
+    ) {
+      return Err(new VaultStateError('a chit runs for a whole number of months, at least one'));
+    }
+
+    return mutateChit(chitId, (chit) => {
+      const org = edit.org?.trim();
+      const label = edit.label?.trim();
+      const target =
+        edit.targetAmount === undefined
+          ? chit.targetAmount
+          : (Money.parse(edit.targetAmount.amount, edit.targetAmount.currency) as {
+              ok: true;
+              value: MoneyValue;
+            }).value;
+
+      const startDate = edit.startDate ?? chit.startDate;
+      const durationMonths = edit.durationMonths ?? chit.durationMonths;
+
+      return {
+        ...chit,
+        ...(org === undefined || org.length === 0 ? {} : { org }),
+        ...(label === undefined || label.length === 0 ? {} : { label }),
+        targetAmount: target,
+        startDate,
+        durationMonths,
+        // Re-derived unless stated: leaving a stale end date after a term change
+        // would have the register disagree with its own duration.
+        endDate: edit.endDate ?? addMonths(startDate, durationMonths),
+        ...(edit.emiType === undefined ? {} : { emiType: edit.emiType }),
+        ...(edit.comments === undefined ? {} : { comments: edit.comments }),
+        ...(edit.scheduleLabel === undefined
+          ? {}
+          : edit.scheduleLabel === null
+            ? {}
+            : { scheduleLabel: edit.scheduleLabel }),
+      };
+    });
+  },
+
+  /* ------------------------------------------------ withdrawal schedules */
+
+  async schedules(): Promise<Result<readonly ChitWithdrawalSchedule[]>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+    return Ok(await ChitScheduleRepository.all());
+  },
+
+  async saveSchedule(schedule: ChitWithdrawalSchedule): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    if (schedule.label.trim().length === 0) {
+      return Err(new VaultStateError('a withdrawal schedule needs a label'));
+    }
+
+    const rows: { month: number; amount: MoneyValue }[] = [];
+    for (const row of schedule.rows) {
+      if (!Number.isInteger(row.month) || row.month <= 0) {
+        return Err(new VaultStateError('a schedule month must be a whole number, at least one'));
+      }
+      const amount = Money.parse(row.amount.amount, row.amount.currency);
+      if (!amount.ok) return amount;
+      rows.push({ month: row.month, amount: amount.value });
+    }
+
+    return ChitScheduleRepository.save({ label: schedule.label.trim(), rows });
+  },
+
+  async deleteSchedule(label: string): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+    return ChitScheduleRepository.delete(label);
   },
 };
 
