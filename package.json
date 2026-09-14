@@ -14,12 +14,15 @@
     "test:functional": "vitest run tests/functional",
     "test:container": "vitest run --config vitest.container.config.ts",
     "test:e2e": "playwright test",
+    "test:e2e:fresh": "docker compose --env-file .env.test down && rm -rf data-test && mkdir -p data-test && docker compose --env-file .env.test up -d --wait && playwright test",
     "test:watch": "vitest",
     "bench": "vitest bench --run",
     "typecheck": "tsc -b --pretty false",
     "lint": "eslint .",
     "docker:up": "docker compose up --build",
     "docker:down": "docker compose down",
+    "docker:test:up": "docker compose --env-file .env.test up --build -d",
+    "docker:test:down": "docker compose --env-file .env.test down",
     "demo": "vitest run --config vitest.demo.config.ts"
   },
   "devDependencies": {

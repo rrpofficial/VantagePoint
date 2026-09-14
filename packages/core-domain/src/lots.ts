@@ -149,3 +149,58 @@ export function allocateFifo(
 
   return Ok({ allocations, updatedLots });
 }
+
+/**
+ * The exact inverse of {@link allocateFifo}: puts back the units a disposal took.
+ *
+ * Driven by the disposal's own allocations rather than by re-running FIFO
+ * backwards. FIFO would return the units to the OLDEST lots, which is not
+ * necessarily where they came from once several exits have been recorded, and a
+ * lot that gets back units it never gave up carries the wrong acquisition date —
+ * which is what long-term versus short-term turns on.
+ *
+ * Refused rather than clamped when a lot would end up holding more than it ever
+ * acquired. That can only mean the allocations no longer describe this book — a
+ * corporate action rescaled the lots, say — and silently capping the restore
+ * would leave a holding whose quantity nothing downstream could tell was wrong.
+ */
+export function restoreAllocations(
+  lots: readonly AcquisitionLot[],
+  allocations: readonly LotAllocation[],
+): Result<readonly AcquisitionLot[]> {
+  const returned = new Map<string, Decimal>();
+  for (const allocation of allocations) {
+    const lot = lots.find((candidate) => candidate.lotId === allocation.lotId);
+    if (lot === undefined) {
+      return Err(
+        new InsufficientQuantityError(
+          `cannot restore ${allocation.quantity} units to lot ${allocation.lotId}: it is no longer on the book`,
+        ),
+      );
+    }
+    returned.set(
+      allocation.lotId,
+      (returned.get(allocation.lotId) ?? new Decimal(0)).plus(dec(allocation.quantity)),
+    );
+  }
+
+  const restored: AcquisitionLot[] = [];
+  for (const lot of lots) {
+    const back = returned.get(lot.lotId);
+    if (back === undefined) {
+      restored.push(lot);
+      continue;
+    }
+    const remaining = dec(lot.remainingQuantity).plus(back);
+    if (remaining.greaterThan(dec(lot.quantity))) {
+      return Err(
+        new InsufficientQuantityError(
+          `restoring ${back.toFixed()} units to lot ${lot.lotId} would leave ${remaining.toFixed()} of an original ${lot.quantity}`,
+        ),
+      );
+    }
+    restored.push({ ...lot, remainingQuantity: remaining.toFixed() });
+  }
+
+  return Ok(restored);
+}

@@ -15,7 +15,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ChitUC, ValuePortfolioUC, resetPorts } from '@porttrack/app-services';
+import { ChitUC, EditModeUC, ValuePortfolioUC, resetPorts } from '@porttrack/app-services';
 import { Vault } from '@porttrack/persistence';
 import { expectOk } from '@porttrack/test-kit';
 
@@ -28,6 +28,12 @@ beforeEach(async () => {
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await Vault.unlock(PASSPHRASE));
   resetPorts();
+  /*
+   * Editing a chit, marking it withdrawn and replacing a schedule are gated on
+   * edit mode. Enabled here with the real passphrase rather than through a
+   * seam, so these scenarios keep walking the path a user walks.
+   */
+  expectOk(await EditModeUC.enable(PASSPHRASE));
 });
 
 afterEach(async () => {

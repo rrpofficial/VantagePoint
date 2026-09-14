@@ -47,6 +47,13 @@ export {
 } from './use-cases.js';
 
 export {
+  EditModeUC,
+  requireEditMode,
+  resetEditMode,
+  type EditModeState,
+} from './edit-mode.js';
+
+export {
   configure,
   currentPorts,
   resetPorts,

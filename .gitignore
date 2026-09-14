@@ -6,6 +6,7 @@ coverage/
 
 # Local encrypted vault — the bind-mount target (ADR-012). Never committed.
 data/
+data-test/
 *.db
 *.db-wal
 *.db-shm

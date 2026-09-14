@@ -9,7 +9,12 @@ import {
   type Currency,
   type Result,
 } from '@porttrack/shared-kernel';
-import { allocateFifo, recordAcquisition, totalCostBasis } from './lots.js';
+import {
+  allocateFifo,
+  recordAcquisition,
+  restoreAllocations,
+  totalCostBasis,
+} from './lots.js';
 import { applyCorporateAction } from './corporate-actions.js';
 import {
   depositAccruedValue,
@@ -116,8 +121,8 @@ export const AssetRegistry = {
 /** US-1.2 — acquisition lots and cost basis. */
 export const LotBook = { recordAcquisition, totalCostBasis };
 
-/** US-1.3 — FIFO lot allocation. */
-export const FifoAllocator = { allocate: allocateFifo };
+/** US-1.3 — FIFO lot allocation, and its reversal when a disposal is deleted. */
+export const FifoAllocator = { allocate: allocateFifo, restore: restoreAllocations };
 
 /** US-1.6 — splits, bonuses, mergers, demergers. */
 export const CorporateActionEngine = { apply: applyCorporateAction };

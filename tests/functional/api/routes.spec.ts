@@ -158,3 +158,170 @@ describe('US-8.11 Scenario: Vault passphrase is never logged or persisted (ADR-0
     expectNoPii(response.body);
   });
 });
+
+/**
+ * The edit/update/delete mode, over HTTP.
+ *
+ * These matter more than the use-case tests they duplicate. The SPA hides its
+ * edit and delete controls when the mode is off, and that is worth nothing on
+ * its own — a curl, a script, or a second client walks straight past a hidden
+ * button. What makes the mode a control rather than a courtesy is that the API
+ * refuses the request, and that is what is asserted here.
+ */
+describe('Scenario: Edit mode is enforced by the API, not only by the SPA', () => {
+  const PASSPHRASE = 'correct horse battery staple';
+
+  /** A fresh vault per scenario, so an enabled mode cannot leak between them. */
+  const unlocked = async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'porttrack-edit-mode-api-'));
+    const instance = await buildApp({ dataDir: dir });
+    await instance.inject({
+      method: 'POST',
+      url: '/api/vault/unlock',
+      payload: { passphrase: PASSPHRASE },
+    });
+    return instance;
+  };
+
+  const enable = (instance: Awaited<ReturnType<typeof unlocked>>, passphrase = PASSPHRASE) =>
+    instance.inject({
+      method: 'POST',
+      url: '/api/edit-mode/enable',
+      payload: { passphrase },
+    });
+
+  /** The new chit's id, typed rather than read off an `any` from JSON.parse. */
+  const chitIdOf = (response: { body: string }): string =>
+    (JSON.parse(response.body) as { chitId: string }).chitId;
+
+  const openChit = (instance: Awaited<ReturnType<typeof unlocked>>) =>
+    instance.inject({
+      method: 'POST',
+      url: '/api/chits',
+      payload: {
+        org: 'Sri Balaji Chits',
+        label: '5L / 25 months',
+        targetAmount: { amount: '500000', currency: 'INR' },
+        startDate: '2025-04-01',
+        durationMonths: 25,
+        emiType: 'CONSTANT',
+      },
+    });
+
+  it('reports the mode as off on a freshly unlocked vault', async () => {
+    const response = await (await unlocked()).inject({ method: 'GET', url: '/api/edit-mode' });
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).enabled).toBe(false);
+  });
+
+  it('turns it on for the vault passphrase', async () => {
+    const instance = await unlocked();
+
+    const response = await enable(instance);
+
+    expect(response.statusCode).toBe(200);
+    expect(JSON.parse(response.body).enabled).toBe(true);
+  });
+
+  it('answers 401 to a wrong passphrase, and stays off', async () => {
+    const instance = await unlocked();
+
+    const response = await enable(instance, 'not the passphrase');
+
+    expect(response.statusCode).toBe(401);
+    const state = await instance.inject({ method: 'GET', url: '/api/edit-mode' });
+    expect(JSON.parse(state.body).enabled).toBe(false);
+  });
+
+  it('never echoes the passphrase it refused', async () => {
+    const response = await enable(await unlocked(), 'hunter2');
+
+    expect(response.body).not.toContain('hunter2');
+  });
+
+  it('turns it off again without one', async () => {
+    const instance = await unlocked();
+    await enable(instance);
+
+    const response = await instance.inject({ method: 'POST', url: '/api/edit-mode/disable' });
+
+    expect(JSON.parse(response.body).enabled).toBe(false);
+  });
+
+  it('turns it off when the vault is locked', async () => {
+    const instance = await unlocked();
+    await enable(instance);
+
+    await instance.inject({ method: 'POST', url: '/api/vault/lock' });
+
+    const state = await instance.inject({ method: 'GET', url: '/api/edit-mode' });
+    expect(JSON.parse(state.body).enabled).toBe(false);
+  });
+
+  /*
+   * 403, not 422. The distinction is what lets the SPA respond usefully: 422
+   * sends the user back to the form to re-check a field, 403 sends them to
+   * Settings to turn the mode on. Answering 422 here would have them hunting a
+   * typo that was never the problem.
+   */
+  it('answers 403 EDIT_MODE_REQUIRED to an edit while the mode is off', async () => {
+    const instance = await unlocked();
+    const chitId = chitIdOf(await openChit(instance));
+
+    const response = await instance.inject({
+      method: 'PUT',
+      url: `/api/chits/${chitId}`,
+      payload: { label: 'renamed' },
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(JSON.parse(response.body).error.code).toBe('EDIT_MODE_REQUIRED');
+  });
+
+  it('answers 403 to a delete while the mode is off', async () => {
+    const instance = await unlocked();
+    const chitId = chitIdOf(await openChit(instance));
+
+    const response = await instance.inject({ method: 'DELETE', url: `/api/chits/${chitId}` });
+
+    expect(response.statusCode).toBe(403);
+    expect(JSON.parse(response.body).error.code).toBe('EDIT_MODE_REQUIRED');
+  });
+
+  it('still accepts an addition while the mode is off', async () => {
+    const response = await openChit(await unlocked());
+
+    expect(response.statusCode).toBe(201);
+  });
+
+  it('accepts the same edit and delete once the mode is on', async () => {
+    const instance = await unlocked();
+    const chitId = chitIdOf(await openChit(instance));
+    await enable(instance);
+
+    const edited = await instance.inject({
+      method: 'PUT',
+      url: `/api/chits/${chitId}`,
+      payload: { label: 'renamed' },
+    });
+    const deleted = await instance.inject({ method: 'DELETE', url: `/api/chits/${chitId}` });
+
+    expect(edited.statusCode).toBe(200);
+    expect(deleted.statusCode).toBe(200);
+  });
+
+  it('routes every delete endpoint the SPA calls', async () => {
+    const instance = await unlocked();
+    for (const url of [
+      '/api/loans/nope',
+      '/api/chits/nope',
+      '/api/chits/schedules/nope',
+      '/api/ledger/assets/nope',
+      '/api/ledger/exits/nope',
+    ]) {
+      const response = await instance.inject({ method: 'DELETE', url });
+      expect(response.statusCode, url).not.toBe(404);
+    }
+  });
+});

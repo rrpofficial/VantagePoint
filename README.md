@@ -12,9 +12,9 @@ local-first, privacy-first, containerized.
 ## Current status — all milestones complete
 
 ```
-unit + functional   705 passing   0 failing   0 skipped
+unit + functional   914 passing   0 failing   0 skipped
 container (Docker)   38 passing   0 failing
-E2E (Playwright)     41 passing   0 failing
+E2E (Playwright)     63 passing   0 failing
 typecheck  clean     docker compose up ✓
 ```
 
@@ -48,6 +48,48 @@ docker compose up
 ```
 
 Then open <http://localhost:5173>. Nothing else is required — no Node, no pnpm, no toolchain.
+
+### Two instances: one you use, one you break
+
+Keep using portTrack while testing changes against it. `.env` describes the **production**
+instance; `.env.test` describes the **testing** one, and the two share nothing:
+
+|  | Production | Testing |
+|---|---|---|
+| Start | `pnpm docker:up` | `pnpm docker:test:up` |
+| Stop | `pnpm docker:down` | `pnpm docker:test:down` |
+| `PORTTRACK_PROJECT` | `porttrack` | `porttrack-test` |
+| Containers | `porttrack-api` / `-web` | `porttrack-test-api` / `-web` |
+| Image tag | `porttrack-*:prod` | `porttrack-*:test` |
+| Vault | `./data` | `./data-test` |
+| URL | <http://localhost:5273> | <http://localhost:5274> |
+
+Everything Docker can namespace is namespaced — project, containers, networks, images — so
+rebuilding the testing stack cannot replace the image production is serving from, and
+`docker compose down` on one leaves the other running. **The published port is the exception:**
+Docker cannot namespace a host port, so the two `PORTTRACK_WEB_PORT` values must differ or the
+second stack simply refuses to start.
+
+The vaults are separate files with separate passphrases. Nothing in the testing instance can read,
+change or delete production data — which matters more now that edit mode makes deletion real.
+
+```bash
+pnpm docker:test:up        # bring the testing instance up
+pnpm test:e2e              # Playwright, against the TESTING instance
+pnpm test:e2e:fresh        # ...after recreating its vault from empty
+```
+
+`pnpm test:e2e` reads `.env.test` in preference to `.env`, so a test run has to be pointed at
+production deliberately (`PORTTRACK_BASE_URL=...`) rather than landing there by accident. The E2E
+suite is cumulative and assumes a vault it has not seen before, so use `test:e2e:fresh` when a
+previous run's records get in its way. `pnpm test:container` is separate again: it builds its own
+project, tag and port, and leaves both instances untouched.
+
+To promote a tested build to production, rebuild production's tag and restart it:
+
+```bash
+pnpm docker:up             # rebuilds porttrack-*:prod and recreates the stack
+```
 
 ### Manual entry — CSV templates
 
@@ -151,6 +193,51 @@ lakh. A comma is always a digit separator, never a decimal point.
 > Borrower **names** live in the encrypted vault because the register is filtered and sorted by them.
 > Anything that leaves this machine carries the opaque `borrowerRef` instead — except an export you
 > ask for by name, which necessarily carries the name, since that is what makes it readable.
+
+### Edit mode — changing and deleting is off until you say so
+
+Everything portTrack holds is a record of money that has already **moved**. Adding to that is
+routine: a wrong entry is visible on the screen, and correcting it leaves a trail. Changing or
+deleting one is neither — a mistaken delete looks exactly like a record that was never made, and
+there is nothing left to notice it by.
+
+So the destructive half of the application is **off by default**, and turning it on is an act that
+cannot happen by accident: **Settings → Edit mode**, re-enter the vault passphrase.
+
+| Always available | Needs edit mode |
+|---|---|
+| Record a loan, a chit, a trade | Edit a loan or a chit |
+| Record an interest payment, a repayment, a monthly instalment | Close or reopen a loan |
+| Import a statement | Mark a chit drawn, or put it back to active |
+| Enter this year's income for the first time | Replace the income already recorded |
+| Save a withdrawal schedule under a **new** label | Replace an existing schedule's rows |
+| | **Delete** a loan, chit, holding, disposal or schedule |
+
+It applies across **every tab** from a single enable, shows in the top bar wherever you are, and
+**ends with the session** — locking the vault or restarting the API turns it off. It is never
+remembered, and there is no expiry setting: both would turn one deliberate decision into a standing
+permission, which is the state it exists to avoid.
+
+The passphrase is checked against the **vault key itself** — nothing extra is stored for this, so
+there is no second secret on disk and none to keep in step after a passphrase change. That means it
+is as slow as an unlock, for the same reason.
+
+**The SPA hiding its buttons is courtesy, not the control.** The API refuses a gated request with
+**403 EDIT_MODE_REQUIRED** whatever the browser believes, so a script, a `curl`, or a second client
+is refused the same way. A UI-only gate is bypassed by anything that speaks HTTP.
+
+Deleting is honest about what goes with it:
+
+- a **holding** takes its lots, income events and the disposals recorded against it — an exit left
+  behind would report a gain on units the book no longer says were ever acquired;
+- a **disposal** returns its units to the lots it took them from, so the holding is whole again;
+- a **hand loan** leaves its **audit trail behind**, with an entry saying it was deleted and why.
+  That trail does not cascade with the loan, by design — it is the only remaining answer to "what
+  happened to the loan I remember";
+- a **withdrawal schedule** is refused while a chit still names it, rather than silently orphaning
+  the figure that chit was showing.
+
+There is no undo. The way back is your own backup of the data directory.
 
 ### Where your data lives
 

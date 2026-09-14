@@ -20,6 +20,8 @@ import {
   type TradeClass,
 } from '../api.js';
 import { Amount, Card, Chip } from '../components/primitives.js';
+import { DeleteControl } from '../components/DeleteControl.js';
+import { useEditMode } from '../edit-mode.js';
 import { navigate } from '../router.js';
 
 const STATUS_LABEL: Readonly<Record<string, string>> = {
@@ -29,6 +31,7 @@ const STATUS_LABEL: Readonly<Record<string, string>> = {
 };
 
 export function Ledger() {
+  const editMode = useEditMode();
   const [ledger, setLedger] = useState<LedgerData | undefined>();
   const [loans, setLoans] = useState<LoanRegister | undefined>();
   const [error, setError] = useState<string | undefined>();
@@ -231,6 +234,7 @@ export function Ledger() {
                 <th scope="col" className="pt-align-end">
                   Cost
                 </th>
+                {editMode.enabled && <th scope="col" />}
               </tr>
             </thead>
             <tbody>
@@ -273,10 +277,21 @@ export function Ledger() {
                     <td className="pt-align-end">
                       <Amount value={{ amount: String(cost), currency: asset.currency }} />
                     </td>
+                    {editMode.enabled && (
+                      <td>
+                        <DeleteControl
+                          label="Delete"
+                          describes={`${asset.symbol ?? asset.isin ?? asset.folioRef ?? asset.assetId}, its ${String(asset.lots.length)} lot(s), its income events and any disposals recorded against it`}
+                          testId={`delete-asset-${asset.assetId}`}
+                          onDelete={() => api.deleteAsset(asset.assetId)}
+                          onDeleted={() => void load()}
+                        />
+                      </td>
+                    )}
                   </tr>,
                   isOpen ? (
                     <tr key={`${asset.assetId}-lots`} className="pt-table__detail">
-                      <td colSpan={6}>
+                      <td colSpan={editMode.enabled ? 7 : 6}>
                         <table className="pt-table pt-table--nested">
                           <thead>
                             <tr>
@@ -330,6 +345,7 @@ export function Ledger() {
                   <th scope="col" className="pt-align-end">
                     Price
                   </th>
+                  {editMode.enabled && <th scope="col" />}
                 </tr>
               </thead>
               <tbody>
@@ -341,6 +357,22 @@ export function Ledger() {
                     <td className="pt-align-end">
                       <Amount value={exit.pricePerUnit} />
                     </td>
+                    {editMode.enabled && (
+                      <td>
+                        {/*
+                          Says what deleting a disposal DOES, because it is not
+                          obvious: the units go back onto the lots they were
+                          sold from, so the holding grows again.
+                        */}
+                        <DeleteControl
+                          label="Delete"
+                          describes={`this sale of ${exit.quantity} on ${exit.exitDate}, returning those units to the lots they came from`}
+                          testId={`delete-exit-${exit.txnId}`}
+                          onDelete={() => api.deleteExit(exit.txnId)}
+                          onDeleted={() => void load()}
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

@@ -345,7 +345,9 @@ export type LoanAuditAction =
   | 'CLOSED'
   | 'REOPENED'
   | 'PRINCIPAL_REPAYMENT'
-  | 'INTEREST_PAYMENT';
+  | 'INTEREST_PAYMENT'
+  /** The loan itself. The entry outlives it — the trail does not cascade. */
+  | 'DELETED';
 
 export interface LoanAuditEntry {
   readonly entryId: string;
@@ -505,6 +507,11 @@ export interface ScheduleFa {
   readonly tableDError: ApiError | null;
 }
 
+export interface EditModeState {
+  readonly enabled: boolean;
+  readonly since?: string;
+}
+
 export const api = {
   unlock: (passphrase: string) =>
     request<{ unlocked: boolean }>('/vault/unlock', {
@@ -515,7 +522,24 @@ export const api = {
   valuation: () => request<Valuation>('/portfolio/valuation'),
   ready: () => request<{ status: string }>('/health/ready'),
 
+  editMode: () => request<EditModeState>('/edit-mode'),
+  /** Slow: the server re-derives the vault key, exactly as unlocking does. */
+  enableEditMode: (passphrase: string) =>
+    request<EditModeState>('/edit-mode/enable', {
+      method: 'POST',
+      body: JSON.stringify({ passphrase }),
+    }),
+  disableEditMode: () => request<EditModeState>('/edit-mode/disable', { method: 'POST' }),
+
   ledger: () => request<Ledger>('/ledger/assets'),
+  deleteAsset: (assetId: string) =>
+    request<{ deleted: boolean }>(`/ledger/assets/${encodeURIComponent(assetId)}`, {
+      method: 'DELETE',
+    }),
+  deleteExit: (txnId: string) =>
+    request<{ deleted: boolean }>(`/ledger/exits/${encodeURIComponent(txnId)}`, {
+      method: 'DELETE',
+    }),
 
   /**
    * Server-derived. The browser must not decide which financial year it is —
@@ -567,12 +591,18 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  deleteChit: (chitId: string) =>
+    request<{ deleted: boolean }>(`/chits/${encodeURIComponent(chitId)}`, { method: 'DELETE' }),
   chitSchedules: () =>
     request<{ schedules: readonly ChitWithdrawalSchedule[] }>('/chits/schedules'),
   saveChitSchedule: (schedule: ChitWithdrawalSchedule) =>
     request<{ saved: boolean }>('/chits/schedules', {
       method: 'POST',
       body: JSON.stringify(schedule),
+    }),
+  deleteChitSchedule: (label: string) =>
+    request<{ deleted: boolean }>(`/chits/schedules/${encodeURIComponent(label)}`, {
+      method: 'DELETE',
     }),
 
   tradeClasses: () => request<{ classes: readonly TradeClass[] }>('/trades/classes'),
@@ -617,6 +647,11 @@ export const api = {
       `/loans/${encodeURIComponent(loanId)}`,
       { method: 'PUT', body: JSON.stringify(input) },
     ),
+  deleteLoan: (loanId: string, reason?: string) =>
+    request<{ deleted: boolean }>(`/loans/${encodeURIComponent(loanId)}`, {
+      method: 'DELETE',
+      body: JSON.stringify(reason === undefined ? {} : { reason }),
+    }),
   loanAudit: (loanId: string) =>
     request<{ entries: readonly LoanAuditEntry[] }>(
       `/loans/${encodeURIComponent(loanId)}/audit`,

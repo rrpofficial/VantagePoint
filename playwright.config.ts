@@ -11,7 +11,16 @@ import { existsSync } from 'node:fs';
  * every test with ERR_CONNECTION_REFUSED — a suite that cannot reach the app it
  * exists to test. A real shell variable still wins, so CI can override.
  */
-if (existsSync('.env')) process.loadEnvFile('.env');
+/*
+ * `.env.test` FIRST, and `.env` only as a fallback.
+ *
+ * This suite records, edits and deletes — and with edit mode the deletions are
+ * real. Defaulting to `.env` aimed it at whichever stack that file describes,
+ * which is the production instance once there are two of them. A test run must
+ * have to be pointed AT production deliberately, never land there by default.
+ */
+const envFile = ['.env.test', '.env'].find((candidate) => existsSync(candidate));
+if (envFile !== undefined) process.loadEnvFile(envFile);
 
 const port = process.env.PORTTRACK_WEB_PORT ?? '5173';
 

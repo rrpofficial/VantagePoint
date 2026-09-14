@@ -17,6 +17,25 @@ import { join, resolve } from 'node:path';
 const ROOT = resolve(import.meta.dirname, '../..');
 const COMPOSE_TIMEOUT = 300_000;
 
+/**
+ * The suite runs as its OWN compose project, on its OWN image tag and port.
+ *
+ * All three used to be inherited from whatever `.env` happened to say. That was
+ * harmless while there was one stack and dangerous the moment there were two:
+ * teardown runs `compose down -v`, which would have destroyed whichever project
+ * `.env` named — a running production instance — and `up --build` would have
+ * rebuilt the image tag that instance was serving from. Pinning them here means
+ * the suite can only ever affect itself.
+ */
+const PROJECT = 'porttrack-container-test';
+const IMAGE_TAG = 'container-test';
+/** Deliberately not 5173: a production or testing stack may already hold it. */
+const WEB_PORT = '5399';
+
+const API = `${PROJECT}-api`;
+const WEB = `${PROJECT}-web`;
+const API_IMAGE = `porttrack-api:${IMAGE_TAG}`;
+
 /** Throwaway host directory standing in for the user's PORTTRACK_DATA_DIR. */
 let hostDataDir: string;
 
@@ -25,7 +44,16 @@ const sh = (cmd: string, args: string[], env: Record<string, string> = {}) =>
     cwd: ROOT,
     encoding: 'utf8',
     timeout: COMPOSE_TIMEOUT,
-    env: { ...process.env, ...env },
+    // The pins go on EVERY invocation, not just the `compose` helper: several
+    // assertions below call `docker compose exec` through `sh` directly, and one
+    // that resolved to a different project would exec into the wrong stack.
+    env: {
+      ...process.env,
+      PORTTRACK_PROJECT: PROJECT,
+      PORTTRACK_IMAGE_TAG: IMAGE_TAG,
+      PORTTRACK_WEB_PORT: WEB_PORT,
+      ...env,
+    },
   });
 
 const compose = (args: string[], env: Record<string, string> = {}) =>
@@ -78,7 +106,7 @@ describe('@container US-9.3 — compose stack orchestration', () => {
         'inspect',
         '-f',
         '{{.State.Health.Status}}',
-        'porttrack-api',
+        API,
       ]).trim();
       expect(health).toBe('healthy');
     });
@@ -111,12 +139,12 @@ describe('@container US-9.3 — compose stack orchestration', () => {
   });
 
   describe('Scenario: Only the web service publishes a host port', () => {
-    it('publishes a host port for porttrack-web', () => {
-      expect(sh('docker', ['port', 'porttrack-web']).trim().length).toBeGreaterThan(0);
+    it('publishes a host port for the web container', () => {
+      expect(sh('docker', ['port', WEB]).trim().length).toBeGreaterThan(0);
     });
 
-    it('publishes no host port for porttrack-api', () => {
-      expect(sh('docker', ['port', 'porttrack-api']).trim()).toBe('');
+    it('publishes no host port for the api container', () => {
+      expect(sh('docker', ['port', API]).trim()).toBe('');
     });
   });
 
@@ -144,7 +172,7 @@ describe('@container US-9.4 — host-native bind-mount persistence (FR-8.2, ADR-
         'inspect',
         '-f',
         '{{range .Mounts}}{{if eq .Destination "/var/lib/porttrack"}}{{.Type}}{{end}}{{end}}',
-        'porttrack-api',
+        API,
       ]).trim();
       expect(type).toBe('bind');
     });
@@ -154,7 +182,7 @@ describe('@container US-9.4 — host-native bind-mount persistence (FR-8.2, ADR-
         'inspect',
         '-f',
         '{{range .Mounts}}{{if eq .Destination "/var/lib/porttrack"}}{{.Source}}{{end}}{{end}}',
-        'porttrack-api',
+        API,
       ]).trim();
       expect(source).toBe(hostDataDir);
     });
@@ -209,7 +237,7 @@ describe('@container US-9.4 — host-native bind-mount persistence (FR-8.2, ADR-
 
   describe('Scenario: Nothing is written to the container writable layer', () => {
     it('shows no database file in `docker diff`', () => {
-      const diff = sh('docker', ['diff', 'porttrack-api']);
+      const diff = sh('docker', ['diff', API]);
       expect(diff).not.toMatch(/vault\.db/);
     });
   });
@@ -302,7 +330,7 @@ describe('@container US-9.6 — secret handling and image hygiene (FR-8.3)', () 
         '--rm',
         '--entrypoint',
         'sh',
-        'porttrack-api:test',
+        API_IMAGE,
         '-c',
         'find / -name ".env" -not -path "/proc/*" 2>/dev/null | head -1',
       ]).trim();
@@ -310,7 +338,7 @@ describe('@container US-9.6 — secret handling and image hygiene (FR-8.3)', () 
     });
 
     it('has no passphrase in the image history', () => {
-      const history = sh('docker', ['history', '--no-trunc', 'porttrack-api:test']);
+      const history = sh('docker', ['history', '--no-trunc', API_IMAGE]);
       expect(history).not.toMatch(/passphrase|PORTTRACK_PASSPHRASE=/i);
     });
   });
@@ -329,7 +357,7 @@ describe('@container US-9.6 — secret handling and image hygiene (FR-8.3)', () 
         '--rm',
         '--entrypoint',
         'sh',
-        'porttrack-api:test',
+        API_IMAGE,
         '-c',
         'ls node_modules/.bin/tsc 2>/dev/null || echo absent',
       ]).trim();
@@ -338,7 +366,7 @@ describe('@container US-9.6 — secret handling and image hygiene (FR-8.3)', () 
 
     it('keeps the runtime image under 400 MB', () => {
       const bytes = Number(
-        sh('docker', ['image', 'inspect', '-f', '{{.Size}}', 'porttrack-api:test']).trim(),
+        sh('docker', ['image', 'inspect', '-f', '{{.Size}}', API_IMAGE]).trim(),
       );
       expect(bytes).toBeLessThan(400 * 1024 * 1024);
     });

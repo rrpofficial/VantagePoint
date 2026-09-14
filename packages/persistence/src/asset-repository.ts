@@ -630,6 +630,24 @@ export const AssetRepository = {
     return Promise.resolve(rows.map(hydrate));
   },
 
+  /**
+   * Removes one asset and everything hanging off it.
+   *
+   * The child rows go by `ON DELETE CASCADE`, which only fires because the vault
+   * sets `foreign_keys=ON` at unlock — without that pragma SQLite would leave
+   * orphaned lots behind and this would look like it had worked.
+   *
+   * `hand_loan_audit` deliberately does NOT cascade (see the v6 migration): the
+   * trail for a deleted loan is the one thing that can still answer what
+   * happened to it.
+   */
+  delete(assetId: string): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return Promise.resolve(guard);
+    Vault.connection().prepare('DELETE FROM assets WHERE asset_id = ?').run(assetId);
+    return Promise.resolve(Ok(undefined));
+  },
+
   deleteAll(): Promise<Result<void>> {
     const guard = requireUnlocked();
     if (!guard.ok) return Promise.resolve(guard);
@@ -737,12 +755,43 @@ export const ExitRepository = {
     return Promise.resolve(Ok(undefined));
   },
 
+  findById(txnId: string): Promise<ExitTransaction | undefined> {
+    if (!Vault.isUnlocked()) return Promise.resolve(undefined);
+    const row = Vault.connection().prepare('SELECT * FROM exits WHERE txn_id = ?').get(txnId) as
+      | ExitRow
+      | undefined;
+    return Promise.resolve(row === undefined ? undefined : toExit(row));
+  },
+
   all(): Promise<readonly ExitTransaction[]> {
     if (!Vault.isUnlocked()) return Promise.resolve([]);
     const rows = Vault.connection()
       .prepare('SELECT * FROM exits ORDER BY exit_date, txn_id')
       .all() as ExitRow[];
     return Promise.resolve(rows.map(toExit));
+  },
+
+  /**
+   * Removes a disposal and re-saves the holdings it depleted, in ONE transaction.
+   *
+   * The two halves cannot be separate calls. Deleting the exit without restoring
+   * the lots understates the holding; restoring the lots without deleting the
+   * exit counts the same units twice. Either failing alone leaves a ledger whose
+   * quantity nothing downstream can tell is wrong.
+   *
+   * The restored assets are computed by the caller and merely written here —
+   * this layer decides nothing about what a reversal means.
+   */
+  deleteWithAssets(txnId: string, assets: readonly Asset[]): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return Promise.resolve(guard);
+
+    const db = Vault.connection();
+    db.transaction(() => {
+      db.prepare('DELETE FROM exits WHERE txn_id = ?').run(txnId);
+      for (const asset of assets) writeAsset(asset);
+    })();
+    return Promise.resolve(Ok(undefined));
   },
 };
 

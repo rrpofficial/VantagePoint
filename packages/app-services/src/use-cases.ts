@@ -25,6 +25,7 @@ import {
 import { createHash } from 'node:crypto';
 import {
   ChitLedger,
+  FifoAllocator,
   HandLoanLedger,
   LoanExporter,
   ValuationEngine,
@@ -97,6 +98,7 @@ import {
   type SnapshotSummary,
 } from '@porttrack/persistence';
 import { currentPorts } from './context.js';
+import { requireEditMode, resetEditMode } from './edit-mode.js';
 
 /* ------------------------------------------------------------------- vault */
 
@@ -114,6 +116,10 @@ export const VaultUC = {
     // Salary is as sensitive as holdings; it must not outlive the session in
     // memory once the vault it came from is closed.
     setIncomeProfile(undefined);
+    // The passphrase was entered to open one window on one session. Leaving edit
+    // mode on across a lock would hand the next person who unlocks a permission
+    // they never asked for.
+    resetEditMode();
   },
   /** Exposed so the API can answer readiness without importing persistence. */
   isUnlocked(): boolean {
@@ -250,10 +256,23 @@ export function setIncomeProfile(profile: IncomeProfile | undefined): void {
   incomeProfile = profile;
 }
 
-/** Persists as well as sets. Async because it writes. */
+/**
+ * Persists as well as sets. Async because it writes.
+ *
+ * Gated only when a profile is already stored, for the same reason the chit
+ * schedule is: entering one for the first time is an addition, while replacing
+ * or clearing one silently moves every advance-tax figure computed from it.
+ */
 export async function saveIncomeProfile(
   profile: IncomeProfile | undefined,
 ): Promise<Result<void>> {
+  if (incomeProfile !== undefined) {
+    const permitted = requireEditMode(
+      profile === undefined ? 'clearing the income profile' : 'replacing the income profile',
+    );
+    if (!permitted.ok) return permitted;
+  }
+
   incomeProfile = profile;
   return profile === undefined
     ? SettingsRepository.delete(INCOME_PROFILE_KEY)
@@ -639,6 +658,11 @@ export const ChitUC = {
     chitId: string,
     input: { readonly date: IsoDate; readonly amount: MoneyValue },
   ): Promise<Result<void>> {
+    // A draw changes what an existing chit IS, not what has been paid into it,
+    // so it sits on the protected side of the line that `recordEmi` does not.
+    const permitted = requireEditMode('marking this chit withdrawn');
+    if (!permitted.ok) return permitted;
+
     if (!ISO_DATE.test(input.date)) {
       return Err(new VaultStateError('a withdrawal needs a date, as YYYY-MM-DD'));
     }
@@ -655,6 +679,9 @@ export const ChitUC = {
 
   /** Status is editable in both directions: a draw can be recorded in error. */
   setStatus(chitId: string, status: ChitStatus): Promise<Result<void>> {
+    const permitted = requireEditMode('changing this chit’s status');
+    if (!permitted.ok) return Promise.resolve(permitted);
+
     return mutateChit(chitId, (chit) => {
       if (status === 'ACTIVE') {
         const { withdrawnDate: _date, withdrawnAmount: _amount, ...rest } = chit;
@@ -667,6 +694,9 @@ export const ChitUC = {
   async edit(chitId: string, edit: EditChitInput): Promise<Result<void>> {
     const guard = requireUnlocked();
     if (!guard.ok) return guard;
+
+    const permitted = requireEditMode('editing this chit');
+    if (!permitted.ok) return permitted;
 
     if (edit.targetAmount !== undefined) {
       const target = Money.parse(edit.targetAmount.amount, edit.targetAmount.currency);
@@ -729,8 +759,21 @@ export const ChitUC = {
     const guard = requireUnlocked();
     if (!guard.ok) return guard;
 
-    if (schedule.label.trim().length === 0) {
+    const label = schedule.label.trim();
+    if (label.length === 0) {
       return Err(new VaultStateError('a withdrawal schedule needs a label'));
+    }
+
+    /*
+     * Gated only when it would OVERWRITE. Saving under a new label is creating
+     * reference data and stays open like every other addition; saving under an
+     * existing one replaces its rows wholesale, and every chit pointing at that
+     * label silently revalues with it. The second is a change to existing
+     * records however much it looks like a save.
+     */
+    if ((await ChitScheduleRepository.findByLabel(label)) !== undefined) {
+      const permitted = requireEditMode(`replacing the "${label}" withdrawal schedule`);
+      if (!permitted.ok) return permitted;
     }
 
     const rows: { month: number; amount: MoneyValue }[] = [];
@@ -743,13 +786,59 @@ export const ChitUC = {
       rows.push({ month: row.month, amount: amount.value });
     }
 
-    return ChitScheduleRepository.save({ label: schedule.label.trim(), rows });
+    return ChitScheduleRepository.save({ label, rows });
   },
 
   async deleteSchedule(label: string): Promise<Result<void>> {
     const guard = requireUnlocked();
     if (!guard.ok) return guard;
+
+    const permitted = requireEditMode(`deleting the "${label}" withdrawal schedule`);
+    if (!permitted.ok) return permitted;
+
+    /*
+     * Refused while a chit still names it. The schedule is what turns a month
+     * number into the amount the pot pays out; removing it out from under a
+     * chit would leave that chit's withdrawal value unresolvable, and the chit
+     * itself gives no sign that the figure it used to show ever existed.
+     */
+    const assets = await AssetRepository.all();
+    const users = chitsOf(assets).filter((chit) => chit.scheduleLabel === label);
+    if (users.length > 0) {
+      return Err(
+        new VaultStateError(
+          `"${label}" is still used by ${String(users.length)} chit(s); point them at another schedule first`,
+        ),
+      );
+    }
+
     return ChitScheduleRepository.delete(label);
+  },
+
+  /**
+   * Removes a chit and every instalment recorded against it.
+   *
+   * No soft delete and no trail. A chit has no counterparty reading its history
+   * the way a hand loan does — its evidence is the instalment receipts the
+   * holder keeps outside this application — so a tombstone row here would be
+   * clutter that the register then has to learn to hide.
+   */
+  async delete(chitId: string): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    const permitted = requireEditMode('deleting this chit');
+    if (!permitted.ok) return permitted;
+
+    const asset = await AssetRepository.findById(chitId);
+    if (asset?.chitFund === undefined) {
+      return Err(new VaultStateError(`no chit fund ${chitId} was found`));
+    }
+
+    const removed = await AssetRepository.delete(chitId);
+    if (!removed.ok) return removed;
+    currentPorts().logger.info('chit deleted');
+    return Ok(undefined);
   },
 };
 
@@ -953,7 +1042,11 @@ export const TradeUC = {
     if (!savedExits.ok) return savedExits;
 
     return Ok({
-      assetId: projected.value.assets[0]?.assetId ?? '',
+      // The asset THIS trade landed on. `assets` is the whole merged ledger, so
+      // reading its first entry returned whichever holding the user happened to
+      // own first — a different asset than the one just recorded, as soon as
+      // there was more than one.
+      assetId: projected.value.touched[0] ?? '',
       exits: projected.value.exits.length,
       unapplied: projected.value.unapplied.map((row) => ({ reason: row.reason })),
     });
@@ -1206,6 +1299,9 @@ export const LoanUC = {
     const guard = requireUnlocked();
     if (!guard.ok) return guard;
 
+    const permitted = requireEditMode('editing this loan');
+    if (!permitted.ok) return permitted;
+
     const asset = await AssetRepository.findById(loanId);
     if (asset?.handLoan === undefined) {
       return Err(new VaultStateError(`no hand loan ${loanId} was found`));
@@ -1357,6 +1453,9 @@ export const LoanUC = {
 
   /** Closing freezes accrual; it does not assert the money came back. */
   close(loanId: string, closedDate: IsoDate): Promise<Result<void>> {
+    const permitted = requireEditMode('closing this loan');
+    if (!permitted.ok) return Promise.resolve(permitted);
+
     return mutateLoan(
       loanId,
       (loan) => ({ ...loan, closedDate }),
@@ -1365,6 +1464,9 @@ export const LoanUC = {
   },
 
   reopen(loanId: string): Promise<Result<void>> {
+    const permitted = requireEditMode('reopening this loan');
+    if (!permitted.ok) return Promise.resolve(permitted);
+
     return mutateLoan(
       loanId,
       (loan) => {
@@ -1373,6 +1475,54 @@ export const LoanUC = {
       },
       (recordedAt) => auditEvent(loanId, 'REOPENED', recordedAt),
     );
+  },
+
+  /**
+   * Removes a loan and every payment recorded against it.
+   *
+   * The trail is written FIRST and survives the loan, which is the whole reason
+   * `hand_loan_audit` carries no foreign key to `assets` (v6 migration). Order
+   * matters: appending after the delete would lose the trail entirely if the
+   * append failed, and a loan that vanished with no record of why is the exact
+   * situation the audit table exists to prevent.
+   *
+   * A deletion cannot be undone from inside the application, so the reason is
+   * worth asking for even though nothing enforces one.
+   */
+  async delete(
+    loanId: string,
+    options: { readonly reason?: string } = {},
+  ): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    const permitted = requireEditMode('deleting this loan');
+    if (!permitted.ok) return permitted;
+
+    const asset = await AssetRepository.findById(loanId);
+    if (asset?.handLoan === undefined) {
+      return Err(new VaultStateError(`no hand loan ${loanId} was found`));
+    }
+
+    const recordedAt = currentPorts().clock.now();
+    const loan = asset.handLoan;
+    const appended = await LoanAuditRepository.append([
+      auditEvent(loanId, 'DELETED', recordedAt, {
+        // The terms, so the trail still says what was removed. The borrower's
+        // NAME is deliberately absent: an audit entry is read outside the
+        // register that holds it, and ADR-013 keeps names in the vault only.
+        newValue: `${loan.principal.currency} ${loan.principal.amount} at ${loan.interestRatePct}% from ${loan.startDate}`,
+        ...(options.reason === undefined || options.reason.length === 0
+          ? {}
+          : { reason: options.reason }),
+      }),
+    ]);
+    if (!appended.ok) return appended;
+
+    const removed = await AssetRepository.delete(loanId);
+    if (!removed.ok) return removed;
+    currentPorts().logger.info('hand loan deleted');
+    return Ok(undefined);
   },
 };
 
@@ -1560,6 +1710,84 @@ export const LedgerUC = {
   },
   exits(): Promise<readonly ExitTransaction[]> {
     return ExitRepository.all();
+  },
+
+  /**
+   * Removes a holding: its lots, its income events, its corporate actions and
+   * its disposals all go with it.
+   *
+   * The disposals go too, and that is correct rather than incidental — an exit
+   * is a sale OF this holding, and one left behind would report a realised gain
+   * on units the book no longer says were ever acquired. A user who wants to
+   * undo one sale wants `deleteExit`, which is a different operation.
+   *
+   * Hand loans and chits are refused here and routed to their own use cases: a
+   * loan deleted through this generic path would skip the audit entry, and the
+   * trail's whole value is that it cannot be got around.
+   */
+  async deleteAsset(assetId: string): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    const permitted = requireEditMode('deleting this holding');
+    if (!permitted.ok) return permitted;
+
+    const asset = await AssetRepository.findById(assetId);
+    if (asset === undefined) {
+      return Err(new VaultStateError(`no asset ${assetId} was found`));
+    }
+    if (asset.assetClass === 'HAND_LOAN') {
+      return Err(
+        new VaultStateError('a hand loan is deleted from the Loans tab, so its audit trail is written'),
+      );
+    }
+    if (asset.assetClass === 'CHIT_FUND') {
+      return Err(new VaultStateError('a chit is deleted from the Chits tab'));
+    }
+
+    const removed = await AssetRepository.delete(assetId);
+    if (!removed.ok) return removed;
+    currentPorts().logger.info('holding deleted');
+    return Ok(undefined);
+  },
+
+  /**
+   * Undoes one disposal, returning the units to the lots it took them from.
+   *
+   * Deleting the exit row alone would leave the holding permanently short: the
+   * depletion lives in `remainingQuantity`, not in the presence of the exit, so
+   * nothing would ever put those units back. The reversal is driven by the
+   * exit's own allocations and is written with the delete in one transaction —
+   * see `ExitRepository.deleteWithAssets`.
+   */
+  async deleteExit(txnId: string): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    const permitted = requireEditMode('deleting this disposal');
+    if (!permitted.ok) return permitted;
+
+    const exit = await ExitRepository.findById(txnId);
+    if (exit === undefined) {
+      return Err(new VaultStateError(`no disposal ${txnId} was found`));
+    }
+
+    const asset = await AssetRepository.findById(exit.assetId);
+    if (asset === undefined) {
+      return Err(new VaultStateError(`the holding this disposal belongs to is no longer on the book`));
+    }
+
+    const restored = FifoAllocator.restore(asset.lots, exit.allocations);
+    if (!restored.ok) return restored;
+
+    // The position is open again by definition: units it had sold are back.
+    const { positionClosed: _closed, ...rest } = asset;
+    const reversal = await ExitRepository.deleteWithAssets(txnId, [
+      { ...rest, lots: restored.value },
+    ]);
+    if (!reversal.ok) return reversal;
+    currentPorts().logger.info('disposal deleted');
+    return Ok(undefined);
   },
 };
 

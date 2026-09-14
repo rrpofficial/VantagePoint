@@ -17,6 +17,7 @@ import {
   type ChitQuery,
   CompareSnapshotsUC,
   ComputeAdvanceTaxUC,
+  EditModeUC,
   GenerateComplianceUC,
   GenerateSnapshotUC,
   ImportStatementUC,
@@ -41,6 +42,22 @@ interface UnlockBody {
 }
 
 const failure = (code: string, message: string) => ({ error: { code, message } });
+
+/**
+ * A refused change gets 403, everything else keeps the route's own status.
+ *
+ * The distinction is what lets the SPA respond usefully. 422 says "you typed
+ * something wrong" and sends the user back to the form; 403 says "the request
+ * was fine, the mode is off" and sends them to Settings. Answering 422 for a
+ * gated call would have them re-check a field that was never the problem.
+ */
+const refusal = (
+  error: { readonly code: string; readonly message: string },
+  fallbackStatus: number,
+): { status: number; body: ReturnType<typeof failure> } => ({
+  status: error.code === 'EDIT_MODE_REQUIRED' ? 403 : fallbackStatus,
+  body: failure(error.code, error.message),
+});
 
 export function registerRoutes(app: FastifyInstance): void {
   /* ------------------------------------------------------------- health */
@@ -74,6 +91,21 @@ export function registerRoutes(app: FastifyInstance): void {
     return reply.send({ unlocked: false });
   });
 
+  /* ---------------------------------------------------------- edit mode */
+
+  app.get('/api/edit-mode', (_request, reply) => reply.send(EditModeUC.state()));
+
+  app.post<{ Body: UnlockBody }>('/api/edit-mode/enable', async (request, reply) => {
+    const result = await EditModeUC.enable(request.body.passphrase ?? '');
+    // 401, not 403: the passphrase supplied here is the credential, so a wrong
+    // one is a failed authentication rather than a refused permission.
+    return result.ok
+      ? reply.send(result.value)
+      : reply.code(401).send(failure(result.error.code, 'unable to enable edit mode'));
+  });
+
+  app.post('/api/edit-mode/disable', (_request, reply) => reply.send(EditModeUC.disable()));
+
   /* ---------------------------------------------------------- portfolio */
 
   app.get('/api/portfolio/valuation', async (request, reply) => {
@@ -93,6 +125,20 @@ export function registerRoutes(app: FastifyInstance): void {
       LedgerUC.exits(),
     ]);
     return reply.send({ assets, liabilities, exits });
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/ledger/assets/:id', async (request, reply) => {
+    const result = await LedgerUC.deleteAsset(request.params.id);
+    if (result.ok) return reply.send({ deleted: true });
+    const { status, body } = refusal(result.error, 422);
+    return reply.code(status).send(body);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/ledger/exits/:id', async (request, reply) => {
+    const result = await LedgerUC.deleteExit(request.params.id);
+    if (result.ok) return reply.send({ deleted: true });
+    const { status, body } = refusal(result.error, 422);
+    return reply.code(status).send(body);
   });
 
   /* --------------------------------------------------------- chit funds */
@@ -194,9 +240,16 @@ export function registerRoutes(app: FastifyInstance): void {
       ...(body.scheduleLabel === undefined ? {} : { scheduleLabel: body.scheduleLabel }),
       ...(body.comments === undefined ? {} : { comments: body.comments }),
     });
-    return result.ok
-      ? reply.send({ updated: true })
-      : reply.code(422).send(failure(result.error.code, result.error.message));
+    if (result.ok) return reply.send({ updated: true });
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/chits/:id', async (request, reply) => {
+    const result = await ChitUC.delete(request.params.id);
+    if (result.ok) return reply.send({ deleted: true });
+    const { status, body } = refusal(result.error, 422);
+    return reply.code(status).send(body);
   });
 
   app.post<{ Params: { id: string } }>('/api/chits/:id/emis', async (request, reply) => {
@@ -244,9 +297,9 @@ export function registerRoutes(app: FastifyInstance): void {
           })
         : await ChitUC.setStatus(request.params.id, 'ACTIVE');
 
-    return result.ok
-      ? reply.send({ updated: true })
-      : reply.code(422).send(failure(result.error.code, result.error.message));
+    if (result.ok) return reply.send({ updated: true });
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
   });
 
   app.get('/api/chits/schedules', async (_request, reply) => {
@@ -272,10 +325,20 @@ export function registerRoutes(app: FastifyInstance): void {
         },
       })),
     });
-    return result.ok
-      ? reply.code(201).send({ saved: true })
-      : reply.code(422).send(failure(result.error.code, result.error.message));
+    if (result.ok) return reply.code(201).send({ saved: true });
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
   });
+
+  app.delete<{ Params: { label: string } }>(
+    '/api/chits/schedules/:label',
+    async (request, reply) => {
+      const result = await ChitUC.deleteSchedule(request.params.label);
+      if (result.ok) return reply.send({ deleted: true });
+      const { status, body } = refusal(result.error, 422);
+      return reply.code(status).send(body);
+    },
+  );
 
   /* ------------------------------------------------------------- trades */
 
@@ -440,9 +503,20 @@ export function registerRoutes(app: FastifyInstance): void {
       body.reason === undefined ? {} : { reason: body.reason },
     );
 
-    return result.ok
-      ? reply.send({ changed: result.value.length, entries: result.value })
-      : reply.code(422).send(failure(result.error.code, result.error.message));
+    if (result.ok) return reply.send({ changed: result.value.length, entries: result.value });
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/loans/:id', async (request, reply) => {
+    const reason = (request.body as { reason?: string } | undefined)?.reason;
+    const result = await LoanUC.delete(
+      request.params.id,
+      reason === undefined ? {} : { reason },
+    );
+    if (result.ok) return reply.send({ deleted: true });
+    const { status, body } = refusal(result.error, 422);
+    return reply.code(status).send(body);
   });
 
   app.get<{ Params: { id: string } }>('/api/loans/:id/audit', async (request, reply) => {
@@ -640,9 +714,9 @@ export function registerRoutes(app: FastifyInstance): void {
       return reply.code(422).send(failure('INVALID_BODY', 'an income profile is required'));
     }
     const saved = await saveIncomeProfile(body.profile as Parameters<typeof saveIncomeProfile>[0]);
-    return saved.ok
-      ? reply.send({ present: true })
-      : reply.code(409).send(failure(saved.error.code, saved.error.message));
+    if (saved.ok) return reply.send({ present: true });
+    const { status, body: failed } = refusal(saved.error, 409);
+    return reply.code(status).send(failed);
   });
 
   /* --------------------------------------------------------- compliance */

@@ -43,6 +43,17 @@ export interface UnappliedTransaction {
 
 export interface LedgerProjection {
   readonly assets: readonly Asset[];
+  /**
+   * The assets these transactions actually landed on, in the order first
+   * touched.
+   *
+   * `assets` carries every holding in the vault, because a projection merges
+   * into what is already there rather than replacing it. A caller that wanted to
+   * know which asset its own row produced therefore could not read `assets[0]` —
+   * that is simply the first holding the user happens to own, and the manual
+   * trade form returned exactly that id to the browser.
+   */
+  readonly touched: readonly string[];
   /** Disposals, recorded so they are neither re-applied nor lost to tax. */
   readonly exits: readonly ExitTransaction[];
   readonly unapplied: readonly UnappliedTransaction[];
@@ -246,6 +257,7 @@ export function projectToLedger(input: {
   }
 
   const exits: ExitTransaction[] = [];
+  const touched: string[] = [];
   const seenExits = new Set((input.existingExits ?? []).map((exit) => exit.txnId));
   const reconciliation: ReconciliationNote[] = [];
 
@@ -277,6 +289,7 @@ export function projectToLedger(input: {
     }
 
     const assetId = assetIdFor(transaction, assetClass);
+    if (!touched.includes(assetId)) touched.push(assetId);
 
     if (ACQUISITION_KINDS.has(transaction.kind)) {
       const draft = draftFor(drafts, assetId, assetClass, transaction);
@@ -416,7 +429,7 @@ export function projectToLedger(input: {
     incomeEvents: draft.income,
   }));
 
-  return Ok({ assets, exits, unapplied, reconciliation });
+  return Ok({ assets, touched, exits, unapplied, reconciliation });
 }
 
 /** The acquisition kind a stored lot must have come from. */

@@ -10,18 +10,23 @@
 # vault.db at a path you chose, owned by you — which is what "native OS disk
 # volume" in FR-8.2 actually means.
 
-name: porttrack
+# Two instances can run side by side — a production one you actually use and a
+# testing one you break. PORTTRACK_PROJECT separates everything Docker namespaces
+# (project, containers, networks) and PORTTRACK_IMAGE_TAG separates what is BUILT,
+# so rebuilding test cannot replace the image production is running on. Both
+# default to today's values, so an existing `docker compose up` is unchanged.
+name: ${PORTTRACK_PROJECT:-porttrack}
 
 services:
   api:
-    container_name: porttrack-api
+    container_name: ${PORTTRACK_PROJECT:-porttrack}-api
     build:
       context: .
       dockerfile: docker/api.Dockerfile
       args:
         PORTTRACK_UID: ${PORTTRACK_UID:-1000}
         PORTTRACK_GID: ${PORTTRACK_GID:-1000}
-    image: porttrack-api:test
+    image: porttrack-api:${PORTTRACK_IMAGE_TAG:-test}
     user: "${PORTTRACK_UID:-1000}:${PORTTRACK_GID:-1000}"
     environment:
       PORTTRACK_DATA_DIR: /var/lib/porttrack
@@ -47,14 +52,14 @@ services:
     restart: unless-stopped
 
   web:
-    container_name: porttrack-web
+    container_name: ${PORTTRACK_PROJECT:-porttrack}-web
     build:
       context: .
       dockerfile: docker/web.Dockerfile
       args:
         PORTTRACK_UID: ${PORTTRACK_UID:-1000}
         PORTTRACK_GID: ${PORTTRACK_GID:-1000}
-    image: porttrack-web:test
+    image: porttrack-web:${PORTTRACK_IMAGE_TAG:-test}
     user: "${PORTTRACK_UID:-1000}:${PORTTRACK_GID:-1000}"
     ports:
       - "${PORTTRACK_WEB_PORT:-5173}:80"

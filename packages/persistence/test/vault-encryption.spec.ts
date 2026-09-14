@@ -181,3 +181,140 @@ describe('US-8.2 Scenario: The derived key never touches disk and is zeroised (A
     expect(readFileSync(join(dir, 'vault.db'), 'latin1')).not.toContain(PASSPHRASE);
   });
 });
+
+/**
+ * Re-verifying the passphrase without unlocking or re-deriving a second secret.
+ *
+ * The derived key IS the verifier: nothing extra is stored for this, so there is
+ * no second secret on disk, and none to keep in step after a passphrase change.
+ * Edit mode is the caller (see packages/app-services/src/edit-mode.ts).
+ */
+describe('US-8.2 Scenario: The open vault can re-check its own passphrase', () => {
+  const openedVault = async () => {
+    expectOk(await Vault.open({ dataDir: dataDir(), fileName: 'vault.db' }));
+    expectOk(await Vault.unlock(PASSPHRASE));
+  };
+
+  it('accepts the passphrase the vault was unlocked with', async () => {
+    await openedVault();
+    try {
+      expect(await Vault.verifyPassphrase(PASSPHRASE)).toBe(true);
+    } finally {
+      await Vault.close();
+    }
+  });
+
+  it('rejects any other passphrase', async () => {
+    await openedVault();
+    try {
+      expect(await Vault.verifyPassphrase('correct horse battery stapl')).toBe(false);
+    } finally {
+      await Vault.close();
+    }
+  });
+
+  /*
+   * An empty passphrase must not be a shortcut. `unlock` refuses one because on a
+   * brand-new vault it would silently become the key; a verifier that accepted it
+   * would hand every gated operation to a bare Enter press.
+   */
+  it('rejects an empty passphrase', async () => {
+    await openedVault();
+    try {
+      expect(await Vault.verifyPassphrase('')).toBe(false);
+    } finally {
+      await Vault.close();
+    }
+  });
+
+  it('rejects everything while locked, rather than throwing', async () => {
+    await openedVault();
+    await Vault.lock();
+    try {
+      expect(await Vault.verifyPassphrase(PASSPHRASE)).toBe(false);
+    } finally {
+      await Vault.close();
+    }
+  });
+
+  it('leaves the vault unlocked and usable', async () => {
+    await openedVault();
+    try {
+      await Vault.verifyPassphrase('wrong');
+      expect(Vault.isUnlocked()).toBe(true);
+    } finally {
+      await Vault.close();
+    }
+  });
+});
+
+/**
+ * The unlock session id, which is what lets a session-scoped permission tell
+ * "the session I was granted in" from "some session that is open now". A
+ * boolean cannot: lock-then-unlock reads true at both ends.
+ */
+describe('US-8.2 Scenario: Each unlock is a distinct session', () => {
+  it('has no session id while locked', async () => {
+    expectOk(await Vault.open({ dataDir: dataDir(), fileName: 'vault.db' }));
+    try {
+      expect(Vault.sessionId()).toBeUndefined();
+    } finally {
+      await Vault.close();
+    }
+  });
+
+  /*
+   * The SPA re-submits the passphrase whenever a browser tab is reloaded, because
+   * "unlocked" is client state and starts false on mount. Treating that as a new
+   * session revoked edit mode on every reload, which looked like the mode turning
+   * itself off at random.
+   */
+  it('keeps the same session when an already-open vault is unlocked again', async () => {
+    expectOk(await Vault.open({ dataDir: dataDir(), fileName: 'vault.db' }));
+    expectOk(await Vault.unlock(PASSPHRASE));
+    const first = Vault.sessionId();
+
+    expectOk(await Vault.unlock(PASSPHRASE));
+
+    try {
+      expect(Vault.sessionId()).toBe(first);
+      expect(Vault.isUnlocked()).toBe(true);
+    } finally {
+      await Vault.close();
+    }
+  });
+
+  it('leaves an open vault usable after a wrong passphrase is re-submitted', async () => {
+    const dir = dataDir();
+    expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
+    expectOk(await Vault.unlock(PASSPHRASE));
+    const first = Vault.sessionId();
+
+    const wrong = await Vault.unlock('not the passphrase');
+
+    try {
+      expect(wrong.ok).toBe(false);
+      expect(Vault.isUnlocked()).toBe(true);
+      expect(Vault.sessionId()).toBe(first);
+    } finally {
+      await Vault.close();
+    }
+  });
+
+  it('issues a different id on a second unlock of the same vault', async () => {
+    const dir = dataDir();
+    expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
+    expectOk(await Vault.unlock(PASSPHRASE));
+    const first = Vault.sessionId();
+
+    await Vault.lock();
+    expectOk(await Vault.unlock(PASSPHRASE));
+
+    try {
+      expect(first).toBeDefined();
+      expect(Vault.sessionId()).not.toBe(first);
+    } finally {
+      await Vault.close();
+    }
+  });
+});

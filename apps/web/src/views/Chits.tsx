@@ -22,6 +22,8 @@ import {
   type PaymentMode,
 } from '../api.js';
 import { Amount, Card, Chip } from '../components/primitives.js';
+import { DeleteControl } from '../components/DeleteControl.js';
+import { EditModeHint, useEditMode } from '../edit-mode.js';
 
 const STATUSES: readonly { readonly value: ChitStatus; readonly label: string }[] = [
   { value: 'ACTIVE', label: 'Active' },
@@ -370,6 +372,7 @@ function ChitDetail({
   schedules: readonly ChitWithdrawalSchedule[];
   onChanged: () => void;
 }) {
+  const editMode = useEditMode();
   const [editing, setEditing] = useState(false);
 
   return (
@@ -415,18 +418,34 @@ function ChitDetail({
         <p className="pt-muted">{chit.comments}</p>
       )}
 
-      <div className="pt-actions">
-        <button
-          type="button"
-          className="pt-button-inline"
-          data-testid={`chit-edit-toggle-${chit.assetId}`}
-          onClick={() => {
-            setEditing((open) => !open);
-          }}
-        >
-          {editing ? 'Cancel edit' : 'Edit chit'}
-        </button>
-      </div>
+      {/*
+        Recording an instalment stays below whatever this shows: paying into a
+        chit is the monthly routine, and gating it would make the mode something
+        the user leaves permanently on — which is the opposite of the intent.
+      */}
+      {editMode.enabled ? (
+        <div className="pt-actions">
+          <button
+            type="button"
+            className="pt-button-inline"
+            data-testid={`chit-edit-toggle-${chit.assetId}`}
+            onClick={() => {
+              setEditing((open) => !open);
+            }}
+          >
+            {editing ? 'Cancel edit' : 'Edit chit'}
+          </button>
+          <DeleteControl
+            label="Delete chit"
+            describes={`the chit "${chit.label}" with ${chit.org}, and its ${String(chit.emiCount)} recorded instalment(s)`}
+            testId={`delete-chit-${chit.assetId}`}
+            onDelete={() => api.deleteChit(chit.assetId)}
+            onDeleted={onChanged}
+          />
+        </div>
+      ) : (
+        <EditModeHint action="edit or delete this chit" />
+      )}
 
       {editing && (
         <EditChitForm
@@ -593,6 +612,7 @@ function EmiForm({ chit, onDone }: { chit: ChitView; onDone: () => void }) {
 }
 
 function StatusForm({ chit, onDone }: { chit: ChitView; onDone: () => void }) {
+  const editMode = useEditMode();
   const [date, setDate] = useState(chit.withdrawnDate ?? today());
   const [amount, setAmount] = useState(chit.withdrawnAmount?.amount ?? '');
   const [busy, setBusy] = useState(false);
@@ -621,7 +641,14 @@ function StatusForm({ chit, onDone }: { chit: ChitView; onDone: () => void }) {
   return (
     <div className="pt-form" data-testid={`chit-status-form-${chit.assetId}`}>
       <h4 className="pt-subhead">Status</h4>
-      {chit.status === 'ACTIVE' ? (
+      {/*
+        Gated with the edits, not with the instalments. A draw moves the chit off
+        the asset side entirely — net worth changes the moment it is recorded —
+        so it is a change to what this chit IS, not another payment into it.
+      */}
+      {!editMode.enabled ? (
+        <EditModeHint action="change this chit’s status" />
+      ) : chit.status === 'ACTIVE' ? (
         <>
           <p className="pt-muted">
             Marking this drawn removes it from net worth: the pot becomes cash you hold elsewhere,
@@ -1008,10 +1035,13 @@ function ScheduleEditor({
   schedules: readonly ChitWithdrawalSchedule[];
   onSaved: () => void;
 }) {
+  const editMode = useEditMode();
   const [label, setLabel] = useState('');
   const [rows, setRows] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | undefined>();
+
+  const overwrites = schedules.some((schedule) => schedule.label === label.trim());
 
   const submit = useCallback(async (): Promise<void> => {
     setBusy(true);
@@ -1056,6 +1086,7 @@ function ScheduleEditor({
                 <th scope="col">Schedule</th>
                 <th scope="col">Months covered</th>
                 <th scope="col">Payouts</th>
+                <th scope="col" />
               </tr>
             </thead>
             <tbody>
@@ -1069,6 +1100,15 @@ function ScheduleEditor({
                     {schedule.rows
                       .map((row) => `m${String(row.month)}: ${row.amount.amount}`)
                       .join(' · ')}
+                  </td>
+                  <td>
+                    <DeleteControl
+                      label="Delete"
+                      describes={`the "${schedule.label}" withdrawal schedule`}
+                      testId={`delete-schedule-${schedule.label}`}
+                      onDelete={() => api.deleteChitSchedule(schedule.label)}
+                      onDeleted={onSaved}
+                    />
                   </td>
                 </tr>
               ))}
@@ -1101,6 +1141,20 @@ function ScheduleEditor({
         <button type="submit" disabled={busy}>
           {busy ? 'Saving…' : 'Save schedule'}
         </button>
+        {/*
+          Warned rather than blocked. Saving under a new label is an ordinary
+          addition; reusing an existing one replaces that schedule's rows for
+          every chit pointing at it, which is a change to existing records and is
+          refused unless edit mode is on. Saying so before the submit is better
+          than a 403 the user has to interpret.
+        */}
+        {overwrites && (
+          <p className="pt-muted" data-testid="schedule-overwrite-warning">
+            <strong>&quot;{label.trim()}&quot; already exists.</strong> Saving replaces its rows for
+            every chit that uses it
+            {editMode.enabled ? '.' : ', which needs edit mode — turn it on under Settings.'}
+          </p>
+        )}
         {error !== undefined && (
           <p className="pt-error" role="alert">
             {error}

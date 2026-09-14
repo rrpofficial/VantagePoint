@@ -30,6 +30,8 @@ import {
   type PaymentMode,
 } from '../api.js';
 import { Amount, Card, Chip } from '../components/primitives.js';
+import { DeleteControl } from '../components/DeleteControl.js';
+import { EditModeHint, useEditMode } from '../edit-mode.js';
 
 const STATUSES: readonly { readonly value: LoanStatus; readonly label: string }[] = [
   { value: 'ACTIVE', label: 'Active' },
@@ -416,6 +418,7 @@ function LoanRow({
 }
 
 function LoanDetail({ loan, onChanged }: { loan: LoanView; onChanged: () => void }) {
+  const editMode = useEditMode();
   const [editing, setEditing] = useState(false);
   /*
    * Bumped by anything that writes a trail entry. The history is fetched once
@@ -432,18 +435,35 @@ function LoanDetail({ loan, onChanged }: { loan: LoanView; onChanged: () => void
 
   return (
     <div className="pt-stack" data-testid={`loan-detail-${loan.loanId}`}>
-      <div className="pt-actions">
-        <button
-          type="button"
-          className="pt-button-inline"
-          data-testid={`edit-toggle-${loan.loanId}`}
-          onClick={() => {
-            setEditing((open) => !open);
-          }}
-        >
-          {editing ? 'Cancel edit' : 'Edit loan'}
-        </button>
-      </div>
+      {/*
+        Editing and deleting appear together, and only in edit mode. Recording a
+        payment stays below regardless: adding to a loan's history is the
+        everyday path and nothing about it is destructive.
+      */}
+      {editMode.enabled ? (
+        <div className="pt-actions">
+          <button
+            type="button"
+            className="pt-button-inline"
+            data-testid={`edit-toggle-${loan.loanId}`}
+            onClick={() => {
+              setEditing((open) => !open);
+            }}
+          >
+            {editing ? 'Cancel edit' : 'Edit loan'}
+          </button>
+          <DeleteControl
+            label="Delete loan"
+            describes={`the loan to ${loan.borrowerName}`}
+            testId={`delete-loan-${loan.loanId}`}
+            withReason
+            onDelete={(reason) => api.deleteLoan(loan.loanId, reason)}
+            onDeleted={onChanged}
+          />
+        </div>
+      ) : (
+        <EditModeHint action="edit or delete this loan" />
+      )}
 
       {editing && (
         <EditLoanForm
@@ -524,6 +544,7 @@ const ACTION_LABEL: Readonly<Record<LoanAuditEntry['action'], string>> = {
   REOPENED: 'Reopened',
   PRINCIPAL_REPAYMENT: 'Principal repayment',
   INTEREST_PAYMENT: 'Interest payment',
+  DELETED: 'Deleted',
 };
 
 /**

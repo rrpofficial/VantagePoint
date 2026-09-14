@@ -15,6 +15,7 @@
  *     so backup and restore cover both.
  */
 import Database from 'better-sqlite3-multiple-ciphers';
+import { timingSafeEqual } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
@@ -32,7 +33,7 @@ import {
   zeroise,
   type KdfParams,
 } from './crypto.js';
-import { runMigrations } from './migrations.js';
+import { currentVersion, runMigrations } from './migrations.js';
 
 /** SQLite3MultipleCiphers scheme name for AES-256-CBC + HMAC-SHA512. */
 const CIPHER_SCHEME = 'sqlcipher';
@@ -64,9 +65,21 @@ interface OpenState {
   meta: VaultMeta;
   db?: Database.Database | undefined;
   key?: Uint8Array | undefined;
+  sessionId?: number | undefined;
 }
 
 let state: OpenState | undefined;
+
+/**
+ * Incremented on every successful unlock, never reused.
+ *
+ * Lets anything holding session-scoped permission — edit mode, today — tell "the
+ * session I was granted in" from "a session that happens to be open now". A
+ * boolean cannot: lock-then-unlock leaves `isUnlocked()` reading true again, and
+ * a permission checked against that alone would silently survive into a session
+ * that never authorised it.
+ */
+let sessions = 0;
 
 function readOrCreateMeta(metaPath: string): VaultMeta {
   if (existsSync(metaPath)) {
@@ -140,6 +153,24 @@ export const Vault = {
         throw new Error(`integrity check returned ${String(check)}`);
       }
 
+      /*
+       * Re-unlocking a vault that is already open is a no-op, not a new session.
+       *
+       * The passphrase was right — `quick_check` above proved it against the
+       * real cipher — but nothing has changed: the same database, opened by the
+       * same person, who never locked it. The SPA re-submits exactly this way
+       * whenever a browser tab is reloaded, because "unlocked" is client state
+       * and starts false on mount. Issuing a new session id here revoked edit
+       * mode on every reload, which looked like the mode randomly turning itself
+       * off. Replacing the handle also leaked the previous one.
+       */
+      const alreadyOpen = current.db;
+      if (alreadyOpen !== undefined) {
+        db.close();
+        zeroise(key);
+        return Ok({ schemaVersion: currentVersion(alreadyOpen), locked: false });
+      }
+
       db.pragma('journal_mode=WAL');
       db.pragma('synchronous=FULL');
       db.pragma('foreign_keys=ON');
@@ -148,6 +179,7 @@ export const Vault = {
 
       current.db = db;
       current.key = key;
+      current.sessionId = ++sessions;
       return Ok({ schemaVersion, locked: false });
     } catch {
       db?.close();
@@ -158,10 +190,53 @@ export const Vault = {
     }
   },
 
+  /**
+   * Is this the passphrase the open vault was unlocked with?
+   *
+   * Re-derives with the SAME salt and parameters and compares against the key
+   * already in memory. Nothing is stored to support this and nothing new is
+   * written: the derived key is itself the only verifier the vault has, so a
+   * separate passphrase hash — which would be a second secret on disk, and a
+   * second thing to keep in step after a passphrase change — is not needed.
+   *
+   * Costs a full Argon2id derivation, which is the point: this exists to gate a
+   * deliberate action, and a cheap check would be a cheap thing to guess at.
+   */
+  async verifyPassphrase(passphrase: string): Promise<boolean> {
+    const current = state;
+    const key = current?.key;
+    // A locked vault has no key to compare against. Answering "no" rather than
+    // throwing keeps the caller's failure path single: both mean "refused".
+    if (current === undefined || key === undefined || passphrase.length === 0) return false;
+
+    const candidate = await deriveKeyAsync(
+      passphrase,
+      Buffer.from(current.meta.saltHex, 'hex'),
+      current.meta.params,
+    );
+    try {
+      // Constant-time. A byte-by-byte comparison leaks how much of a guess was
+      // right through its timing, which is exactly what makes guessing cheap.
+      return candidate.length === key.length && timingSafeEqual(candidate, key);
+    } finally {
+      zeroise(candidate);
+    }
+  },
+
+  /**
+   * Identifies the current unlock session, or undefined while locked. A caller
+   * holding a permission granted in one session compares this to decide whether
+   * it is still the same one.
+   */
+  sessionId(): number | undefined {
+    return state?.db === undefined ? undefined : state.sessionId;
+  },
+
   lock(): Promise<void> {
     if (!state) return Promise.resolve();
     state.db?.close();
     state.db = undefined;
+    state.sessionId = undefined;
     if (state.key) {
       zeroise(state.key);
       state.key = undefined;
