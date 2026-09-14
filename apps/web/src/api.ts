@@ -248,6 +248,83 @@ export interface LoanRegister {
   readonly borrowers: readonly string[];
 }
 
+export type ChitStatus = 'ACTIVE' | 'WITHDRAWN';
+export type ChitEmiType = 'CONSTANT' | 'VARYING';
+
+export interface ChitEmi {
+  readonly emiId: string;
+  readonly date: string;
+  readonly amount: Money;
+  readonly mode: PaymentMode;
+  readonly paidTo: string;
+  readonly comments?: string;
+}
+
+export interface ChitView {
+  readonly assetId: string;
+  readonly org: string;
+  readonly label: string;
+  readonly targetAmount: Money;
+  readonly startDate: string;
+  readonly endDate: string;
+  readonly durationMonths: number;
+  readonly emiType: ChitEmiType;
+  readonly scheduleLabel?: string;
+  readonly status: ChitStatus;
+  readonly withdrawnDate?: string;
+  readonly withdrawnAmount?: Money;
+  readonly comments?: string;
+  readonly emis: readonly ChitEmi[];
+  readonly paidToDate: Money;
+  readonly emiCount: number;
+  readonly monthsElapsed: number;
+  readonly monthsRemaining: number;
+  readonly remainingCommitment: Money;
+  readonly carryingValue: Money;
+  readonly expectedWithdrawal?: Money;
+  readonly lastPaymentDate?: string;
+}
+
+export interface ChitTotals {
+  readonly chitCount: number;
+  readonly activeCount: number;
+  readonly withdrawnCount: number;
+  readonly totalTarget: Money;
+  readonly totalPaid: Money;
+  readonly activeCarryingValue: Money;
+  readonly totalWithdrawn: Money;
+}
+
+export interface ChitRegister {
+  readonly chits: readonly ChitView[];
+  readonly totals: ChitTotals;
+  readonly orgs: readonly string[];
+}
+
+export interface ChitWithdrawalSchedule {
+  readonly label: string;
+  readonly rows: readonly { readonly month: number; readonly amount: Money }[];
+}
+
+export interface ChitQuery {
+  readonly statuses?: readonly ChitStatus[];
+  readonly orgs?: readonly string[];
+  readonly sortBy?: string;
+  readonly direction?: 'ASC' | 'DESC';
+}
+
+function chitQueryString(query: ChitQuery): string {
+  const params = new URLSearchParams();
+  if (query.statuses !== undefined && query.statuses.length > 0) {
+    params.set('status', query.statuses.join(','));
+  }
+  if (query.orgs !== undefined && query.orgs.length > 0) params.set('org', query.orgs.join(','));
+  if (query.sortBy !== undefined) params.set('sortBy', query.sortBy);
+  if (query.direction !== undefined) params.set('direction', query.direction);
+  const encoded = params.toString();
+  return encoded.length === 0 ? '' : `?${encoded}`;
+}
+
 export interface TradeClass {
   readonly assetClass: string;
   readonly label: string;
@@ -268,7 +345,9 @@ export type LoanAuditAction =
   | 'CLOSED'
   | 'REOPENED'
   | 'PRINCIPAL_REPAYMENT'
-  | 'INTEREST_PAYMENT';
+  | 'INTEREST_PAYMENT'
+  /** The loan itself. The entry outlives it — the trail does not cascade. */
+  | 'DELETED';
 
 export interface LoanAuditEntry {
   readonly entryId: string;
@@ -428,6 +507,11 @@ export interface ScheduleFa {
   readonly tableDError: ApiError | null;
 }
 
+export interface EditModeState {
+  readonly enabled: boolean;
+  readonly since?: string;
+}
+
 export const api = {
   unlock: (passphrase: string) =>
     request<{ unlocked: boolean }>('/vault/unlock', {
@@ -438,13 +522,88 @@ export const api = {
   valuation: () => request<Valuation>('/portfolio/valuation'),
   ready: () => request<{ status: string }>('/health/ready'),
 
+  editMode: () => request<EditModeState>('/edit-mode'),
+  /** Slow: the server re-derives the vault key, exactly as unlocking does. */
+  enableEditMode: (passphrase: string) =>
+    request<EditModeState>('/edit-mode/enable', {
+      method: 'POST',
+      body: JSON.stringify({ passphrase }),
+    }),
+  disableEditMode: () => request<EditModeState>('/edit-mode/disable', { method: 'POST' }),
+
   ledger: () => request<Ledger>('/ledger/assets'),
+  deleteAsset: (assetId: string) =>
+    request<{ deleted: boolean }>(`/ledger/assets/${encodeURIComponent(assetId)}`, {
+      method: 'DELETE',
+    }),
+  deleteExit: (txnId: string) =>
+    request<{ deleted: boolean }>(`/ledger/exits/${encodeURIComponent(txnId)}`, {
+      method: 'DELETE',
+    }),
 
   /**
    * Server-derived. The browser must not decide which financial year it is —
    * a client in another timezone would disagree with the engine computing the tax.
    */
   periods: () => request<Periods>('/reference/periods'),
+
+  chits: (query: ChitQuery = {}) => request<ChitRegister>(`/chits${chitQueryString(query)}`),
+  openChit: (input: {
+    org: string;
+    label: string;
+    targetAmount: Money;
+    startDate: string;
+    durationMonths: number;
+    emiType: ChitEmiType;
+    scheduleLabel?: string;
+    comments?: string;
+  }) => request<{ chitId: string }>('/chits', { method: 'POST', body: JSON.stringify(input) }),
+  editChit: (
+    chitId: string,
+    input: {
+      org?: string;
+      label?: string;
+      targetAmount?: Money;
+      startDate?: string;
+      durationMonths?: number;
+      emiType?: ChitEmiType;
+      scheduleLabel?: string | null;
+      comments?: string;
+    },
+  ) =>
+    request<{ updated: boolean }>(`/chits/${encodeURIComponent(chitId)}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  recordChitEmi: (
+    chitId: string,
+    input: { date: string; amount: Money; mode: PaymentMode; paidTo: string; comments?: string },
+  ) =>
+    request<{ recorded: boolean }>(`/chits/${encodeURIComponent(chitId)}/emis`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  setChitStatus: (
+    chitId: string,
+    input: { status: ChitStatus; date?: string; amount?: Money },
+  ) =>
+    request<{ updated: boolean }>(`/chits/${encodeURIComponent(chitId)}/status`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  deleteChit: (chitId: string) =>
+    request<{ deleted: boolean }>(`/chits/${encodeURIComponent(chitId)}`, { method: 'DELETE' }),
+  chitSchedules: () =>
+    request<{ schedules: readonly ChitWithdrawalSchedule[] }>('/chits/schedules'),
+  saveChitSchedule: (schedule: ChitWithdrawalSchedule) =>
+    request<{ saved: boolean }>('/chits/schedules', {
+      method: 'POST',
+      body: JSON.stringify(schedule),
+    }),
+  deleteChitSchedule: (label: string) =>
+    request<{ deleted: boolean }>(`/chits/schedules/${encodeURIComponent(label)}`, {
+      method: 'DELETE',
+    }),
 
   tradeClasses: () => request<{ classes: readonly TradeClass[] }>('/trades/classes'),
   recordTrade: (input: {
@@ -488,6 +647,11 @@ export const api = {
       `/loans/${encodeURIComponent(loanId)}`,
       { method: 'PUT', body: JSON.stringify(input) },
     ),
+  deleteLoan: (loanId: string, reason?: string) =>
+    request<{ deleted: boolean }>(`/loans/${encodeURIComponent(loanId)}`, {
+      method: 'DELETE',
+      body: JSON.stringify(reason === undefined ? {} : { reason }),
+    }),
   loanAudit: (loanId: string) =>
     request<{ entries: readonly LoanAuditEntry[] }>(
       `/loans/${encodeURIComponent(loanId)}/audit`,

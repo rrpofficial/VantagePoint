@@ -30,7 +30,13 @@ export type LoanAuditAction =
   | 'CLOSED'
   | 'REOPENED'
   | 'PRINCIPAL_REPAYMENT'
-  | 'INTEREST_PAYMENT';
+  | 'INTEREST_PAYMENT'
+  /**
+   * The loan itself was removed. The entry outlives it: the trail does not
+   * cascade with the record (see the v6 migration), so this is what remains to
+   * answer why a loan someone remembers is no longer on the register.
+   */
+  | 'DELETED';
 
 export interface LoanAuditEntry {
   readonly entryId: string;

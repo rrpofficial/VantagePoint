@@ -52,6 +52,31 @@ async function goToSection(page: Page, section: string): Promise<void> {
   await page.getByRole('link', { name: section, exact: true }).click();
 }
 
+/**
+ * Turns on edit mode, which every edit, status change and delete is gated on.
+ *
+ * Idempotent, because the suite shares one API process and one vault: the mode
+ * stays on once enabled, so this checks for the form before filling it rather
+ * than assuming the state it starts in.
+ */
+async function enableEditMode(page: Page): Promise<void> {
+  await goToSection(page, 'Settings');
+
+  const enable = page.getByTestId('enable-edit-mode');
+  const disable = page.getByTestId('disable-edit-mode');
+  // Waits for React to render EITHER state before deciding, for the same reason
+  // `unlock` does: a bare isVisible() does not retry and answers "false" while
+  // the card is still mounting.
+  await expect(enable.or(disable).first()).toBeVisible();
+
+  if (await enable.isVisible()) {
+    await page.getByLabel('Vault passphrase').fill(PASSPHRASE);
+    await enable.click();
+  }
+  await expect(page.getByTestId('edit-mode-flag')).toBeVisible();
+}
+
+
 test.describe('US-8.5 Scenario: Core navigation exists', () => {
   test.beforeEach(async ({ page }) => {
     await unlock(page);
@@ -697,6 +722,9 @@ test.describe('US-1.11 Scenario: The hand-loan register, end to end', () => {
 
   test('edits a loan and records what changed in its history', async ({ page }) => {
     await unlock(page);
+    // The edit control does not exist until edit mode is on — that is the gate,
+    // not a styling choice, so the journey has to open it like a user does.
+    await enableEditMode(page);
     await goToSection(page, 'Loans');
 
     const name = BORROWERS.edited;
@@ -927,10 +955,380 @@ test.describe('US-4.8 Scenario: A trade is typed in rather than imported', () =>
   });
 });
 
+test.describe('US-1.12 Scenario: The chit-fund register, end to end', () => {
+  const CHITS = {
+    journey: 'E2E Journey Chit',
+    withdrawn: 'E2E Withdrawn Chit',
+    scheduled: 'E2E Scheduled Chit',
+  } as const;
+  const ORG = 'E2E Chit Company';
+
+  async function openChit(
+    page: Page,
+    label: string,
+    values: {
+      target?: string;
+      start?: string;
+      months?: string;
+      emiType?: string;
+      schedule?: string;
+    } = {},
+  ): Promise<void> {
+    await page.getByRole('button', { name: 'Record a chit' }).click();
+    const form = page.getByTestId('new-chit-form');
+    await form.getByLabel('Chit fund organisation').fill(ORG);
+    await form.getByLabel('Chit label').fill(label);
+    await form.getByLabel('Chit amount').fill(values.target ?? '500000');
+    await form.getByLabel('Start date').fill(values.start ?? '2025-04-01');
+    await form.getByLabel('Duration in months').fill(values.months ?? '25');
+    if (values.emiType !== undefined) {
+      await form.getByLabel('Instalment').selectOption({ label: values.emiType });
+    }
+    if (values.schedule !== undefined) {
+      await form.getByLabel('Withdrawal schedule').selectOption({ label: values.schedule });
+    }
+    await form.getByRole('button', { name: 'Save chit' }).click();
+    await expect(page.getByTestId('chit-table')).toContainText(label);
+  }
+
+  async function payInstalment(page: Page, label: string, amount: string, date: string) {
+    await page.getByRole('button', { name: label, exact: true }).click();
+    const detail = page.locator('[data-testid^="chit-detail-"]');
+    await expect(detail).toBeVisible();
+    const form = detail.locator('[data-testid^="chit-emi-form-"]');
+    await form.getByLabel('Amount').fill(amount);
+    await form.getByLabel('Date').fill(date);
+    await form.getByRole('button', { name: 'Record instalment' }).click();
+    return detail;
+  }
+
+  test('records a chit and carries it at what has been paid in', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Chits');
+
+    await openChit(page, CHITS.journey, { target: '500000' });
+    await payInstalment(page, CHITS.journey, '20000', '2025-04-05');
+
+    const table = page.getByTestId('chit-table');
+    // ₹20,000 counted, against a ₹5,00,000 chit. The face value must never be
+    // the asset figure.
+    await expect(table).toContainText('20,000');
+    await expect(page.getByTestId('chit-carrying')).toContainText('20,000');
+    await expect(page.getByTestId('chit-carrying')).not.toContainText('5,00,000');
+  });
+
+  test('adds the chit to net worth on the Dashboard', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Dashboard');
+    const netWorth = page.getByTestId('net-worth');
+    const before = (await netWorth.textContent()) ?? '';
+
+    await goToSection(page, 'Chits');
+    await openChit(page, CHITS.scheduled, { target: '1000000' });
+    await payInstalment(page, CHITS.scheduled, '35000', '2025-04-05');
+
+    await goToSection(page, 'Dashboard');
+    await expect(netWorth).not.toHaveText(before);
+    await expect(page.getByTestId('allocation-breakdown')).toContainText('chit fund');
+  });
+
+  /*
+   * The tiles are portfolio-wide totals, and the suite is cumulative, so a
+   * per-chit assertion has to read the chit's OWN row. Asserting on the tile
+   * made this test depend on every chit recorded before it.
+   */
+  const rowFor = (page: Page, label: string) =>
+    page.getByTestId('chit-table').locator('tr', { hasText: label }).first();
+
+  test('drops out of net worth once marked withdrawn, and comes back if reversed', async ({
+    page,
+  }) => {
+    await unlock(page);
+    // Marking a chit drawn is a status change, so it is gated with the edits.
+    await enableEditMode(page);
+    await goToSection(page, 'Chits');
+
+    await openChit(page, CHITS.withdrawn, { target: '500000', start: '2025-05-01' });
+    const detail = await payInstalment(page, CHITS.withdrawn, '25000', '2025-05-05');
+    await expect(rowFor(page, CHITS.withdrawn)).toContainText('25,000');
+
+    /* ------------------------------------------------------------ withdraw */
+    const status = detail.locator('[data-testid^="chit-status-form-"]');
+    await status.getByLabel('Amount received').fill('420000');
+    await status.getByLabel('Date drawn').fill('2025-08-01');
+    await detail.locator('[data-testid^="chit-withdraw-"]').click();
+
+    // The pot is now cash elsewhere; counting the instalments too would count
+    // the same money twice. Paid-in still reads ₹25,000 — only the asset
+    // column goes to nil.
+    const row = rowFor(page, CHITS.withdrawn);
+    await expect(row).toContainText('Withdrawn');
+    await expect(row.locator('td').last()).toHaveText('₹0');
+
+    /* ------------------------------------------------------------- reverse */
+    /*
+     * The panel is STILL OPEN — recording a status change reloads the register
+     * but does not collapse the row, the same way an edited loan keeps its trail
+     * on screen. Clicking the chit name again would toggle it SHUT, and the
+     * reactivate button would then never appear.
+     */
+    await detail.locator('[data-testid^="chit-reactivate-"]').click();
+    await expect(rowFor(page, CHITS.withdrawn).locator('td').last()).not.toHaveText('₹0');
+  });
+
+  test('keeps recording instalments after the pot is drawn', async ({ page }) => {
+    await unlock(page);
+    await enableEditMode(page);
+    await goToSection(page, 'Chits');
+
+    // Its own chit: reusing another test's left the status form showing the
+    // reactivate branch instead of the withdraw one, depending on run order.
+    const label = 'E2E Still Paying Chit';
+    await openChit(page, label, { target: '500000', start: '2025-06-01' });
+    const detail = await payInstalment(page, label, '25000', '2025-06-05');
+
+    const status = detail.locator('[data-testid^="chit-status-form-"]');
+    await status.getByLabel('Amount received').fill('420000');
+    await status.getByLabel('Date drawn').fill('2025-08-01');
+    await detail.locator('[data-testid^="chit-withdraw-"]').click();
+    await expect(rowFor(page, label)).toContainText('Withdrawn');
+
+    // Drawing early does not end the obligation, so the form must stay usable.
+    // Read from the panel that is already open: re-clicking the name closes it.
+    const form = detail.locator('[data-testid^="chit-emi-form-"]');
+    await form.getByLabel('Amount').fill('25000');
+    await form.getByLabel('Date').fill('2025-09-05');
+    await form.getByRole('button', { name: 'Record instalment' }).click();
+
+    await expect(page.locator('[data-testid^="chit-emis-"]')).toContainText('2025-09-05');
+    // Still nil as an asset, despite the further instalment.
+    await expect(rowFor(page, label).locator('td').last()).toHaveText('₹0');
+  });
+
+  test('sets up an agreed payout table and shows what a draw would pay', async ({ page }) => {
+    await unlock(page);
+    // The first save of a label is an addition and needs nothing. A RE-RUN of
+    // this suite against the same vault is a replace, which does — and a test
+    // that passes only on a fresh vault is worse than one that always runs.
+    await enableEditMode(page);
+    await goToSection(page, 'Chits');
+
+    await page.getByRole('button', { name: /set up|Hide/ }).click();
+    const scheduleForm = page.getByTestId('chit-schedule-form');
+    await scheduleForm.getByLabel('Schedule label').fill('E2E 5L / 25');
+    await scheduleForm
+      .getByLabel('Month and payout, one per line')
+      .fill('1, 350000\n9, 420000\n25, 500000');
+    await scheduleForm.getByRole('button', { name: 'Save schedule' }).click();
+
+    await expect(page.getByTestId('chit-schedule-table')).toContainText('E2E 5L / 25');
+  });
+
+  test('offers no payout table for a varying-instalment chit', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Chits');
+
+    await page.getByRole('button', { name: 'Record a chit' }).click();
+    const form = page.getByTestId('new-chit-form');
+    await expect(form.getByLabel('Withdrawal schedule')).toBeVisible();
+
+    await form.getByLabel('Instalment').selectOption({ label: 'Varying' });
+
+    // Showing a payout selector here would imply a figure nobody agreed to.
+    await expect(form.getByLabel('Withdrawal schedule')).toHaveCount(0);
+  });
+
+  test('filters by status', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Chits');
+
+    await page.getByLabel('Withdrawn').check();
+    const table = page.getByTestId('chit-table');
+    await expect(table).not.toContainText(CHITS.journey);
+
+    await page.getByLabel('Withdrawn').uncheck();
+    await expect(table).toContainText(CHITS.journey);
+  });
+});
+
 test.describe('US-8.10 Scenario: Egress is visible and empty by default', () => {
   test('reports no outbound calls, and labels that as expected', async ({ page }) => {
     await unlock(page);
     await goToSection(page, 'Settings');
     await expect(page.getByTestId('egress-log-empty')).toBeVisible();
+  });
+});
+
+/**
+ * Edit mode, end to end.
+ *
+ * The journey a user actually takes: everything destructive is absent, they go
+ * to Settings and re-enter the passphrase, the controls appear on every tab at
+ * once, and turning it off puts them away again.
+ *
+ * Ordered last on purpose. These tests turn the mode off, and the suite shares a
+ * single API process — leaving it off part-way through would break whichever
+ * gated journey happened to run next.
+ */
+test.describe('Scenario: Edit mode gates changing and deleting across every tab', () => {
+  /*
+   * Its own records rather than another block's. A gating test that depended on
+   * a loan some earlier scenario happened to leave behind would pass or fail on
+   * run order, which is exactly what it must not do.
+   */
+  const BORROWER = 'E2E Edit Mode Borrower';
+  const ORG = 'E2E Chit Company';
+
+  async function lendOnce(page: Page, name: string): Promise<void> {
+    await goToSection(page, 'Loans');
+    const table = page.getByTestId('loan-table');
+    if (await table.getByText(name, { exact: true }).first().isVisible()) return;
+
+    await page.getByRole('button', { name: 'Record a loan' }).click();
+    const form = page.getByTestId('new-loan-form');
+    await form.getByLabel('Borrower name').fill(name);
+    await form.getByLabel('Loan amount').fill('200000');
+    await form.getByLabel('Interest rate %').fill('12');
+    await form.getByLabel('Loan date').fill('2025-08-01');
+    await form.getByRole('button', { name: 'Save loan' }).click();
+    await expect(table).toContainText(name);
+  }
+
+  /** Idempotent, so the suite stays re-runnable against the same vault. */
+  async function openChitOnce(page: Page, label: string): Promise<void> {
+    await goToSection(page, 'Chits');
+    const table = page.getByTestId('chit-table');
+    if (await table.getByText(label, { exact: true }).first().isVisible()) return;
+
+    await page.getByRole('button', { name: 'Record a chit' }).click();
+    const form = page.getByTestId('new-chit-form');
+    await form.getByLabel('Chit fund organisation').fill(ORG);
+    await form.getByLabel('Chit label').fill(label);
+    await form.getByLabel('Chit amount').fill('500000');
+    await form.getByLabel('Start date').fill('2025-07-01');
+    await form.getByLabel('Duration in months').fill('25');
+    await form.getByRole('button', { name: 'Save chit' }).click();
+    await expect(table).toContainText(label);
+  }
+
+  test('hides the edit control on Loans until the mode is on', async ({ page }) => {
+    await unlock(page);
+    await enableEditMode(page);
+    await lendOnce(page, BORROWER);
+
+    await goToSection(page, 'Settings');
+    await page.getByTestId('disable-edit-mode').click();
+    await expect(page.getByTestId('edit-mode-flag')).toHaveCount(0);
+
+    await goToSection(page, 'Loans');
+    await page.getByRole('button', { name: BORROWER, exact: true }).click();
+    const detail = page.locator('[data-testid^="loan-detail-"]');
+
+    await expect(detail.locator('[data-testid^="edit-toggle-"]')).toHaveCount(0);
+    await expect(detail.locator('[data-testid^="delete-loan-"]')).toHaveCount(0);
+    // The absence is explained rather than left looking like a missing feature.
+    await expect(detail.getByTestId('edit-mode-hint')).toBeVisible();
+  });
+
+  test('refuses the wrong passphrase and stays off', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Settings');
+
+    await page.getByLabel('Vault passphrase').fill('not the passphrase');
+    await page.getByTestId('enable-edit-mode').click();
+
+    await expect(page.getByTestId('edit-mode-error')).toBeVisible();
+    await expect(page.getByTestId('edit-mode-flag')).toHaveCount(0);
+  });
+
+  /*
+   * One enable, controls on several tabs. A per-screen permission would need
+   * turning on again on each, which is the thing the user asked not to have.
+   */
+  test('reveals edit and delete on Loans, Chits and the Ledger after one enable', async ({
+    page,
+  }) => {
+    await unlock(page);
+    await enableEditMode(page);
+    await lendOnce(page, BORROWER);
+    await openChitOnce(page, 'E2E Edit Mode Chit');
+
+    await goToSection(page, 'Loans');
+    await page.getByRole('button', { name: BORROWER, exact: true }).click();
+    const loan = page.locator('[data-testid^="loan-detail-"]');
+    await expect(loan.locator('[data-testid^="edit-toggle-"]')).toBeVisible();
+    await expect(loan.locator('[data-testid^="delete-loan-"]')).toBeVisible();
+
+    await goToSection(page, 'Chits');
+    await page.getByRole('button', { name: 'E2E Edit Mode Chit', exact: true }).click();
+    const chit = page.locator('[data-testid^="chit-detail-"]');
+    await expect(chit.locator('[data-testid^="chit-edit-toggle-"]')).toBeVisible();
+    await expect(chit.locator('[data-testid^="delete-chit-"]')).toBeVisible();
+
+    await goToSection(page, 'Ledger');
+    await expect(page.locator('[data-testid^="delete-asset-"]').first()).toBeVisible();
+  });
+
+  test('shows the mode in the top bar from every tab, not only Settings', async ({ page }) => {
+    await unlock(page);
+    await enableEditMode(page);
+
+    await goToSection(page, 'Dashboard');
+    await expect(page.getByTestId('edit-mode-flag')).toBeVisible();
+    await goToSection(page, 'Ledger');
+    await expect(page.getByTestId('edit-mode-flag')).toBeVisible();
+  });
+
+  /*
+   * Arm, then delete. The first click reveals what is about to go; nothing is
+   * sent until the second, because a single stray click lands on a row and a row
+   * is what is being removed.
+   */
+  test('asks before deleting, and cancelling removes nothing', async ({ page }) => {
+    await unlock(page);
+    await enableEditMode(page);
+    await goToSection(page, 'Chits');
+
+    const label = 'E2E Chit To Keep';
+    await openChitOnce(page, label);
+
+    await page.getByRole('button', { name: label, exact: true }).click();
+    const detail = page.locator('[data-testid^="chit-detail-"]');
+    await detail.locator('[data-testid^="delete-chit-"]').first().click();
+
+    const confirm = page.locator('[data-testid$="-confirm"]');
+    await expect(confirm).toBeVisible();
+    await expect(confirm).toContainText('no undo');
+
+    await page.locator('[data-testid$="-no"]').click();
+    await expect(page.getByTestId('chit-table')).toContainText(label);
+  });
+
+  test('deletes the chit once the deletion is confirmed', async ({ page }) => {
+    await unlock(page);
+    await enableEditMode(page);
+    await goToSection(page, 'Chits');
+
+    const label = 'E2E Chit To Delete';
+    await openChitOnce(page, label);
+    await expect(page.getByTestId('chit-table')).toContainText(label);
+
+    await page.getByRole('button', { name: label, exact: true }).click();
+    await page.locator('[data-testid^="chit-detail-"]').locator('[data-testid^="delete-chit-"]').first().click();
+    await page.locator('[data-testid$="-yes"]').click();
+
+    await expect(page.getByTestId('chit-table')).not.toContainText(label);
+  });
+
+  test('puts the controls away again when the mode is turned off', async ({ page }) => {
+    await unlock(page);
+    await enableEditMode(page);
+
+    await goToSection(page, 'Settings');
+    await page.getByTestId('disable-edit-mode').click();
+    await expect(page.getByTestId('edit-mode-flag')).toHaveCount(0);
+
+    await goToSection(page, 'Ledger');
+    await expect(page.locator('[data-testid^="delete-asset-"]')).toHaveCount(0);
   });
 });

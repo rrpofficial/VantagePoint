@@ -9,7 +9,12 @@ import {
   type Currency,
   type Result,
 } from '@porttrack/shared-kernel';
-import { allocateFifo, recordAcquisition, totalCostBasis } from './lots.js';
+import {
+  allocateFifo,
+  recordAcquisition,
+  restoreAllocations,
+  totalCostBasis,
+} from './lots.js';
 import { applyCorporateAction } from './corporate-actions.js';
 import {
   depositAccruedValue,
@@ -48,6 +53,24 @@ export {
   type LoanView,
   type SortDirection,
 } from './loan-book.js';
+export {
+  ChitLedger,
+  register as chitRegister,
+  viewOf as chitViewOf,
+  totalsOf as chitTotalsOf,
+  sortViews as sortChitViews,
+  withdrawalAmountFor as chitWithdrawalAmountFor,
+  type ChitEmi,
+  type ChitEmiType,
+  type ChitFilter,
+  type ChitFund,
+  type ChitRegister,
+  type ChitSortKey,
+  type ChitStatus,
+  type ChitTotals,
+  type ChitView,
+  type ChitWithdrawalSchedule,
+} from './chit-book.js';
 export {
   applyEdit as applyLoanEdit,
   duplicatesOf as loanDuplicatesOf,
@@ -98,8 +121,8 @@ export const AssetRegistry = {
 /** US-1.2 — acquisition lots and cost basis. */
 export const LotBook = { recordAcquisition, totalCostBasis };
 
-/** US-1.3 — FIFO lot allocation. */
-export const FifoAllocator = { allocate: allocateFifo };
+/** US-1.3 — FIFO lot allocation, and its reversal when a disposal is deleted. */
+export const FifoAllocator = { allocate: allocateFifo, restore: restoreAllocations };
 
 /** US-1.6 — splits, bonuses, mergers, demergers. */
 export const CorporateActionEngine = { apply: applyCorporateAction };

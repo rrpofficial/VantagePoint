@@ -40,6 +40,8 @@ export interface AssetRepositoryOps {
   saveAll(assets: readonly Asset[]): Promise<Result<void>>;
   findById(assetId: string): Promise<Asset | undefined>;
   all(): Promise<readonly Asset[]>;
+  /** Cascades to the asset's lots, income events, exits and corporate actions. */
+  delete(assetId: string): Promise<Result<void>>;
   deleteAll(): Promise<Result<void>>;
 }
 
@@ -63,7 +65,10 @@ export interface BackupOps {
 
 export interface ExitRepositoryOps {
   saveAll(exits: readonly ExitTransaction[]): Promise<Result<void>>;
+  findById(txnId: string): Promise<ExitTransaction | undefined>;
   all(): Promise<readonly ExitTransaction[]>;
+  /** Reversal: one transaction, because half of it is worse than neither half. */
+  deleteWithAssets(txnId: string, assets: readonly Asset[]): Promise<Result<void>>;
 }
 
 export interface LoanAuditRepositoryOps {
@@ -80,3 +85,4 @@ export {
   SettingsRepository,
 } from './asset-repository.js';
 export { LoanAuditRepository } from './loan-audit-repository.js';
+export { ChitScheduleRepository } from './chit-schedule-repository.js';

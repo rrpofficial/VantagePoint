@@ -133,6 +133,19 @@ export class DuplicateTradeError extends DomainError {
 export class VaultUnlockError extends DomainError {
   readonly code = 'VAULT_UNLOCK_FAILED';
 }
+/**
+ * A change to an existing record, or a deletion, was attempted while edit mode
+ * was off.
+ *
+ * Separate from `VaultStateError` on purpose: an unlocked vault that refuses an
+ * edit is a different situation from a locked one, and the caller's remedy
+ * differs — the first is fixed by turning edit mode on, the second by unlocking.
+ * Collapsing them would have the UI tell a user to unlock a vault that is
+ * already open.
+ */
+export class EditModeRequiredError extends DomainError {
+  readonly code = 'EDIT_MODE_REQUIRED';
+}
 export class VaultStateError extends DomainError {
   readonly code = 'VAULT_STATE';
 }

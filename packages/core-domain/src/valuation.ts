@@ -19,6 +19,7 @@ import {
 import { Decimal } from 'decimal.js';
 import { totalCostBasis } from './lots.js';
 import { handLoanAccruedInterest, handLoanOutstandingPrincipal } from './accruals.js';
+import { viewOf as chitViewOf } from './chit-book.js';
 import { JURISDICTION, LIQUIDITY } from './taxonomy.js';
 import type {
   Asset,
@@ -146,6 +147,19 @@ export function value(input: ValuationInput): PortfolioValuation {
        */
       costBasis = handLoanOutstandingPrincipal(asset.handLoan, asOfDate);
       native = Money.add(costBasis, unpaidInterest(asset.handLoan, asOfDate));
+    } else if (asset.assetClass === 'CHIT_FUND' && asset.chitFund) {
+      /*
+       * Contributions at cost, and nil once withdrawn.
+       *
+       * NOT the chit's face value: a ₹5,00,000 chit two instalments old is a
+       * ₹40,000 asset, and carrying it at face would overstate net worth by the
+       * entire undrawn amount. And once the pot is drawn it is cash in a bank
+       * account, counted there — carrying the instalments here as well would
+       * count the same rupees twice.
+       */
+      const view = chitViewOf(asset.chitFund, asOfDate);
+      costBasis = view.carryingValue;
+      native = view.carryingValue;
     } else {
       const { value: marketValue, quote } = marketValueOf(asset, quantity, asOfDate, input.prices);
       native = marketValue;

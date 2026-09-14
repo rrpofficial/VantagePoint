@@ -127,3 +127,87 @@ describe('US-1.3 FIFO allocation', () => {
     });
   });
 });
+
+/**
+ * The inverse: what a deleted disposal has to put back.
+ *
+ * Driven by the disposal's own allocations rather than by running FIFO
+ * backwards. FIFO would return units to the OLDEST lots, which is not
+ * necessarily where they came from once several exits have been recorded — and a
+ * lot handed back units it never gave up carries the wrong acquisition date,
+ * which is what long-term versus short-term turns on.
+ */
+describe('US-1.3 Restoring a reversed allocation', () => {
+  describe('Scenario: The disposal is undone', () => {
+    it('returns each lot exactly what that disposal took', () => {
+      const { allocations, updatedLots } = expectOk(FifoAllocator.allocate([L1, L2], '120'));
+
+      const restored = expectOk(FifoAllocator.restore(updatedLots, allocations));
+
+      const byId = new Map(restored.map((lot) => [lot.lotId, lot.remainingQuantity]));
+      expect(byId.get('L1')).toBe('100');
+      expect(byId.get('L2')).toBe('50');
+    });
+
+    it('leaves lots the disposal never touched alone', () => {
+      const { allocations, updatedLots } = expectOk(FifoAllocator.allocate([L1, L2], '40'));
+
+      const restored = expectOk(FifoAllocator.restore(updatedLots, allocations));
+
+      expect(restored.find((lot) => lot.lotId === 'L2')?.remainingQuantity).toBe('50');
+    });
+
+    /*
+     * Undoing the SECOND of two sells must put back only that sell's units. This
+     * is the case a FIFO-backwards implementation gets wrong: it would credit the
+     * oldest lot, which the first sell had already emptied.
+     */
+    it('undoes one sell of several without disturbing the earlier ones', () => {
+      const first = expectOk(FifoAllocator.allocate([L1, L2], '100'));
+      const second = expectOk(FifoAllocator.allocate(first.updatedLots, '30'));
+
+      const restored = expectOk(FifoAllocator.restore(second.updatedLots, second.allocations));
+
+      const byId = new Map(restored.map((lot) => [lot.lotId, lot.remainingQuantity]));
+      // L1 stays emptied by the first sell; only L2's 30 come back.
+      expect(byId.get('L1')).toBe('0');
+      expect(byId.get('L2')).toBe('50');
+    });
+  });
+
+  describe('Scenario: The allocations no longer describe this book', () => {
+    it('refuses rather than clamping when a lot would exceed what it acquired', () => {
+      // Restoring twice: the second would leave L1 holding 200 of an original 100.
+      const { allocations } = expectOk(FifoAllocator.allocate([L1, L2], '100'));
+
+      expectErr(FifoAllocator.restore([L1, L2], allocations), 'INSUFFICIENT_QUANTITY');
+    });
+
+    it('refuses when the lot it must credit is no longer on the book', () => {
+      const { allocations, updatedLots } = expectOk(FifoAllocator.allocate([L1, L2], '120'));
+
+      expectErr(
+        FifoAllocator.restore(
+          updatedLots.filter((lot) => lot.lotId !== 'L1'),
+          allocations,
+        ),
+        'INSUFFICIENT_QUANTITY',
+      );
+    });
+  });
+
+  describe('Property: allocate then restore is the identity', () => {
+    it('returns the book to exactly what it was, for any legal quantity', () => {
+      fc.assert(
+        fc.property(fc.integer({ min: 1, max: 150 }), (quantity) => {
+          const { allocations, updatedLots } = expectOk(
+            FifoAllocator.allocate([L1, L2], String(quantity)),
+          );
+          const restored = expectOk(FifoAllocator.restore(updatedLots, allocations));
+
+          expect(restored.map((lot) => lot.remainingQuantity)).toEqual(['100', '50']);
+        }),
+      );
+    });
+  });
+});

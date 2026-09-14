@@ -13,17 +13,32 @@
 import { useCallback, useEffect, useState, type SyntheticEvent } from 'react';
 import { api, type Valuation } from './api.js';
 import { Card } from './components/primitives.js';
+import { EditModeProvider, useEditMode } from './edit-mode.js';
 import { SECTIONS, hrefFor, useSection } from './router.js';
 import { Compliance } from './views/Compliance.js';
 import { Dashboard } from './views/Dashboard.js';
 import { Import } from './views/Import.js';
 import { Ledger } from './views/Ledger.js';
 import { Loans } from './views/Loans.js';
+import { Chits } from './views/Chits.js';
 import { Settings } from './views/Settings.js';
 import { Snapshots } from './views/Snapshots.js';
 import { Tax } from './views/Tax.js';
 
+/**
+ * The provider sits OUTSIDE the unlock gate so the mode is read once and stays
+ * consistent across a lock and a re-unlock. The server is the authority on
+ * whether it is on; this only mirrors it.
+ */
 export function App() {
+  return (
+    <EditModeProvider>
+      <AppShell />
+    </EditModeProvider>
+  );
+}
+
+function AppShell() {
   const [unlocked, setUnlocked] = useState(false);
   const [passphrase, setPassphrase] = useState('');
   const [error, setError] = useState<string | undefined>();
@@ -32,6 +47,7 @@ export function App() {
   const [valuedAt, setValuedAt] = useState<string | undefined>();
   const [valuing, setValuing] = useState(false);
   const section = useSection();
+  const editMode = useEditMode();
 
   const refresh = useCallback(async () => {
     setValuing(true);
@@ -99,7 +115,10 @@ export function App() {
   const onLocked = useCallback(() => {
     setUnlocked(false);
     setValuation(undefined);
-  }, []);
+    // Locking turns edit mode off server-side. Re-reading rather than assuming
+    // keeps one authority for the answer, and the indicator clears with it.
+    void editMode.refresh();
+  }, [editMode]);
 
   if (!unlocked) {
     return (
@@ -161,6 +180,16 @@ export function App() {
             </a>
           ))}
         </nav>
+        {/*
+          Persistent, and on every screen rather than only on Settings. A mode
+          that quietly permits deletion must be visible from wherever the
+          deleting would happen, or it is left on without anyone noticing.
+        */}
+        {editMode.enabled && (
+          <span className="pt-mode-flag" role="status" data-testid="edit-mode-flag">
+            Edit mode on
+          </span>
+        )}
       </header>
 
       <main>
@@ -174,6 +203,7 @@ export function App() {
         )}
         {section === 'Ledger' && <Ledger />}
         {section === 'Loans' && <Loans />}
+        {section === 'Chits' && <Chits />}
         {/* Also re-valued after an import, so the Dashboard is already correct
             by the time the user navigates back to it. */}
         {section === 'Import' && <Import onImported={() => void refresh()} />}

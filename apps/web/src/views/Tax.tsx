@@ -17,6 +17,7 @@ import {
   type RegimeComparison,
 } from '../api.js';
 import { Amount, Card, Chip, ProvisionalBanner } from '../components/primitives.js';
+import { EditModeHint, useEditMode } from '../edit-mode.js';
 import { financialYearLabel, usePeriods } from '../usePeriods.js';
 
 const QUARTERS = ['Q1', 'Q2', 'Q3', 'Q4'] as const;
@@ -31,6 +32,7 @@ const INCOME_FIELDS = [
 ] as const;
 
 export function Tax() {
+  const editMode = useEditMode();
   const periods = usePeriods();
   // Empty until the server says what year it is, then defaulted to the current
   // one. Hardcoding a starting year meant the picker silently went stale every
@@ -307,7 +309,17 @@ export function Tax() {
               />
             </div>
           ))}
-          <button type="submit">Save income</button>
+          <button type="submit" disabled={hasProfile && !editMode.enabled}>
+            Save income
+          </button>
+          {/*
+            Entering a profile for the first time is an addition and stays open.
+            REPLACING one is not: every advance-tax figure on this screen is
+            computed from it, and they all move silently when it changes.
+          */}
+          {hasProfile && !editMode.enabled && (
+            <EditModeHint action="replace the income already recorded for this year" />
+          )}
           {saved && (
             <p className="pt-muted" role="status">
               Saved.

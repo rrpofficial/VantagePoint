@@ -12,7 +12,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LoanUC, configure, resetPorts } from '@porttrack/app-services';
+import { EditModeUC, LoanUC, configure, resetPorts } from '@porttrack/app-services';
 import { DuplicateLoanError } from '@porttrack/shared-kernel';
 import { Vault } from '@porttrack/persistence';
 import { expectOk } from '@porttrack/test-kit';
@@ -26,6 +26,13 @@ beforeEach(async () => {
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await Vault.unlock(PASSPHRASE));
   resetPorts();
+  /*
+   * Through the real door, not a test seam. Editing and closing a loan are
+   * gated on edit mode, and enabling it here with the actual passphrase is what
+   * keeps these scenarios exercising the path a user takes — a seam that flipped
+   * the flag directly would let the gate rot without a single test noticing.
+   */
+  expectOk(await EditModeUC.enable(PASSPHRASE));
 });
 
 afterEach(async () => {

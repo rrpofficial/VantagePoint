@@ -7,7 +7,11 @@
 	# /api first: without this the SPA fallback below would swallow API paths
 	# and return index.html for a JSON request.
 	handle /api/* {
-		reverse_proxy porttrack-api:8080
+		# The compose SERVICE name, not the container name. Compose resolves it on
+		# this project's own internal network, so it is correct for every instance
+		# — a hardcoded `porttrack-api` broke the moment a second stack renamed its
+		# containers, and this image is shared by both.
+		reverse_proxy api:8080
 	}
 
 	handle {

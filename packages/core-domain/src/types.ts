@@ -8,6 +8,9 @@ import type {
   Quantity,
   Rate,
 } from '@porttrack/shared-kernel';
+// Type-only in both directions (chit-book imports PaymentMode from here), so the
+// cycle is erased at compile time and never exists at runtime.
+import type { ChitFund } from './chit-book.js';
 
 export type AssetClass =
   | 'DOMESTIC_EQUITY'
@@ -168,6 +171,8 @@ export interface Asset {
   readonly positionClosed?: boolean;
   /** Present only for HAND_LOAN assets. */
   readonly handLoan?: HandLoan;
+  /** Present only for CHIT_FUND assets. */
+  readonly chitFund?: ChitFund;
   /** Present only for DOMESTIC_MUTUAL_FUND assets. */
   readonly schemeCategory?: MfSchemeCategory;
   /** Equity allocation, required to place a HYBRID scheme. */

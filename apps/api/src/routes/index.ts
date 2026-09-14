@@ -13,8 +13,11 @@
 import type { FastifyInstance } from 'fastify';
 import {
   AuditUC,
+  ChitUC,
+  type ChitQuery,
   CompareSnapshotsUC,
   ComputeAdvanceTaxUC,
+  EditModeUC,
   GenerateComplianceUC,
   GenerateSnapshotUC,
   ImportStatementUC,
@@ -39,6 +42,22 @@ interface UnlockBody {
 }
 
 const failure = (code: string, message: string) => ({ error: { code, message } });
+
+/**
+ * A refused change gets 403, everything else keeps the route's own status.
+ *
+ * The distinction is what lets the SPA respond usefully. 422 says "you typed
+ * something wrong" and sends the user back to the form; 403 says "the request
+ * was fine, the mode is off" and sends them to Settings. Answering 422 for a
+ * gated call would have them re-check a field that was never the problem.
+ */
+const refusal = (
+  error: { readonly code: string; readonly message: string },
+  fallbackStatus: number,
+): { status: number; body: ReturnType<typeof failure> } => ({
+  status: error.code === 'EDIT_MODE_REQUIRED' ? 403 : fallbackStatus,
+  body: failure(error.code, error.message),
+});
 
 export function registerRoutes(app: FastifyInstance): void {
   /* ------------------------------------------------------------- health */
@@ -72,6 +91,21 @@ export function registerRoutes(app: FastifyInstance): void {
     return reply.send({ unlocked: false });
   });
 
+  /* ---------------------------------------------------------- edit mode */
+
+  app.get('/api/edit-mode', (_request, reply) => reply.send(EditModeUC.state()));
+
+  app.post<{ Body: UnlockBody }>('/api/edit-mode/enable', async (request, reply) => {
+    const result = await EditModeUC.enable(request.body.passphrase ?? '');
+    // 401, not 403: the passphrase supplied here is the credential, so a wrong
+    // one is a failed authentication rather than a refused permission.
+    return result.ok
+      ? reply.send(result.value)
+      : reply.code(401).send(failure(result.error.code, 'unable to enable edit mode'));
+  });
+
+  app.post('/api/edit-mode/disable', (_request, reply) => reply.send(EditModeUC.disable()));
+
   /* ---------------------------------------------------------- portfolio */
 
   app.get('/api/portfolio/valuation', async (request, reply) => {
@@ -92,6 +126,219 @@ export function registerRoutes(app: FastifyInstance): void {
     ]);
     return reply.send({ assets, liabilities, exits });
   });
+
+  app.delete<{ Params: { id: string } }>('/api/ledger/assets/:id', async (request, reply) => {
+    const result = await LedgerUC.deleteAsset(request.params.id);
+    if (result.ok) return reply.send({ deleted: true });
+    const { status, body } = refusal(result.error, 422);
+    return reply.code(status).send(body);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/ledger/exits/:id', async (request, reply) => {
+    const result = await LedgerUC.deleteExit(request.params.id);
+    if (result.ok) return reply.send({ deleted: true });
+    const { status, body } = refusal(result.error, 422);
+    return reply.code(status).send(body);
+  });
+
+  /* --------------------------------------------------------- chit funds */
+
+  app.get('/api/chits', async (request, reply) => {
+    const raw = request.query as {
+      status?: string;
+      org?: string;
+      sortBy?: string;
+      direction?: string;
+      asOf?: string;
+    };
+    const list = (value: string | undefined) =>
+      value === undefined || value.length === 0 ? undefined : value.split(',').filter(Boolean);
+
+    const statuses = list(raw.status) as ChitQuery['statuses'];
+    const orgs = list(raw.org);
+
+    const result = await ChitUC.register({
+      ...(statuses === undefined ? {} : { statuses }),
+      ...(orgs === undefined ? {} : { orgs }),
+      ...(raw.sortBy === undefined ? {} : { sortBy: raw.sortBy as ChitQuery['sortBy'] }),
+      ...(raw.direction === undefined
+        ? {}
+        : { direction: raw.direction as ChitQuery['direction'] }),
+      ...(raw.asOf === undefined ? {} : { asOf: raw.asOf }),
+    });
+    return result.ok
+      ? reply.send(result.value)
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post('/api/chits', async (request, reply) => {
+    const body = request.body as {
+      org?: string;
+      label?: string;
+      targetAmount?: { amount?: string; currency?: string };
+      startDate?: string;
+      endDate?: string;
+      // A form posts this as text; typing it `number` would be a claim about
+      // the wire that nothing enforces.
+      durationMonths?: number | string;
+      emiType?: string;
+      scheduleLabel?: string;
+      comments?: string;
+    };
+
+    const result = await ChitUC.open({
+      org: body.org ?? '',
+      label: body.label ?? '',
+      targetAmount: {
+        amount: body.targetAmount?.amount ?? '0',
+        currency: (body.targetAmount?.currency ?? 'INR') as 'INR',
+      },
+      startDate: body.startDate ?? '',
+      durationMonths: Number(body.durationMonths ?? 0),
+      emiType: body.emiType === 'VARYING' ? 'VARYING' : 'CONSTANT',
+      ...(body.endDate === undefined ? {} : { endDate: body.endDate }),
+      ...(body.scheduleLabel === undefined ? {} : { scheduleLabel: body.scheduleLabel }),
+      ...(body.comments === undefined ? {} : { comments: body.comments }),
+    });
+    return result.ok
+      ? reply.code(201).send({ chitId: result.value })
+      : reply.code(422).send(failure(result.error.code, result.error.message));
+  });
+
+  app.put<{ Params: { id: string } }>('/api/chits/:id', async (request, reply) => {
+    const body = request.body as {
+      org?: string;
+      label?: string;
+      targetAmount?: { amount?: string; currency?: string };
+      startDate?: string;
+      endDate?: string;
+      durationMonths?: number | string;
+      emiType?: string;
+      scheduleLabel?: string | null;
+      comments?: string;
+    };
+
+    const result = await ChitUC.edit(request.params.id, {
+      ...(body.org === undefined ? {} : { org: body.org }),
+      ...(body.label === undefined ? {} : { label: body.label }),
+      ...(body.targetAmount?.amount === undefined
+        ? {}
+        : {
+            targetAmount: {
+              amount: body.targetAmount.amount,
+              currency: (body.targetAmount.currency ?? 'INR') as 'INR',
+            },
+          }),
+      ...(body.startDate === undefined ? {} : { startDate: body.startDate }),
+      ...(body.endDate === undefined ? {} : { endDate: body.endDate }),
+      ...(body.durationMonths === undefined
+        ? {}
+        : { durationMonths: Number(body.durationMonths) }),
+      ...(body.emiType === undefined
+        ? {}
+        : { emiType: body.emiType === 'VARYING' ? ('VARYING' as const) : ('CONSTANT' as const) }),
+      ...(body.scheduleLabel === undefined ? {} : { scheduleLabel: body.scheduleLabel }),
+      ...(body.comments === undefined ? {} : { comments: body.comments }),
+    });
+    if (result.ok) return reply.send({ updated: true });
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/chits/:id', async (request, reply) => {
+    const result = await ChitUC.delete(request.params.id);
+    if (result.ok) return reply.send({ deleted: true });
+    const { status, body } = refusal(result.error, 422);
+    return reply.code(status).send(body);
+  });
+
+  app.post<{ Params: { id: string } }>('/api/chits/:id/emis', async (request, reply) => {
+    const body = request.body as {
+      date?: string;
+      amount?: { amount?: string; currency?: string };
+      mode?: string;
+      paidTo?: string;
+      comments?: string;
+    };
+
+    const result = await ChitUC.recordEmi({
+      chitId: request.params.id,
+      date: body.date ?? '',
+      amount: {
+        amount: body.amount?.amount ?? '0',
+        currency: (body.amount?.currency ?? 'INR') as 'INR',
+      },
+      mode: (body.mode ?? 'OTHER') as Parameters<typeof ChitUC.recordEmi>[0]['mode'],
+      paidTo: body.paidTo ?? '',
+      ...(body.comments === undefined ? {} : { comments: body.comments }),
+    });
+    return result.ok
+      ? reply.code(201).send({ recorded: true })
+      : reply.code(422).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post<{ Params: { id: string } }>('/api/chits/:id/status', async (request, reply) => {
+    const body = request.body as {
+      status?: string;
+      date?: string;
+      amount?: { amount?: string; currency?: string };
+    };
+
+    // Withdrawing carries the date and the amount actually received; going back
+    // to active clears both, because a draw recorded in error left no money.
+    const result =
+      body.status === 'WITHDRAWN'
+        ? await ChitUC.withdraw(request.params.id, {
+            date: body.date ?? '',
+            amount: {
+              amount: body.amount?.amount ?? '0',
+              currency: (body.amount?.currency ?? 'INR') as 'INR',
+            },
+          })
+        : await ChitUC.setStatus(request.params.id, 'ACTIVE');
+
+    if (result.ok) return reply.send({ updated: true });
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.get('/api/chits/schedules', async (_request, reply) => {
+    const result = await ChitUC.schedules();
+    return result.ok
+      ? reply.send({ schedules: result.value })
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post('/api/chits/schedules', async (request, reply) => {
+    const body = request.body as {
+      label?: string;
+      rows?: readonly { month?: number | string; amount?: { amount?: string; currency?: string } }[];
+    };
+
+    const result = await ChitUC.saveSchedule({
+      label: body.label ?? '',
+      rows: (body.rows ?? []).map((row) => ({
+        month: Number(row.month ?? 0),
+        amount: {
+          amount: row.amount?.amount ?? '0',
+          currency: (row.amount?.currency ?? 'INR') as 'INR',
+        },
+      })),
+    });
+    if (result.ok) return reply.code(201).send({ saved: true });
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.delete<{ Params: { label: string } }>(
+    '/api/chits/schedules/:label',
+    async (request, reply) => {
+      const result = await ChitUC.deleteSchedule(request.params.label);
+      if (result.ok) return reply.send({ deleted: true });
+      const { status, body } = refusal(result.error, 422);
+      return reply.code(status).send(body);
+    },
+  );
 
   /* ------------------------------------------------------------- trades */
 
@@ -256,9 +503,20 @@ export function registerRoutes(app: FastifyInstance): void {
       body.reason === undefined ? {} : { reason: body.reason },
     );
 
-    return result.ok
-      ? reply.send({ changed: result.value.length, entries: result.value })
-      : reply.code(422).send(failure(result.error.code, result.error.message));
+    if (result.ok) return reply.send({ changed: result.value.length, entries: result.value });
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/loans/:id', async (request, reply) => {
+    const reason = (request.body as { reason?: string } | undefined)?.reason;
+    const result = await LoanUC.delete(
+      request.params.id,
+      reason === undefined ? {} : { reason },
+    );
+    if (result.ok) return reply.send({ deleted: true });
+    const { status, body } = refusal(result.error, 422);
+    return reply.code(status).send(body);
   });
 
   app.get<{ Params: { id: string } }>('/api/loans/:id/audit', async (request, reply) => {
@@ -456,9 +714,9 @@ export function registerRoutes(app: FastifyInstance): void {
       return reply.code(422).send(failure('INVALID_BODY', 'an income profile is required'));
     }
     const saved = await saveIncomeProfile(body.profile as Parameters<typeof saveIncomeProfile>[0]);
-    return saved.ok
-      ? reply.send({ present: true })
-      : reply.code(409).send(failure(saved.error.code, saved.error.message));
+    if (saved.ok) return reply.send({ present: true });
+    const { status, body: failed } = refusal(saved.error, 409);
+    return reply.code(status).send(failed);
   });
 
   /* --------------------------------------------------------- compliance */
