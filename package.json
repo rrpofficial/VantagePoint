@@ -23,7 +23,8 @@
     "docker:down": "docker compose down",
     "docker:test:up": "docker compose --env-file .env.test up --build -d",
     "docker:test:down": "docker compose --env-file .env.test down",
-    "demo": "vitest run --config vitest.demo.config.ts"
+    "demo": "vitest run --config vitest.demo.config.ts",
+    "vault:diagnose": "node scripts/diagnose-vault.mjs"
   },
   "devDependencies": {
     "@playwright/test": "^1.62.1",

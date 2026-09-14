@@ -43,6 +43,11 @@ export default tseslint.config(
       '**/build.mjs',
       '**/kdf-worker.mjs',
       'tests/fixtures/**/*.mjs',
+      // Operator tools, run with bare `node` against the built dependencies.
+      // `vault:diagnose` in particular must stay runnable from a checkout whose
+      // TypeScript has never been compiled — it exists for the case where the
+      // application will not start.
+      'scripts/*.mjs',
     ],
   },
 

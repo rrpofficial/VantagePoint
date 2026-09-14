@@ -260,6 +260,45 @@ data/
 Your data survives `docker compose down`, `docker compose build --no-cache`, container recreation and
 Docker Engine upgrades. Verified by the container suite, not assumed.
 
+> **`vault.db-wal` is not a scratch file.** A process killed without a clean close leaves every
+> committed page in the write-ahead log, so a 4 KB `vault.db` beside a 600 KB `vault.db-wal` is
+> normal — and means the database file on its own holds nothing. This is a second reason to back up
+> the whole directory.
+
+#### When it will not unlock
+
+`unlock` reports a wrong passphrase and a damaged vault as the **same** error, on purpose: the
+response must not reveal whether a vault holds data (ADR-014). That is correct for an API and no help
+at all to you, so the distinction is available offline instead:
+
+```bash
+read -rs -p 'passphrase: ' PORTTRACK_PASSPHRASE && export PORTTRACK_PASSPHRASE
+pnpm vault:diagnose ./data
+unset PORTTRACK_PASSPHRASE
+```
+
+Type it into the prompt rather than the command line, so it stays out of your shell history. The
+tool works on a **copy** it deletes afterwards — your vault is never opened, so nothing it does can
+checkpoint, truncate or lock it — and it prints the cipher parameters, table names and row counts
+only: no passphrase, no salt, no row contents.
+
+| Exit | Meaning | What to do |
+|---|---|---|
+| `0` | Passphrase right, database sound | The vault is fine; the problem is elsewhere |
+| `1` | Passphrase right, **integrity check failed** | Restore the whole directory from a backup |
+| `3` | Passphrase wrong | No recovery path — the key exists nowhere but in what you type |
+| `4` | No vault at that path | Nothing to check; see the warning below |
+
+**A directory with no vault is the dangerous case.** The first unlock on an empty data directory
+*sets* the passphrase rather than checking it — there is no confirmation prompt and no recovery — so
+pointing the app at the wrong directory silently creates a new, empty vault that looks exactly like
+your data having vanished. `vault:diagnose` refuses to create one, which is why it can tell you `4`
+instead of cheerfully accepting a passphrase you have never used.
+
+> A browser tab left open on the unlock screen re-submits as soon as the API comes back. If you are
+> deliberately wiping a data directory, **close that tab first** — otherwise it recreates the vault
+> under its old passphrase before you get there.
+
 ### Operator reference
 
 | Task | Command |
@@ -269,6 +308,8 @@ Docker Engine upgrades. Verified by the container suite, not assumed.
 | Change where data lives | set `PORTTRACK_DATA_DIR=/path/on/your/disk` |
 | Back up | copy the whole data directory while the stack is stopped |
 | Restore | copy it back, then `docker compose up` |
+| Diagnose a vault that will not unlock | `pnpm vault:diagnose ./data` — see above |
+| Start the testing instance | `pnpm docker:test:up` |
 | Upgrade | `git pull && docker compose up --build` — data is untouched |
 | Logs | `docker compose logs -f api` |
 | Allow outbound (FX/NAV) | `docker compose -f compose.yaml -f compose.egress.yaml up` |
