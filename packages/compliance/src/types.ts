@@ -1,6 +1,6 @@
 /** Compliance types. Types only — no runtime behaviour. */
-import type { AssessmentYear, IsoDate, Money, Rate } from '@porttrack/shared-kernel';
-import type { Snapshot } from '@porttrack/snapshot';
+import type { AssessmentYear, IsoDate, Money, Rate } from '@vantagepoint/shared-kernel';
+import type { Snapshot } from '@vantagepoint/snapshot';
 
 export interface PeakValue {
   readonly peakNative: Money;

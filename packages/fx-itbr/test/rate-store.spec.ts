@@ -3,8 +3,8 @@
  * US-2.2 — SBI ITBR ingestion pipeline
  */
 import { describe, it, expect } from 'vitest';
-import { RateStore, SbiSheetParser, type RateRecord } from '@porttrack/fx-itbr';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+import { RateStore, SbiSheetParser, type RateRecord } from '@vantagepoint/fx-itbr';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 

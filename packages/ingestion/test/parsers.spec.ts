@@ -21,8 +21,8 @@ import {
   TemplateRegistry,
   VestedParser,
   ZerodhaTradebookParser,
-} from '@porttrack/ingestion';
-import { expectErr, expectNoPii, expectOk, inr } from '@porttrack/test-kit';
+} from '@vantagepoint/ingestion';
+import { expectErr, expectNoPii, expectOk, inr } from '@vantagepoint/test-kit';
 
 const FIXTURES = resolve(import.meta.dirname, '../../../tests/fixtures');
 const read = (rel: string) => readFileSync(resolve(FIXTURES, rel), 'utf8');

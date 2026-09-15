@@ -2,8 +2,8 @@
  * US-1.1 — Typed asset registry and taxonomy (PRD FR-1.1)
  */
 import { describe, it, expect } from 'vitest';
-import { AssetRegistry, type AssetClass } from '@porttrack/core-domain';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+import { AssetRegistry, type AssetClass } from '@vantagepoint/core-domain';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const ALL_ASSET_CLASSES: readonly AssetClass[] = [
   'DOMESTIC_EQUITY',

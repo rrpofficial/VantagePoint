@@ -6,8 +6,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { CurrencyMismatchError, Money } from '@porttrack/shared-kernel';
-import { expectMoney, inr, usd } from '@porttrack/test-kit';
+import { CurrencyMismatchError, Money } from '@vantagepoint/shared-kernel';
+import { expectMoney, inr, usd } from '@vantagepoint/test-kit';
 
 describe('US-8.4 Money value object (ADR-002)', () => {
   describe('Scenario: Currency mismatch is an error', () => {

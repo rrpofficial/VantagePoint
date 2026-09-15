@@ -7,7 +7,7 @@
  * the case where the user has seen the rejections and wants the rest anyway, and
  * it still reports every rejected row rather than dropping it quietly.
  */
-import { Err, Ok, UnsupportedAssetClassError, type Result } from '@porttrack/shared-kernel';
+import { Err, Ok, UnsupportedAssetClassError, type Result } from '@vantagepoint/shared-kernel';
 import { parseCams } from './cams.js';
 import { parseEtrade, parseVested, parseZerodhaTradebook, type ParseOutcome } from './brokers.js';
 import { parseEtradeGainsLosses } from './etrade-gl.js';

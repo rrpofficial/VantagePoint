@@ -66,7 +66,7 @@ function NewLoanForm({ onSaved, onClose }: { onSaved: () => void; onClose: () =>
   }
 
   return (
-    <form className="pt-form pt-form--grid" onSubmit={onSubmit} data-testid="new-liability-form">
+    <form className="vp-form vp-form--grid" onSubmit={onSubmit} data-testid="new-liability-form">
       <label htmlFor="liab-lender">Lender</label>
       <input
         id="liab-lender"
@@ -160,8 +160,8 @@ function NewLoanForm({ onSaved, onClose }: { onSaved: () => void; onClose: () =>
         }}
       />
 
-      <div className="pt-form__wide">
-        <p className="pt-muted">
+      <div className="vp-form__wide">
+        <p className="vp-muted">
           If you leave the EMI blank it is computed from the principal, rate and tenure. Where you
           know the lender&rsquo;s own figure, enter it — a lender rounds to the rupee, and a
           schedule three rupees out is one you cannot reconcile against your statement.
@@ -173,7 +173,7 @@ function NewLoanForm({ onSaved, onClose }: { onSaved: () => void; onClose: () =>
       </button>
 
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}
@@ -205,7 +205,7 @@ function PaymentForm({ loan, onSaved }: { loan: BorrowedView; onSaved: () => voi
   }, [loan.loanId, date, amount, isPrepayment, onSaved]);
 
   return (
-    <div className="pt-form pt-form--grid" data-testid={`payment-form-${loan.loanId}`}>
+    <div className="vp-form vp-form--grid" data-testid={`payment-form-${loan.loanId}`}>
       <label htmlFor={`pay-date-${loan.loanId}`}>Paid on</label>
       <input
         id={`pay-date-${loan.loanId}`}
@@ -240,8 +240,8 @@ function PaymentForm({ loan, onSaved }: { loan: BorrowedView; onSaved: () => voi
         {busy ? 'Saving…' : 'Record payment'}
       </button>
 
-      <div className="pt-form__wide">
-        <p className="pt-muted">
+      <div className="vp-form__wide">
+        <p className="vp-muted">
           An EMI services accrued interest first, then principal. A{' '}
           <strong>prepayment</strong> goes entirely against principal — tick the box so it is not
           counted as an instalment.
@@ -249,7 +249,7 @@ function PaymentForm({ loan, onSaved }: { loan: BorrowedView; onSaved: () => voi
       </div>
 
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}
@@ -280,7 +280,7 @@ export function Liabilities() {
   if (error !== undefined) {
     return (
       <Card title="Borrowings">
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       </Card>
@@ -290,7 +290,7 @@ export function Liabilities() {
   if (register === undefined) {
     return (
       <Card title="Borrowings">
-        <p className="pt-muted">Loading…</p>
+        <p className="vp-muted">Loading…</p>
       </Card>
     );
   }
@@ -298,15 +298,15 @@ export function Liabilities() {
   const { totals } = register;
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <Card
         title="Borrowings"
         action={
-          <div className="pt-actions pt-actions--inline">
+          <div className="vp-actions vp-actions--inline">
             <Chip>{`${String(totals.activeCount)} active`}</Chip>
             <button
               type="button"
-              className="pt-button-inline"
+              className="vp-button-inline"
               data-testid="add-liability"
               onClick={() => {
                 setAdding((open) => !open);
@@ -317,12 +317,12 @@ export function Liabilities() {
           </div>
         }
       >
-        <p className="pt-muted">
+        <p className="vp-muted">
           What net worth is reduced <strong>by</strong>. A borrowing is not an asset, so it lives
           here rather than under Assets — the same separation Schedule AL makes.
         </p>
 
-        <dl className="pt-stats">
+        <dl className="vp-stats">
           <div>
             <dt>Outstanding</dt>
             <dd data-testid="total-outstanding">
@@ -356,7 +356,7 @@ export function Liabilities() {
           </div>
         </dl>
 
-        <div className="pt-controls">
+        <div className="vp-controls">
           <label htmlFor="liab-status">Status</label>
           <select
             id="liab-status"
@@ -382,16 +382,16 @@ export function Liabilities() {
       </Card>
 
       <Card title="Loans">
-        <div className="pt-table-scroll">
-          <table className="pt-table" data-testid="liabilities-table">
+        <div className="vp-table-scroll">
+          <table className="vp-table" data-testid="liabilities-table">
             <thead>
               <tr>
                 <th scope="col">Lender</th>
                 <th scope="col">Type</th>
                 <th scope="col">From</th>
-                <th scope="col" className="pt-align-end">EMI</th>
-                <th scope="col" className="pt-align-end">Outstanding</th>
-                <th scope="col" className="pt-align-end">Repaid</th>
+                <th scope="col" className="vp-align-end">EMI</th>
+                <th scope="col" className="vp-align-end">Outstanding</th>
+                <th scope="col" className="vp-align-end">Repaid</th>
                 <th scope="col">Status</th>
                 {editMode.enabled && <th scope="col" />}
               </tr>
@@ -399,7 +399,7 @@ export function Liabilities() {
             <tbody>
               {register.loans.length === 0 && (
                 <tr>
-                  <td colSpan={editMode.enabled ? 8 : 7} className="pt-muted">
+                  <td colSpan={editMode.enabled ? 8 : 7} className="vp-muted">
                     No borrowings recorded.
                   </td>
                 </tr>
@@ -411,7 +411,7 @@ export function Liabilities() {
                     <td>
                       <button
                         type="button"
-                        className="pt-link pt-link--inline"
+                        className="vp-link vp-link--inline"
                         aria-expanded={isOpen}
                         onClick={() => {
                           setExpanded(isOpen ? undefined : loan.loanId);
@@ -422,13 +422,13 @@ export function Liabilities() {
                     </td>
                     <td>{humanise(loan.kind)}</td>
                     <td>{loan.startDate}</td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       <Amount value={loan.emi} />
                     </td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       <Amount value={loan.outstanding} />
                     </td>
-                    <td className="pt-align-end pt-numeric">{loan.percentRepaid}%</td>
+                    <td className="vp-align-end vp-numeric">{loan.percentRepaid}%</td>
                     <td>{humanise(loan.status)}</td>
                     {editMode.enabled && (
                       <td>
@@ -443,12 +443,12 @@ export function Liabilities() {
                     )}
                   </tr>,
                   isOpen ? (
-                    <tr key={`${loan.loanId}-detail`} className="pt-table__detail">
+                    <tr key={`${loan.loanId}-detail`} className="vp-table__detail">
                       <td colSpan={editMode.enabled ? 8 : 7}>
-                        <dl className="pt-stats">
+                        <dl className="vp-stats">
                           <div>
                             <dt>Instalments paid</dt>
-                            <dd className="pt-numeric">
+                            <dd className="vp-numeric">
                               {loan.instalmentsPaid} of {loan.tenureMonths}
                             </dd>
                           </div>
@@ -486,33 +486,33 @@ export function Liabilities() {
                           and a 240-row table buries it.
                         */}
                         <h4>Schedule — first year</h4>
-                        <div className="pt-table-scroll">
-                          <table className="pt-table pt-table--nested">
+                        <div className="vp-table-scroll">
+                          <table className="vp-table vp-table--nested">
                             <thead>
                               <tr>
                                 <th scope="col">#</th>
                                 <th scope="col">Due</th>
-                                <th scope="col" className="pt-align-end">Payment</th>
-                                <th scope="col" className="pt-align-end">Interest</th>
-                                <th scope="col" className="pt-align-end">Principal</th>
-                                <th scope="col" className="pt-align-end">Balance</th>
+                                <th scope="col" className="vp-align-end">Payment</th>
+                                <th scope="col" className="vp-align-end">Interest</th>
+                                <th scope="col" className="vp-align-end">Principal</th>
+                                <th scope="col" className="vp-align-end">Balance</th>
                               </tr>
                             </thead>
                             <tbody>
                               {loan.schedule.slice(0, 12).map((instalment) => (
                                 <tr key={instalment.number}>
-                                  <td className="pt-numeric">{instalment.number}</td>
+                                  <td className="vp-numeric">{instalment.number}</td>
                                   <td>{instalment.dueDate}</td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     <Amount value={instalment.payment} />
                                   </td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     <Amount value={instalment.interest} />
                                   </td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     <Amount value={instalment.principal} />
                                   </td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     <Amount value={instalment.closingBalance} />
                                   </td>
                                 </tr>

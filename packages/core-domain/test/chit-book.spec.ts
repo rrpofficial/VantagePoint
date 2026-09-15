@@ -22,7 +22,7 @@ import {
   chitWithdrawalAmountFor,
   type ChitFund,
   type ChitWithdrawalSchedule,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
 

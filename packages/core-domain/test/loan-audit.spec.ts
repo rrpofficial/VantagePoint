@@ -6,7 +6,7 @@
  * corrected years later without destroying the evidence of what it said before.
  */
 import { describe, it, expect } from 'vitest';
-import { applyLoanEdit, loanDuplicatesOf, type HandLoan } from '@porttrack/core-domain';
+import { applyLoanEdit, loanDuplicatesOf, type HandLoan } from '@vantagepoint/core-domain';
 
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
 

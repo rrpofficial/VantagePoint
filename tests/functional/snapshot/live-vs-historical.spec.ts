@@ -11,10 +11,10 @@ import {
   GenerateSnapshotUC,
   VaultUC,
   configure,
-} from '@porttrack/app-services';
-import { SnapshotRepository, Vault } from '@porttrack/persistence';
-import { SnapshotFactory } from '@porttrack/snapshot';
-import { anAsset, expectMoney, expectOk, fixedClock, inr, stubPrices } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { SnapshotRepository, Vault } from '@vantagepoint/persistence';
+import { SnapshotFactory } from '@vantagepoint/snapshot';
+import { anAsset, expectMoney, expectOk, fixedClock, inr, stubPrices } from '@vantagepoint/test-kit';
 
 /**
  * Live holdings priced to ₹310,000,000, against a frozen snapshot of
@@ -26,7 +26,7 @@ const SNAPSHOT_PRICES = stubPrices({ TCS: inr('2500000') });
 const NOW = '2026-08-02T12:00:00.000+05:30';
 
 async function openVault(): Promise<void> {
-  const dataDir = mkdtempSync(join(tmpdir(), 'porttrack-snap-'));
+  const dataDir = mkdtempSync(join(tmpdir(), 'vantagepoint-snap-'));
   expectOk(await Vault.open({ dataDir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock('correct horse battery staple'));
 }
@@ -35,7 +35,7 @@ async function openVault(): Promise<void> {
 async function seedHistoricalSnapshot(): Promise<void> {
   configure({ assets: () => [LIVE_ASSET], liabilities: () => [], prices: SNAPSHOT_PRICES });
   const valuation = expectOk(
-    await (await import('@porttrack/app-services')).ValuePortfolioUC.execute(
+    await (await import('@vantagepoint/app-services')).ValuePortfolioUC.execute(
       '2025-03-31T23:59:59.999+05:30',
     ),
   );

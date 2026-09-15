@@ -8,7 +8,7 @@
  * Rounding is half-up on the absolute value, so a disclosure is never rounded
  * DOWN toward a smaller declared figure.
  */
-import { Err, Ok, Money, type Money as MoneyValue, type Result } from '@porttrack/shared-kernel';
+import { Err, Ok, Money, type Money as MoneyValue, type Result } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import type { ScheduleAl, ScheduleFaA3Row, ScheduleFaDRow } from './types.js';
 
@@ -141,7 +141,7 @@ export function validate(json: string, schemaName: string): Result<void> {
   return Err(new SchemaValidationError(`unknown export schema "${schemaName}"`));
 }
 
-import { DomainError } from '@porttrack/shared-kernel';
+import { DomainError } from '@vantagepoint/shared-kernel';
 
 export class SchemaValidationError extends DomainError {
   readonly code = 'SCHEMA_VALIDATION_FAILED';

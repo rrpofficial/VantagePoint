@@ -1,5 +1,5 @@
 /**
- * portTrack design tokens (US-8.5, PRD Module 9).
+ * VantagePoint design tokens (US-8.5, PRD Module 9).
  *
  * Values sampled directly from the supplied reference screenshot rather than
  * estimated by eye — the hex codes below are what is actually in that image.
@@ -12,29 +12,29 @@
 :root {
   /* ---------------------------------------------------------------- surface */
   /* The periwinkle field the app shell floats on. */
-  --pt-canvas: #8891a9;
+  --vp-canvas: #8891a9;
   /* Shell interior — a warm light grey, not white; cards read as raised against it. */
-  --pt-shell: #e8eaec;
-  --pt-surface: #ffffff;
+  --vp-shell: #e8eaec;
+  --vp-surface: #ffffff;
   /* Sunken wells: chips, inset panels, progress troughs. */
-  --pt-surface-sunken: #d5d9dd;
-  --pt-surface-muted: #f2f3f4;
-  --pt-border: #e3e5e8;
-  --pt-border-strong: #cdd2d8;
+  --vp-surface-sunken: #d5d9dd;
+  --vp-surface-muted: #f2f3f4;
+  --vp-border: #e3e5e8;
+  --vp-border-strong: #cdd2d8;
 
   /* -------------------------------------------------------------------- ink */
   /* Navy-tinted, never pure black — this is what gives the reference its softness. */
-  --pt-ink: #0e1124;
-  --pt-ink-soft: #282e42;
-  --pt-ink-muted: #7a8090;
-  --pt-ink-inverse: #ffffff;
+  --vp-ink: #0e1124;
+  --vp-ink-soft: #282e42;
+  --vp-ink-muted: #7a8090;
+  --vp-ink-inverse: #ffffff;
 
   /* ------------------------------------------------------------------ brand */
-  --pt-accent: #e4482f;
-  --pt-accent-hover: #cc3d26;
-  --pt-accent-wash: #fdece8;
-  --pt-info: #7796bb;
-  --pt-info-wash: #e8eff6;
+  --vp-accent: #e4482f;
+  --vp-accent-hover: #cc3d26;
+  --vp-accent-wash: #fdece8;
+  --vp-info: #7796bb;
+  --vp-info-wash: #e8eff6;
 
   /*
    * ⚠ Departure 1 — semantic gain/loss.
@@ -43,41 +43,41 @@
    * negative number. Vermilion is therefore reserved for brand marks and primary
    * CTAs ONLY, and gains/losses get their own unmistakable pair.
    */
-  --pt-gain: #0e7c5a;
-  --pt-gain-wash: #e6f4ee;
-  --pt-loss: #b3261e;
-  --pt-loss-wash: #fbeae9;
+  --vp-gain: #0e7c5a;
+  --vp-gain-wash: #e6f4ee;
+  --vp-loss: #b3261e;
+  --vp-loss-wash: #fbeae9;
   /* Neutral delta — used when a change is exactly zero, so it is never mistaken. */
-  --pt-flat: var(--pt-ink-muted);
+  --vp-flat: var(--vp-ink-muted);
 
   /*
    * ⚠ Departure 2 — compliance status.
    * Tax states (filed / due / overdue / provisional) must not collide with
    * gain/loss. Amber carries "action needed" without implying a loss.
    */
-  --pt-warn: #b7791f;
-  --pt-warn-wash: #fdf3e2;
-  --pt-provisional: #6b6f7d;
+  --vp-warn: #b7791f;
+  --vp-warn-wash: #fdf3e2;
+  --vp-provisional: #6b6f7d;
 
   /* ----------------------------------------------------------------- radius */
-  --pt-radius-shell: 28px;
-  --pt-radius-card: 20px;
-  --pt-radius-control: 12px;
-  --pt-radius-chip: 999px;
+  --vp-radius-shell: 28px;
+  --vp-radius-card: 20px;
+  --vp-radius-control: 12px;
+  --vp-radius-chip: 999px;
 
   /* ---------------------------------------------------------------- spacing */
-  --pt-space-1: 4px;
-  --pt-space-2: 8px;
-  --pt-space-3: 12px;
-  --pt-space-4: 16px;
-  --pt-space-5: 24px;
-  --pt-space-6: 32px;
-  --pt-space-7: 48px;
+  --vp-space-1: 4px;
+  --vp-space-2: 8px;
+  --vp-space-3: 12px;
+  --vp-space-4: 16px;
+  --vp-space-5: 24px;
+  --vp-space-6: 32px;
+  --vp-space-7: 48px;
 
   /* --------------------------------------------------------------- elevation */
   /* Diffuse and low-contrast; the reference has no hard drop shadows. */
-  --pt-shadow-card: 0 1px 2px rgb(14 17 36 / 4%), 0 8px 24px rgb(14 17 36 / 6%);
-  --pt-shadow-raised: 0 2px 4px rgb(14 17 36 / 6%), 0 16px 40px rgb(14 17 36 / 8%);
+  --vp-shadow-card: 0 1px 2px rgb(14 17 36 / 4%), 0 8px 24px rgb(14 17 36 / 6%);
+  --vp-shadow-raised: 0 2px 4px rgb(14 17 36 / 6%), 0 16px 40px rgb(14 17 36 / 8%);
 
   /* ------------------------------------------------------------- typography */
   /*
@@ -86,24 +86,24 @@
    * a preference — ADR-010 denies egress by default, so a webfont CDN would
    * either be blocked or would punch a hole in that guarantee.
    */
-  --pt-font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --vp-font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   /* Tabular figures for every monetary column, so digits align down a table. */
-  --pt-font-numeric: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --vp-font-numeric: 'Inter', ui-sans-serif, system-ui, sans-serif;
 
-  --pt-text-display: 600 34px / 1.15 var(--pt-font-sans);
-  --pt-text-title: 600 22px / 1.25 var(--pt-font-sans);
-  --pt-text-heading: 600 17px / 1.3 var(--pt-font-sans);
-  --pt-text-body: 400 14px / 1.5 var(--pt-font-sans);
-  --pt-text-label: 500 13px / 1.4 var(--pt-font-sans);
-  --pt-text-caption: 400 12px / 1.4 var(--pt-font-sans);
+  --vp-text-display: 600 34px / 1.15 var(--vp-font-sans);
+  --vp-text-title: 600 22px / 1.25 var(--vp-font-sans);
+  --vp-text-heading: 600 17px / 1.3 var(--vp-font-sans);
+  --vp-text-body: 400 14px / 1.5 var(--vp-font-sans);
+  --vp-text-label: 500 13px / 1.4 var(--vp-font-sans);
+  --vp-text-caption: 400 12px / 1.4 var(--vp-font-sans);
 
-  --pt-tracking-tight: -0.02em;
-  --pt-tracking-normal: 0;
+  --vp-tracking-tight: -0.02em;
+  --vp-tracking-normal: 0;
 }
 
 /* Money and quantities: fixed-width digits so columns line up. */
-.pt-numeric {
-  font-family: var(--pt-font-numeric);
+.vp-numeric {
+  font-family: var(--vp-font-numeric);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1, 'cv05' 1;
 }

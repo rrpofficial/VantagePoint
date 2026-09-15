@@ -1,6 +1,6 @@
-# portTrack — Implementation Plan
+# VantagePoint — Implementation Plan
 
-**Project:** portTrack — Global Portfolio Tracking & Indian Tax Compliance Platform
+**Project:** VantagePoint — Global Portfolio Tracking & Indian Tax Compliance Platform
 **Source of truth:** [`Global_Portfolio_Tracker_PRD.md`](./Global_Portfolio_Tracker_PRD.md)
 **Plan version:** 1.0
 **Date:** 2026-08-02
@@ -25,8 +25,8 @@ reversible only at material cost after Milestone M2.
 | **ADR-008** | **All EOD boundaries resolve in `Asia/Kolkata`.** "31-Mar EOD" means `2026-03-31T23:59:59.999+05:30`. Foreign 31-Dec snapshots also freeze at IST EOD. | Ambiguous EOD makes 31-Mar and 1-Apr snapshots non-deterministic across machines. | Low |
 | **ADR-009** | **Liabilities are first-class ledger entities**, not negative assets. | Schedule AL (FR-6.2) requires liabilities reported separately at closing balance. Modelling them as negative assets loses the distinction. | Medium |
 | **ADR-010** | **Zero network egress by default.** FX scraping, price refresh and AI calls are explicitly user-triggered and pass through a single audited `EgressGateway`. | PRD §4.3 data sovereignty. Also makes the whole test suite hermetic. | Low |
-| **ADR-011** | **Two-container split: `porttrack-api` (Node 22) + `porttrack-web` (SPA behind Caddy/nginx).** Domain packages compile into the API image; the SPA is a static build reverse-proxying `/api`. | PRD FR-8.1 requires frontend and backend to be separately containerized. Keeping the domain in one process preserves the sub-1.5s valuation budget (no cross-service chatter). | High after M1 |
-| **ADR-012** | **DB on a host **bind mount**, never a named/anonymous Docker volume.** Host path `${PORTTRACK_DATA_DIR:-./data}` → `/var/lib/porttrack` in-container. Containers run as `${PORTTRACK_UID}:${PORTTRACK_GID}`. | PRD FR-8.2 says "native OS disk volume" — a named volume lives in Docker's own storage area and is not directly accessible or backup-able from the host. Bind mount is the only option that satisfies "visible and copyable from the host". | Low |
+| **ADR-011** | **Two-container split: `vantagepoint-api` (Node 22) + `vantagepoint-web` (SPA behind Caddy/nginx).** Domain packages compile into the API image; the SPA is a static build reverse-proxying `/api`. | PRD FR-8.1 requires frontend and backend to be separately containerized. Keeping the domain in one process preserves the sub-1.5s valuation budget (no cross-service chatter). | High after M1 |
+| **ADR-012** | **DB on a host **bind mount**, never a named/anonymous Docker volume.** Host path `${VANTAGEPOINT_DATA_DIR:-./data}` → `/var/lib/vantagepoint` in-container. Containers run as `${VANTAGEPOINT_UID}:${VANTAGEPOINT_GID}`. | PRD FR-8.2 says "native OS disk volume" — a named volume lives in Docker's own storage area and is not directly accessible or backup-able from the host. Bind mount is the only option that satisfies "visible and copyable from the host". | Low |
 | **ADR-013** | **PII masking stays in the browser bundle**, not the API container. The API never receives unmasked text destined for an AI service. | FR-7.1 says masking is client-side. Containerizing must not quietly turn the masker into a server-side step — that would put unmasked PII on the wire, defeating the requirement. `pii-masker` is a pure package imported by the SPA; the API imports only its *verifier* for the fail-closed guard. | Medium |
 | **ADR-014** | **The vault passphrase never reaches the API container's disk.** It is supplied per-session, held in memory only, and the derived key is zeroised on lock/shutdown. | FR-8.3 "no secrets in images"; also prevents a bind-mounted `.env` from becoming the weakest link. | Low |
 | **ADR-015** | **Vault encryption is page-level whole-file AES-256-CBC + HMAC-SHA512** (the `sqlcipher` scheme in `better-sqlite3-multiple-ciphers`), **not AES-256-GCM.** NFR-1 amended accordingly. | **AES-256-GCM is not offered by any whole-file SQLite encryption provider** — the available schemes are `aes128cbc`, `aes256cbc`, `chacha20`, `sqlcipher`, `rc4`, `ascon128`, `aegis` (empirically enumerated, see below). Application-layer value encryption *can* use GCM but would forfeit range queries and indexing on the date and amount columns the ledger and snapshot engines depend on, for no material gain over one authenticated layer. `aes256cbc` alone was ruled out: it is unauthenticated and silently returns data from a tampered file. | Medium |
@@ -65,7 +65,7 @@ bottom row lives in `packages/persistence/test/vault-encryption.spec.ts`.
 
 ## 1. Architecture Summary
 
-Full component and sequence diagrams: **[`ARCHITECTURE_portrack.md`](./ARCHITECTURE_portrack.md)**.
+Full component and sequence diagrams: **[`ARCHITECTURE_vantagepoint.md`](./ARCHITECTURE_vantagepoint.md)**.
 
 Layering rule enforced by lint (`import/no-restricted-paths`):
 
@@ -86,14 +86,14 @@ port. This is what makes the tax engine deterministically testable across FYs �
 ### Repository layout
 
 ```
-portTrack/
+VantagePoint/
 ├── package.json                    # pnpm workspace root
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json              # strict: true, noUncheckedIndexedAccess: true
 ├── vitest.workspace.ts
 ├── playwright.config.ts
-├── implementation_plan_portrack.md
-├── ARCHITECTURE_portrack.md
+├── implementation_plan_vantagepoint.md
+├── ARCHITECTURE_vantagepoint.md
 ├── Global_Portfolio_Tracker_PRD.md
 ├── packages/
 │   ├── shared-kernel/              # Money, Decimal, FyDate, Result, ids, Clock port
@@ -109,8 +109,8 @@ portTrack/
 │   ├── adapters-fx/                # SBI/RBI/ECB HTTP scrapers (I/O)
 │   └── app-services/               # use-case orchestration consumed by apps
 ├── apps/
-│   ├── api/                        # Fastify backend service  → image porttrack-api
-│   ├── web/                        # React + Vite SPA          → image porttrack-web
+│   ├── api/                        # Fastify backend service  → image vantagepoint-api
+│   ├── web/                        # React + Vite SPA          → image vantagepoint-web
 │   └── cli/                        # headless snapshot / tax / import runner
 ├── docker/
 │   ├── api.Dockerfile              # multi-stage, non-root, minimal runtime
@@ -120,7 +120,7 @@ portTrack/
 ├── compose.yaml                    # base stack (default profile, egress denied)
 ├── compose.override.yaml           # local dev: HMR + source bind mounts
 ├── compose.egress.yaml             # opt-in profile enabling outbound FX/AI network
-├── .env.example                    # PORTTRACK_DATA_DIR, PORTTRACK_UID/GID, ports
+├── .env.example                    # VANTAGEPOINT_DATA_DIR, VANTAGEPOINT_UID/GID, ports
 └── tests/
     ├── functional/                 # cross-package acceptance tests (Vitest)
     ├── container/                  # Docker acceptance tests (compose up/down, persistence)
@@ -131,23 +131,23 @@ portTrack/
 ### Container topology (PRD FR-8)
 
 ```
-host:${PORTTRACK_WEB_PORT:-5173}
+host:${VANTAGEPOINT_WEB_PORT:-5173}
       │
       ▼
-  porttrack-web   Caddy + SPA bundle (includes pii-masker — ADR-013)   non-root · read-only FS
+  vantagepoint-web   Caddy + SPA bundle (includes pii-masker — ADR-013)   non-root · read-only FS
       │  /api/*  reverse-proxied over the internal bridge network
       ▼
-  porttrack-api   Node 22 + Fastify + all domain packages              non-root · read-only FS
+  vantagepoint-api   Node 22 + Fastify + all domain packages              non-root · read-only FS
       │  better-sqlite3
       ▼
-  /var/lib/porttrack/vault.db
+  /var/lib/vantagepoint/vault.db
       ▲
-      └── bind mount ──▶  ${PORTTRACK_DATA_DIR:-./data}  ON THE HOST'S NATIVE DISK   (ADR-012)
+      └── bind mount ──▶  ${VANTAGEPOINT_DATA_DIR:-./data}  ON THE HOST'S NATIVE DISK   (ADR-012)
 ```
 
-Only `porttrack-web` publishes a host port; `porttrack-api` is reachable solely on the internal bridge
+Only `vantagepoint-web` publishes a host port; `vantagepoint-api` is reachable solely on the internal bridge
 network. Neither container has outbound internet access unless the user explicitly starts the `egress`
-profile (ADR-010). Writable paths in `porttrack-api` are exactly two: the bind-mounted data directory and
+profile (ADR-010). Writable paths in `vantagepoint-api` are exactly two: the bind-mounted data directory and
 a `tmpfs` `/tmp`.
 
 ### Technology decisions
@@ -168,7 +168,7 @@ a `tmpfs` `/tmp`.
 | Backend service | Fastify 5 on Node 22 | `apps/api`; thin HTTP shell over `app-services` |
 | Static serving | Caddy 2 (alpine) | SPA fallback + `/api` reverse proxy; auto-compresses |
 | Containers | Docker + Compose v2 | Two images, pinned base digests, non-root, read-only FS |
-| DB location | Host bind mount `${PORTTRACK_DATA_DIR:-./data}` | ADR-012 — native host disk, not a Docker volume |
+| DB location | Host bind mount `${VANTAGEPOINT_DATA_DIR:-./data}` | ADR-012 — native host disk, not a Docker volume |
 | Container tests | Vitest + `testcontainers` / raw `docker compose` | `tests/container/`, tagged so they can be excluded from the fast unit run |
 | Lint/format | ESLint (typescript-eslint strict) + Prettier | Layering rules enforced |
 
@@ -1530,8 +1530,8 @@ Scenario: Fonts are bundled, never fetched (FR-9.3)
 **AC**
 ```gherkin
 Scenario: CLI can import, snapshot and compute tax without the UI
-  Then `porttrack import --file <f> --parser zerodha`, `porttrack snapshot --as-of 2026-03-31`
-  And `porttrack tax advance --fy 2025-26 --quarter Q3` each run and exit 0
+  Then `vantagepoint import --file <f> --parser zerodha`, `vantagepoint snapshot --as-of 2026-03-31`
+  And `vantagepoint tax advance --fy 2025-26 --quarter Q3` each run and exit 0
   And exit non-zero with a machine-readable error on failure
 ```
 **Points:** 5 · **Deps:** US-8.3
@@ -1636,7 +1636,7 @@ Scenario: The compliance scheduler never silently skips a statutory snapshot
 
 ---
 
-#### US-9.1 — Backend container image (`porttrack-api`)
+#### US-9.1 — Backend container image (`vantagepoint-api`)
 **As an** operator **I want** the backend packaged as a self-contained image **so that** it runs on any
 host without a Node toolchain.
 
@@ -1660,7 +1660,7 @@ Scenario: Container runs as a non-root user (FR-8.3)
 Scenario: Root filesystem is read-only except data and tmp
   When a write to /app is attempted inside the container
   Then it fails with a read-only filesystem error
-  And writes to /var/lib/porttrack and /tmp succeed
+  And writes to /var/lib/vantagepoint and /tmp succeed
 
 Scenario: Base image is pinned by digest
   Then the Dockerfile FROM line references a sha256 digest, not a floating tag
@@ -1669,7 +1669,7 @@ Scenario: Base image is pinned by digest
 
 ---
 
-#### US-9.2 — Frontend container image (`porttrack-web`)
+#### US-9.2 — Frontend container image (`vantagepoint-web`)
 **AC**
 ```gherkin
 Scenario: SPA is served from the container with API proxying
@@ -1706,8 +1706,8 @@ Scenario: Clean-host bring-up with no local toolchain (PRD FR-8 AC)
 
 Scenario: Only the web service publishes a host port
   When the running stack's port bindings are inspected
-  Then porttrack-web publishes a host port
-  And porttrack-api publishes none and is reachable only on the internal network
+  Then vantagepoint-web publishes a host port
+  And vantagepoint-api publishes none and is reachable only on the internal network
 
 Scenario: Web waits for API readiness before accepting traffic
   Given the API takes 3 seconds to become ready
@@ -1748,9 +1748,9 @@ Scenario: Data directory is a bind mount, not a Docker-managed volume
   And its Source is an absolute path on the host filesystem
 
 Scenario: Data directory location is configurable
-  Given PORTTRACK_DATA_DIR is set to "/mnt/backup/porttrack"
+  Given VANTAGEPOINT_DATA_DIR is set to "/mnt/backup/vantagepoint"
   When the stack starts
-  Then the database is created under /mnt/backup/porttrack on the host
+  Then the database is created under /mnt/backup/vantagepoint on the host
 
 Scenario: Nothing is written to the container writable layer
   Given a session that creates a vault, imports a file and generates a snapshot
@@ -1765,7 +1765,7 @@ Scenario: Nothing is written to the container writable layer
 **AC**
 ```gherkin
 Scenario: Bind-mounted files are owned by the host user (FR-8.3)
-  Given PORTTRACK_UID and PORTTRACK_GID are set to the invoking host user
+  Given VANTAGEPOINT_UID and VANTAGEPOINT_GID are set to the invoking host user
   When the stack creates the vault database
   Then the file on the host is owned by that UID/GID
   And the host user can read, copy and delete it without sudo
@@ -1982,7 +1982,7 @@ Status legend: `TODO` · `TESTS_RED` (acceptance tests written and failing) · `
 | R5 | **Name detection misses a name** | PII leak to LLM | **The original mitigation was wrong and has been replaced.** It claimed the fail-closed guard was the backstop; the guard cannot be, because a PAN has a shape and a name does not. Actual mitigation, in order: (1) the detector **over-masks by default** — anything proper-noun-shaped is masked unless positively identified as an organisation, ticker or common term; (2) structured payloads are masked by **field semantics**, never by detection; (3) the guard re-runs detection, which catches a broken pipeline though not a detector blind spot. Residual risk is stated in `verifier.ts` and pinned by tests. |
 | R6 | Performance budget missed on 1,000+ lots with per-day FX lookups | NFR-2 breach | Rate cache keyed by (currency, date); valuation batches lookups. Benchmark in CI from M2 so regressions surface immediately. |
 | R7 | Grandfathering FMV data unavailable (OQ-4) | LTCG overstated for pre-2018 holdings | Manual per-lot entry; engine flags affected lots as `grandfatheringDataMissing` rather than assuming cost. |
-| R8 | Non-root container + bind-mounted SQLite hits UID/permission problems, differently on Linux vs macOS vs WSL2 | Stack unusable on some hosts; discovered late | Walking-skeleton container at M1 (see M9 sequencing note), configurable `PORTTRACK_UID/GID` (US-9.5), entrypoint pre-flight that fails fast with the exact `chown` remediation. |
+| R8 | Non-root container + bind-mounted SQLite hits UID/permission problems, differently on Linux vs macOS vs WSL2 | Stack unusable on some hosts; discovered late | Walking-skeleton container at M1 (see M9 sequencing note), configurable `VANTAGEPOINT_UID/GID` (US-9.5), entrypoint pre-flight that fails fast with the exact `chown` remediation. |
 | R9 | `better-sqlite3` is a native module — build must match the container's libc (glibc vs musl) | Image build breaks or crashes at runtime | Pin the runtime base to a glibc image (`node:22-bookworm-slim`), rebuild the native module in the builder stage against that exact base, and assert it loads in a container smoke test. |
 | R10 | SQLite over a bind mount on macOS/Windows can have fsync/locking quirks | Corruption risk under concurrent writes | Single-writer API process (no multi-replica), WAL mode with `synchronous=FULL`, and an integrity-check assertion in the persistence round-trip test. Documented as a single-instance deployment. |
 | R11 | Containerizing tempts a move of PII masking to the backend | Unmasked PII crosses the wire — defeats FR-7 | ADR-013 plus a static test (US-9.2) asserting `apps/api` never imports the masker's masking entry point. |
@@ -1991,7 +1991,7 @@ Status legend: `TODO` · `TESTS_RED` (acceptance tests written and failing) · `
 
 ## 10. Execution Order & Current State
 
-1. ✅ **Architecture** — [`ARCHITECTURE_portrack.md`](./ARCHITECTURE_portrack.md): C4 context/container/
+1. ✅ **Architecture** — [`ARCHITECTURE_vantagepoint.md`](./ARCHITECTURE_vantagepoint.md): C4 context/container/
    component views, 7 data-flow sequence diagrams, trust boundaries, deployment view. All 12 Mermaid
    diagrams parse-verified.
 2. ✅ **Tests first (M0)** — acceptance tests for every Gherkin scenario in §5, written against
@@ -2282,10 +2282,10 @@ returns **422 PII_LEAK** for an unmasked payload — the second, independent gat
 |---|---|---|
 | 1 | **A brand-new vault accepted an empty passphrase.** With no stored key to check against, the first unlock *sets* the passphrase — so an empty string silently created a vault anyone could open, and it looked like a successful unlock. | `Vault.unlock` refuses an empty passphrase outright. |
 | 2 | **`Vault.open` locked an already-unlocked vault**, because constructing a second app handle reset the session. | Re-opening the same path is now a no-op. |
-| 3 | **The API test used a fixed `/tmp/porttrack-test` path**, so a vault from an earlier run — created with a different passphrase — survived and made unlock fail for reasons unrelated to the code. | One throwaway directory per run. |
+| 3 | **The API test used a fixed `/tmp/vantagepoint-test` path**, so a vault from an earlier run — created with a different passphrase — survived and made unlock fail for reasons unrelated to the code. | One throwaway directory per run. |
 | 4 | **The scheduler used the ambient clock as a snapshot's creation time**, so catching up on a missed statutory snapshot was rejected as "future-dated" — defeating the catch-up path US-8.11 exists to provide. | A scheduled snapshot is created at the instant the scheduler ran. |
 | 5 | **Missing income was treated as an error**, making `tax advance` fail on a fresh vault. Advance tax on no income is legitimately nil. | Returns a zero profile, and callers surface `hasIncomeProfile()` — otherwise a forgotten Form 16 reads as "₹0 due" rather than "no input". |
-| 6 | Routes reached into `@porttrack/persistence` for readiness, breaking the thin-shell rule. | Readiness goes through `VaultUC.isUnlocked()`. |
+| 6 | Routes reached into `@vantagepoint/persistence` for readiness, breaking the thin-shell rule. | Readiness goes through `VaultUC.isUnlocked()`. |
 | 7 | A missing snapshot returned 404, indistinguishable from an unregistered route — for clients and for our own routing tests. | 409 for a routable request whose referenced resource is absent. |
 
 **Not done: the Playwright E2E suite.** `tests/e2e/` is written but unrun — it needs browser binaries
@@ -2315,7 +2315,7 @@ services. Verified against the running stack, not asserted from the compose file
 
 | Requirement | Evidence |
 |---|---|
-| FR-8.2 bind mount, not a Docker volume | `Type=bind Source=/tmp/porttrack-m9-data` |
+| FR-8.2 bind mount, not a Docker volume | `Type=bind Source=/tmp/vantagepoint-m9-data` |
 | Vault on the host disk, owned by the host user | `vault.db` present, owned `rrpofficial`, not root |
 | Survives `compose down` / `up` | md5 identical before and after; unlocks with the same passphrase |
 | FR-8.3 non-root | api and web both UID 1000 |
@@ -2393,7 +2393,7 @@ that produced this milestone cannot recur silently. Two things it caught: a help
 mount (a non-retrying `isVisible()` answered "false" mid-hydration and skipped the unlock, surfacing
 far from its cause), and the same-day snapshot rejection above.
 
-**Also fixed:** `@porttrack/core-domain` was added as a dependency of `ingestion` and `compliance`
+**Also fixed:** `@vantagepoint/core-domain` was added as a dependency of `ingestion` and `compliance`
 without running `pnpm install`, so the workspace links did not exist and ESLint resolved the whole
 package as `any` — 108 spurious errors from one missing symlink.
 
@@ -2402,7 +2402,7 @@ functional specs, all present before this work. The README's "lint clean" claim 
 
 ### M11b — the CSV template path (2026-08-04)
 
-Raised by the user: *"This application does not provide any sample portTrack csv template."* True,
+Raised by the user: *"This application does not provide any sample VantagePoint csv template."* True,
 and again the missing artefact was the smaller half of the problem.
 
 **The templates existed only as unreachable code.** `TEMPLATES` defined six of them and
@@ -2729,7 +2729,7 @@ must have changed without a page reload.
 
 ### M12d — choosing which template (2026-08-09)
 
-Requested: selecting *portTrack CSV template* in Import should reveal a dropdown of the templates
+Requested: selecting *VantagePoint CSV template* in Import should reveal a dropdown of the templates
 available under it.
 
 Taken further than presentation, because naming the template makes the import **safer**, not just
@@ -2741,7 +2741,7 @@ declared Custom_Cash, balance column missing
   → Custom_Cash template header mismatch — missing column(s): balance
 
 same file, detection only
-  → this header matches no portTrack template: account_label, as_of_date, currency…
+  → this header matches no VantagePoint template: account_label, as_of_date, currency…
 ```
 
 The first is actionable for someone editing a spreadsheet. The second is not.

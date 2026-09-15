@@ -6,7 +6,7 @@
  * withholding is eligible for a foreign tax credit — domestic TDS is a prepayment
  * of the same liability, and treating it as a credit would double-count it.
  */
-import { Err, InvalidAmountError, Money, Ok, type Result } from '@porttrack/shared-kernel';
+import { Err, InvalidAmountError, Money, Ok, type Result } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import type { IncomeEvent, RecordDividendInput, RecordInterestInput } from './types.js';
 

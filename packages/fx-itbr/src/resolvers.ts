@@ -17,9 +17,9 @@ import {
   type IsoDate,
   type Money as MoneyValue,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
-import type { DualRate, RateSource } from '@porttrack/core-domain';
+import type { DualRate, RateSource } from '@vantagepoint/core-domain';
 import { rateStore } from './rate-store.js';
 import type { ResolvedRate } from './types.js';
 

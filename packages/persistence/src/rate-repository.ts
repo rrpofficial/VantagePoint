@@ -22,7 +22,7 @@ import {
   type DomainError,
   type IsoDate,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { Vault } from './vault.js';
 
 /**

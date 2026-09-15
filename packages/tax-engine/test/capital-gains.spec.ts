@@ -3,8 +3,8 @@
  * US-5.8 — CG computation: exemption, grandfathering, indexation (PRD FR-5.2)
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CapitalGainsEngine, TaxRuleTable } from '@porttrack/tax-engine';
-import { anExit, expectMoney, expectOk, inr, seedStandardRates, usd } from '@porttrack/test-kit';
+import { CapitalGainsEngine, TaxRuleTable } from '@vantagepoint/tax-engine';
+import { anExit, expectMoney, expectOk, inr, seedStandardRates, usd } from '@vantagepoint/test-kit';
 
 beforeEach(() => {
   // Foreign gains convert through Rule 115 (ADR-003), so the rate history matters.

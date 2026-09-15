@@ -21,14 +21,14 @@ import {
   TemplateHeaderMismatchError,
   type Money as MoneyValue,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import {
   propertyChargesOf,
   type AreaUnit,
   type PropertyKind,
   type PropertyTransaction,
   type ValuationBasis,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 import { normaliseDate, parseCsv, type CsvRow, type CsvTable } from './csv.js';
 import {
   accountRef,
@@ -325,7 +325,7 @@ export function generateTemplate(name: string): string {
   // `parseCsv` already drops `#` lines, so a downloaded template can be filled
   // in and uploaded without deleting the guidance first.
   const comments = [
-    `# portTrack template: ${template.name}`,
+    `# VantagePoint template: ${template.name}`,
     `# ${template.description}`,
     ...wrap(template.guidance, 88).map((line) => `# ${line}`),
     '#',
@@ -986,7 +986,7 @@ export function parseTemplateFile(
     const { header } = parseCsv(csv);
     return Err(
       new TemplateHeaderMismatchError(
-        `this header matches no portTrack template: ${header.join(', ')}. ` +
+        `this header matches no VantagePoint template: ${header.join(', ')}. ` +
           `Download a template from the Import screen and keep its header row unchanged.`,
         [],
         header,

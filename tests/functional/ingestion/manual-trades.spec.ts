@@ -12,16 +12,16 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LedgerUC, TradeUC, resetPorts } from '@porttrack/app-services';
-import { DuplicateTradeError } from '@porttrack/shared-kernel';
-import { Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+import { LedgerUC, TradeUC, resetPorts } from '@vantagepoint/app-services';
+import { DuplicateTradeError } from '@vantagepoint/shared-kernel';
+import { Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-trades-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-trades-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await Vault.unlock(PASSPHRASE));
   resetPorts();

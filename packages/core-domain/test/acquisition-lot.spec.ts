@@ -2,8 +2,8 @@
  * US-1.2 — Record an acquisition lot with full cost basis (PRD FR-1.2)
  */
 import { describe, it, expect } from 'vitest';
-import { LotBook } from '@porttrack/core-domain';
-import { expectErr, expectMoney, expectOk, inr } from '@porttrack/test-kit';
+import { LotBook } from '@vantagepoint/core-domain';
+import { expectErr, expectMoney, expectOk, inr } from '@vantagepoint/test-kit';
 
 describe('US-1.2 acquisition lot', () => {
   describe('Scenario: Acquisition lot captures all mandated fields (FR-1.2)', () => {

@@ -1,4 +1,4 @@
-# porttrack-web (US-9.2, US-9.3)
+# vantagepoint-web (US-9.2, US-9.3)
 #
 # Serves the SPA and reverse-proxies /api to the backend over the internal
 # bridge network. The API publishes no host port, so this is the only way in.
@@ -9,7 +9,7 @@
 	handle /api/* {
 		# The compose SERVICE name, not the container name. Compose resolves it on
 		# this project's own internal network, so it is correct for every instance
-		# — a hardcoded `porttrack-api` broke the moment a second stack renamed its
+		# — a hardcoded `vantagepoint-api` broke the moment a second stack renamed its
 		# containers, and this image is shared by both.
 		reverse_proxy api:8080
 	}

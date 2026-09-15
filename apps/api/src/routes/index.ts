@@ -53,9 +53,9 @@ import {
   incomeProfileOf,
   saveIncomeInclusions,
   saveIncomeProfile,
-} from '@porttrack/app-services';
-import { PiiVerifier } from '@porttrack/pii-masker';
-import { DuplicateLoanError, DuplicateTradeError } from '@porttrack/shared-kernel';
+} from '@vantagepoint/app-services';
+import { PiiVerifier } from '@vantagepoint/pii-masker';
+import { DuplicateLoanError, DuplicateTradeError } from '@vantagepoint/shared-kernel';
 
 interface UnlockBody {
   readonly passphrase?: string;

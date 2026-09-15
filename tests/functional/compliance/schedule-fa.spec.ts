@@ -26,9 +26,9 @@ import {
   TradeUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { MarkRepository, PriceRepository, RateRepository, Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { MarkRepository, PriceRepository, RateRepository, Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const YEAR = 2025;
@@ -137,7 +137,7 @@ const freezeForeignSnapshot = async (): Promise<void> => {
 
 beforeEach(async () => {
   resetPorts();
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-schedule-fa-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-schedule-fa-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
 });

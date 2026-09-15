@@ -1,4 +1,4 @@
-# portTrack template: Custom_HandLoans
+# VantagePoint template: Custom_HandLoans
 # Money lent to friends or family, with interest and repayment history
 # status is Active, Partially Repaid or Repaid — it is RECOMPUTED from the repayment
 # columns, and so are total_interest_months, interest_balance_months, interest_per_month,

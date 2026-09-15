@@ -22,7 +22,7 @@
  * than a long weekend is missing DATA rather than a closed market, and carrying
  * a mark across that could hide a real peak — so it is reported.
  */
-import { Ok, VaultStateError, type IsoDate, type Result } from '@porttrack/shared-kernel';
+import { Ok, VaultStateError, type IsoDate, type Result } from '@vantagepoint/shared-kernel';
 import { Vault } from './vault.js';
 
 /**

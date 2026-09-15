@@ -1,7 +1,7 @@
-# portTrack — Evolution Plan
+# VantagePoint — Evolution Plan
 
-> Companion to [`ARCHITECTURE_portrack.md`](./ARCHITECTURE_portrack.md) and
-> [`implementation_plan_portrack.md`](./implementation_plan_portrack.md).
+> Companion to [`ARCHITECTURE_vantagepoint.md`](./ARCHITECTURE_vantagepoint.md) and
+> [`implementation_plan_vantagepoint.md`](./implementation_plan_vantagepoint.md).
 > Where those describe what was built, this describes what is missing against the
 > ten stated product objectives, and the order in which to close the gap.
 >
@@ -278,7 +278,7 @@ shippable and leaves the suite green.
 **Only income the employer is not already withholding on.**
 
 Salary, and the RSU/ESPP perquisite inside it, are covered by the employer's own
-TDS and appear on Form 16. portTrack computes the gap: capital gains on
+TDS and appear on Form 16. VantagePoint computes the gap: capital gains on
 disposals, and other income outside salary.
 
 This is why the vest perquisite is deliberately **not** imported, even though
@@ -441,7 +441,7 @@ Deposit interest reaches the tax figure unconditionally — it is chargeable
 whether or not it has been withdrawn, so there is no position for a setting to
 express. **Provident-fund interest is excluded with its reason stated**: exempt
 under s.10(11)/(12) except on contributions above the ₹2,50,000 threshold, and
-portTrack does not hold the contribution history that decides the split.
+VantagePoint does not hold the contribution history that decides the split.
 
 The steps below are kept as the record of what was built.
 

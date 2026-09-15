@@ -1,5 +1,5 @@
 {
-  "name": "@porttrack/app-services",
+  "name": "@vantagepoint/app-services",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,18 +9,18 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@porttrack/compliance": "workspace:*",
-    "@porttrack/core-domain": "workspace:*",
-    "@porttrack/exporters": "workspace:*",
-    "@porttrack/fx-itbr": "workspace:*",
-    "@porttrack/ingestion": "workspace:*",
-    "@porttrack/persistence": "workspace:*",
-    "@porttrack/platform": "workspace:*",
-    "@porttrack/shared-kernel": "workspace:*",
-    "@porttrack/snapshot": "workspace:*",
-    "@porttrack/tax-engine": "workspace:*"
+    "@vantagepoint/compliance": "workspace:*",
+    "@vantagepoint/core-domain": "workspace:*",
+    "@vantagepoint/exporters": "workspace:*",
+    "@vantagepoint/fx-itbr": "workspace:*",
+    "@vantagepoint/ingestion": "workspace:*",
+    "@vantagepoint/persistence": "workspace:*",
+    "@vantagepoint/platform": "workspace:*",
+    "@vantagepoint/shared-kernel": "workspace:*",
+    "@vantagepoint/snapshot": "workspace:*",
+    "@vantagepoint/tax-engine": "workspace:*"
   },
   "devDependencies": {
-    "@porttrack/test-kit": "workspace:*"
+    "@vantagepoint/test-kit": "workspace:*"
   }
 }

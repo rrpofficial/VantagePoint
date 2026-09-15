@@ -1,6 +1,6 @@
-# portTrack — Architecture
+# VantagePoint — Architecture
 
-**Companion to:** [`implementation_plan_portrack.md`](./implementation_plan_portrack.md) · [`Global_Portfolio_Tracker_PRD.md`](./Global_Portfolio_Tracker_PRD.md)
+**Companion to:** [`implementation_plan_vantagepoint.md`](./implementation_plan_vantagepoint.md) · [`Global_Portfolio_Tracker_PRD.md`](./Global_Portfolio_Tracker_PRD.md)
 **Version:** 1.1 (containerized) · **Date:** 2026-08-02
 
 ---
@@ -31,7 +31,7 @@ graph TB
     User["Indian Tax Resident<br/>(HNI / Global Investor / DIY)"]
     CA["Chartered Accountant<br/>(consumes exports)"]
 
-    PT["<b>portTrack</b><br/>Containerized portfolio tracking<br/>and Indian tax compliance"]
+    PT["<b>VantagePoint</b><br/>Containerized portfolio tracking<br/>and Indian tax compliance"]
 
     SBI["SBI Treasury<br/>ITBR / TTBR rate sheets"]
     RBI["RBI Reference Rates"]
@@ -77,13 +77,13 @@ graph TB
     subgraph Host["🖥️  Host OS"]
         Browser["Browser"]
 
-        subgraph DockerNet["Docker bridge network: porttrack_internal"]
-            Web["<b>porttrack-web</b><br/>Caddy 2 + React SPA bundle<br/>─────────────<br/>• SPA history fallback<br/>• reverse-proxy /api → api:8080<br/>• <b>pii-masker (WASM/JS)</b><br/>non-root · read-only FS<br/>published: :5173"]
-            API["<b>porttrack-api</b><br/>Node 22 + Fastify<br/>─────────────<br/>• app-services orchestration<br/>• all domain packages in-process<br/>• persistence + adapters<br/>• PII egress verifier (fail-closed)<br/>non-root · read-only FS · no published port"]
+        subgraph DockerNet["Docker bridge network: vantagepoint_internal"]
+            Web["<b>vantagepoint-web</b><br/>Caddy 2 + React SPA bundle<br/>─────────────<br/>• SPA history fallback<br/>• reverse-proxy /api → api:8080<br/>• <b>pii-masker (WASM/JS)</b><br/>non-root · read-only FS<br/>published: :5173"]
+            API["<b>vantagepoint-api</b><br/>Node 22 + Fastify<br/>─────────────<br/>• app-services orchestration<br/>• all domain packages in-process<br/>• persistence + adapters<br/>• PII egress verifier (fail-closed)<br/>non-root · read-only FS · no published port"]
         end
 
         subgraph HostFS["Host filesystem — NATIVE DISK"]
-            Vault[("<b>${PORTTRACK_DATA_DIR:-./data}</b><br/>vault.db · vault.db-wal · vault.db-shm<br/>AES-256-CBC+HMAC page-level<br/>owned by PORTTRACK_UID:GID")]
+            Vault[("<b>${VANTAGEPOINT_DATA_DIR:-./data}</b><br/>vault.db · vault.db-wal · vault.db-shm<br/>AES-256-CBC+HMAC page-level<br/>owned by VANTAGEPOINT_UID:GID")]
         end
 
         Tmp["tmpfs /tmp<br/>(only other writable path)"]
@@ -127,13 +127,13 @@ UID, backed up by whatever already backs up their home directory. That is the re
 
 ```mermaid
 graph TB
-    subgraph WEBC["porttrack-web container"]
+    subgraph WEBC["vantagepoint-web container"]
         UI["<b>apps/web</b> — React SPA<br/>Dashboard · Ledger · Import · Snapshots · Tax · Compliance"]
         MASK["<b>pii-masker</b> (client-side, ADR-013)<br/>RegexRules → NER → Pseudonymiser → EgressGuard"]
         UI --> MASK
     end
 
-    subgraph APIC["porttrack-api container"]
+    subgraph APIC["vantagepoint-api container"]
         ROUTES["<b>apps/api</b> — Fastify routes<br/>thin shell, zero business logic"]
 
         subgraph AS["packages/app-services — use-case orchestration"]
@@ -244,7 +244,7 @@ The single most consequential flow in the system: it is where ADR-003 resolves t
 sequenceDiagram
     autonumber
     actor U as User (Browser)
-    participant W as porttrack-web
+    participant W as vantagepoint-web
     participant R as apps/api routes
     participant UC as RecordTransactionUC
     participant CD as core-domain
@@ -386,7 +386,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor U as User
-    participant W as porttrack-web
+    participant W as vantagepoint-web
     participant R as apps/api
     participant UC as ComputeAdvanceTaxUC
     participant FY as FyCalendar
@@ -647,20 +647,20 @@ sequenceDiagram
     participant DC as docker compose
     participant HOST as Host filesystem
     participant EP as entrypoint-api.sh
-    participant API as porttrack-api
+    participant API as vantagepoint-api
     participant MIG as Migrations
-    participant WEB as porttrack-web
+    participant WEB as vantagepoint-web
     participant B as Browser
 
     U->>DC: docker compose up
-    DC->>HOST: resolve ${PORTTRACK_DATA_DIR:-./data} to an absolute host path
-    DC->>DC: create bind mount hostPath → /var/lib/porttrack
+    DC->>HOST: resolve ${VANTAGEPOINT_DATA_DIR:-./data} to an absolute host path
+    DC->>DC: create bind mount hostPath → /var/lib/vantagepoint
     DC->>DC: create internal bridge network (no external gateway by default)
 
-    DC->>API: start as ${PORTTRACK_UID}:${PORTTRACK_GID}, read-only rootfs, tmpfs /tmp
+    DC->>API: start as ${VANTAGEPOINT_UID}:${VANTAGEPOINT_GID}, read-only rootfs, tmpfs /tmp
     API->>EP: exec entrypoint
 
-    EP->>EP: assert /var/lib/porttrack is a BIND mount, not a docker volume
+    EP->>EP: assert /var/lib/vantagepoint is a BIND mount, not a docker volume
     EP->>EP: assert writable by current UID
     alt not writable
         EP--xAPI: exit 1 — names path, expected UID:GID, exact chown remediation
@@ -785,9 +785,9 @@ graph TB
     end
     subgraph PROD["User's machine"]
         P1["docker compose up"]
-        P2["porttrack-web :5173"]
-        P3["porttrack-api (internal only)"]
-        P4[("${PORTTRACK_DATA_DIR}/vault.db<br/>HOST NATIVE DISK")]
+        P2["vantagepoint-web :5173"]
+        P3["vantagepoint-api (internal only)"]
+        P4[("${VANTAGEPOINT_DATA_DIR}/vault.db<br/>HOST NATIVE DISK")]
         P1-->P2-->P3-->P4
     end
     DEV-->CI-->PROD
@@ -799,10 +799,10 @@ graph TB
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `PORTTRACK_DATA_DIR` | `./data` | **Host** path for the encrypted vault (ADR-012) |
-| `PORTTRACK_UID` / `PORTTRACK_GID` | invoking user | Ownership of bind-mounted files (US-9.5) |
-| `PORTTRACK_WEB_PORT` | `5173` | Only published host port |
-| `PORTTRACK_EGRESS` | `deny` | `allow` requires `compose.egress.yaml` |
+| `VANTAGEPOINT_DATA_DIR` | `./data` | **Host** path for the encrypted vault (ADR-012) |
+| `VANTAGEPOINT_UID` / `VANTAGEPOINT_GID` | invoking user | Ownership of bind-mounted files (US-9.5) |
+| `VANTAGEPOINT_WEB_PORT` | `5173` | Only published host port |
+| `VANTAGEPOINT_EGRESS` | `deny` | `allow` requires `compose.egress.yaml` |
 
 The vault passphrase is **not** in this table by design — it is supplied per session through the UI and
 never touches the environment, an image layer, or disk (ADR-014).
@@ -811,7 +811,7 @@ never touches the environment, an image layer, or disk (ADR-014).
 
 ## 8. Architecture Decision Index
 
-Full text and reversibility assessment in [`implementation_plan_portrack.md` §0](./implementation_plan_portrack.md#0-critical-decisions--prd-conflict-resolutions-read-first).
+Full text and reversibility assessment in [`implementation_plan_vantagepoint.md` §0](./implementation_plan_vantagepoint.md#0-critical-decisions--prd-conflict-resolutions-read-first).
 
 | ADR | Decision | Realised in |
 |---|---|---|
@@ -825,7 +825,7 @@ Full text and reversibility assessment in [`implementation_plan_portrack.md` §0
 | 008 | All EOD boundaries in Asia/Kolkata | §5.2 |
 | 009 | Liabilities are first-class | `core-domain.Liability` |
 | 010 | Zero egress by default, one gateway | §3, §6.1 |
-| 011 | Two containers: `porttrack-web` + `porttrack-api` | §3 |
+| 011 | Two containers: `vantagepoint-web` + `vantagepoint-api` | §3 |
 | 012 | DB on a **host bind mount**, not a Docker volume | §3, §5.7 |
 | 013 | PII masking stays in the browser bundle | §5.4 |
 | 014 | Passphrase in memory only, never on disk | §5.7 |

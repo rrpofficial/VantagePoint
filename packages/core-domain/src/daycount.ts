@@ -1,7 +1,7 @@
 /**
  * Day-count basis for interest accrual.
  *
- * portTrack uses **30/360** throughout. This is not an arbitrary pick — it is the
+ * VantagePoint uses **30/360** throughout. This is not an arbitrary pick — it is the
  * only convention that satisfies both acceptance criteria simultaneously:
  *
  *   PRD FR-1: ₹5,000,000 at 8% from 2025-04-01, valued 2026-03-31 → ₹400,000.
@@ -15,8 +15,8 @@
  * 30/360 gives 360/360 = 1.0 for a full financial year and 0 on the start date.
  * Indian private lending has no statutory basis, so the PRD's own figure governs.
  */
-import { InvalidDateError } from '@porttrack/shared-kernel';
-import type { IsoDate } from '@porttrack/shared-kernel';
+import { InvalidDateError } from '@vantagepoint/shared-kernel';
+import type { IsoDate } from '@vantagepoint/shared-kernel';
 
 const ISO = /^(\d{4})-(\d{2})-(\d{2})$/;
 

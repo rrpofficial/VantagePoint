@@ -25,16 +25,16 @@ import {
   TradeUC,
   ValuePortfolioUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const AS_OF = '2026-04-01';
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-delete-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-delete-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await Vault.unlock(PASSPHRASE));
   resetPorts();

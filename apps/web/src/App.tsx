@@ -163,12 +163,12 @@ function AppShell() {
 
   if (!unlocked) {
     return (
-      <main className="pt-shell pt-shell--centred">
+      <main className="vp-shell vp-shell--centred">
         <Card title="Unlock your vault">
-          <p className="pt-muted">
+          <p className="vp-muted">
             Your portfolio is encrypted on this machine. Nothing leaves it without your say-so.
           </p>
-          <form onSubmit={unlock} className="pt-form">
+          <form onSubmit={unlock} className="vp-form">
             <label htmlFor="passphrase">Vault passphrase</label>
             <input
               id="passphrase"
@@ -186,13 +186,13 @@ function AppShell() {
             {unlocking && (
               // Says WHY it is slow. A deliberate work factor that looks like a
               // stall is indistinguishable from a broken app.
-              <p className="pt-muted" role="status" data-testid="unlock-progress">
+              <p className="vp-muted" role="status" data-testid="unlock-progress">
                 Deriving your encryption key. This takes a moment by design — it is what makes a
                 guessed passphrase expensive to try.
               </p>
             )}
             {error !== undefined && (
-              <p className="pt-error" role="alert">
+              <p className="vp-error" role="alert">
                 {error}
               </p>
             )}
@@ -203,11 +203,11 @@ function AppShell() {
   }
 
   return (
-    <div className="pt-shell">
-      <header className="pt-topbar">
-        <div className="pt-brand">
-          <span className="pt-brand__mark" aria-hidden="true" />
-          portTrack
+    <div className="vp-shell">
+      <header className="vp-topbar">
+        <div className="vp-brand">
+          <span className="vp-brand__mark" aria-hidden="true" />
+          VantagePoint
         </div>
         <nav aria-label="Sections">
           {SECTIONS.map((name) => (
@@ -227,7 +227,7 @@ function AppShell() {
           deleting would happen, or it is left on without anyone noticing.
         */}
         {editMode.enabled && (
-          <span className="pt-mode-flag" role="status" data-testid="edit-mode-flag">
+          <span className="vp-mode-flag" role="status" data-testid="edit-mode-flag">
             Edit mode on
           </span>
         )}
@@ -240,7 +240,7 @@ function AppShell() {
         clicks, which is the usual reason a grouping level gets resented.
       */}
       {section === 'Assets' && (
-        <nav className="pt-subnav" aria-label="Asset kinds" data-testid="asset-subnav">
+        <nav className="vp-subnav" aria-label="Asset kinds" data-testid="asset-subnav">
           {ASSET_TABS.map((tab) => (
             <a
               key={tab}

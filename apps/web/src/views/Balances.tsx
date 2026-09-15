@@ -119,7 +119,7 @@ function NewBalanceForm({
   }
 
   return (
-    <form className="pt-form pt-form--grid" onSubmit={onSubmit} data-testid="new-balance-form">
+    <form className="vp-form vp-form--grid" onSubmit={onSubmit} data-testid="new-balance-form">
       <label htmlFor="bal-class">What is it</label>
       <select
         id="bal-class"
@@ -136,7 +136,7 @@ function NewBalanceForm({
       </select>
 
       {option !== undefined && (
-        <p className="pt-form__full pt-muted" data-testid="balance-guidance">
+        <p className="vp-form__wide vp-muted" data-testid="balance-guidance">
           {option.guidance}
         </p>
       )}
@@ -306,17 +306,17 @@ function NewBalanceForm({
         }}
       />
 
-      <div className="pt-actions pt-form__full">
+      <div className="vp-actions vp-form__wide">
         <button type="submit" disabled={busy} data-testid="save-balance">
           {busy ? 'Saving…' : 'Save'}
         </button>
-        <button type="button" className="pt-button-inline" onClick={onClose}>
+        <button type="button" className="vp-button-inline" onClick={onClose}>
           Cancel
         </button>
       </div>
 
       {error !== undefined && (
-        <p className="pt-error pt-form__full" role="alert" data-testid="balance-error">
+        <p className="vp-error vp-form__wide" role="alert" data-testid="balance-error">
           {error}
         </p>
       )}
@@ -352,20 +352,20 @@ function Row({ view, onChanged }: { view: BalanceView; onChanged: () => void }) 
         <td>
           <strong>{view.account.label}</strong>
           {view.account.institutionName !== undefined && (
-            <div className="pt-muted">{view.account.institutionName}</div>
+            <div className="vp-muted">{view.account.institutionName}</div>
           )}
         </td>
-        <td className="pt-numeric">{view.account.openedOn}</td>
-        <td className="pt-numeric">
+        <td className="vp-numeric">{view.account.openedOn}</td>
+        <td className="vp-numeric">
           {view.account.annualRatePct === undefined ? '—' : `${view.account.annualRatePct}%`}
         </td>
-        <td className="pt-numeric">
+        <td className="vp-numeric">
           <Amount value={view.contributed} />
         </td>
-        <td className="pt-numeric">
+        <td className="vp-numeric">
           <Amount value={view.accruedInterest} />
         </td>
-        <td className="pt-numeric">
+        <td className="vp-numeric">
           <Amount value={view.value} />
         </td>
         <td>
@@ -379,7 +379,7 @@ function Row({ view, onChanged }: { view: BalanceView; onChanged: () => void }) 
           {editMode.enabled && !view.closed && (
             <button
               type="button"
-              className="pt-button-inline"
+              className="vp-button-inline"
               data-testid="restate-balance"
               onClick={() => {
                 setRestating((open) => !open);
@@ -394,7 +394,7 @@ function Row({ view, onChanged }: { view: BalanceView; onChanged: () => void }) 
       {/* Stated, not left to be inferred from a figure that has not moved. */}
       {view.flatReason !== undefined && (
         <tr>
-          <td colSpan={7} className="pt-muted" data-testid="balance-flat-reason">
+          <td colSpan={7} className="vp-muted" data-testid="balance-flat-reason">
             {view.flatReason}
           </td>
         </tr>
@@ -403,7 +403,7 @@ function Row({ view, onChanged }: { view: BalanceView; onChanged: () => void }) 
       {restating && (
         <tr>
           <td colSpan={7}>
-            <div className="pt-form pt-form--grid">
+            <div className="vp-form vp-form--grid">
               <label htmlFor={`restate-amount-${view.account.assetId}`}>New balance</label>
               <input
                 id={`restate-amount-${view.account.assetId}`}
@@ -422,17 +422,17 @@ function Row({ view, onChanged }: { view: BalanceView; onChanged: () => void }) 
                   setAsOf(event.target.value);
                 }}
               />
-              <div className="pt-actions pt-form__full">
+              <div className="vp-actions vp-form__wide">
                 <button type="button" onClick={() => void submit()}>
                   Restate
                 </button>
               </div>
-              <p className="pt-muted pt-form__full">
+              <p className="vp-muted vp-form__wide">
                 Accrual restarts from this date. A new figure with the old start date would
                 re-accrue interest that is already inside it.
               </p>
               {error !== undefined && (
-                <p className="pt-error pt-form__full" role="alert">
+                <p className="vp-error vp-form__wide" role="alert">
                   {error}
                 </p>
               )}
@@ -464,14 +464,14 @@ export function Balances() {
   const totals = register?.totals;
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <Card
         title="Deposits, retirement and cash"
         action={
-          <div className="pt-actions">
+          <div className="vp-actions">
             <button
               type="button"
-              className="pt-button-inline"
+              className="vp-button-inline"
               data-testid="add-balance"
               onClick={() => {
                 setAdding((open) => !open);
@@ -486,12 +486,12 @@ export function Balances() {
           </div>
         }
       >
-        <p className="pt-muted">
+        <p className="vp-muted">
           Fixed and recurring deposits, EPF, VPF, PPF, NPS, gratuity, bank balances and cash. These
           grow without any trade being recorded — a deposit accrues between two valuations on its
           own rate, which is the whole reason they are entered here rather than as a number.
         </p>
-        <p className="pt-muted">
+        <p className="vp-muted">
           Gold and crypto are <strong>not</strong> here. They are quantities bought at a price and
           sold FIFO, so they are recorded as trades under Non-equity.
         </p>
@@ -512,26 +512,26 @@ export function Balances() {
         action={<Chip>{`${String(register?.accounts.length ?? 0)} shown`}</Chip>}
       >
         {error !== undefined && (
-          <p className="pt-error" role="alert" data-testid="balances-error">
+          <p className="vp-error" role="alert" data-testid="balances-error">
             {error}
           </p>
         )}
 
         {register !== undefined && register.accounts.length === 0 ? (
-          <p className="pt-muted" data-testid="balances-empty">
+          <p className="vp-muted" data-testid="balances-empty">
             Nothing recorded yet. Add a deposit or a balance above, or import a batch.
           </p>
         ) : (
-          <div className="pt-table-scroll">
-            <table className="pt-table">
+          <div className="vp-table-scroll">
+            <table className="vp-table">
               <thead>
                 <tr>
                   <th>Account</th>
-                  <th className="pt-numeric">From</th>
-                  <th className="pt-numeric">Rate</th>
-                  <th className="pt-numeric">Contributed</th>
-                  <th className="pt-numeric">Interest</th>
-                  <th className="pt-numeric">Value</th>
+                  <th className="vp-numeric">From</th>
+                  <th className="vp-numeric">Rate</th>
+                  <th className="vp-numeric">Contributed</th>
+                  <th className="vp-numeric">Interest</th>
+                  <th className="vp-numeric">Value</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -546,13 +546,13 @@ export function Balances() {
                     <td colSpan={3}>
                       <strong>{`${String(totals.openCount)} open`}</strong>
                     </td>
-                    <td className="pt-numeric">
+                    <td className="vp-numeric">
                       <Amount value={totals.totalContributed} />
                     </td>
-                    <td className="pt-numeric">
+                    <td className="vp-numeric">
                       <Amount value={totals.totalAccruedInterest} />
                     </td>
-                    <td className="pt-numeric">
+                    <td className="vp-numeric">
                       <Amount value={totals.totalValue} />
                     </td>
                     <td />

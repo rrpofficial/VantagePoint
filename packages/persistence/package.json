@@ -1,5 +1,5 @@
 {
-  "name": "@porttrack/persistence",
+  "name": "@vantagepoint/persistence",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -10,12 +10,12 @@
   },
   "dependencies": {
     "@noble/hashes": "*",
-    "@porttrack/core-domain": "workspace:*",
-    "@porttrack/shared-kernel": "workspace:*",
-    "@porttrack/snapshot": "workspace:*",
+    "@vantagepoint/core-domain": "workspace:*",
+    "@vantagepoint/shared-kernel": "workspace:*",
+    "@vantagepoint/snapshot": "workspace:*",
     "better-sqlite3-multiple-ciphers": "*"
   },
   "devDependencies": {
-    "@porttrack/test-kit": "workspace:*"
+    "@vantagepoint/test-kit": "workspace:*"
   }
 }

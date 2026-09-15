@@ -22,7 +22,7 @@
  *     now. Carrying both would report the same rupees twice — the same trap the
  *     chit valuation documents.
  */
-import { Money, type IsoDate, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, type IsoDate, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import {
   depositAccruedValue,
   epfProjection,

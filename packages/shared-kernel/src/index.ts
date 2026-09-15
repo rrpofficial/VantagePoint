@@ -1,5 +1,5 @@
 /**
- * portTrack shared kernel — the vocabulary every other package speaks.
+ * VantagePoint shared kernel — the vocabulary every other package speaks.
  *
  * Pure: no I/O, no ambient clock. Time and identity are injected via the `Clock`
  * and `IdGenerator` ports, which is what makes the tax engine deterministically

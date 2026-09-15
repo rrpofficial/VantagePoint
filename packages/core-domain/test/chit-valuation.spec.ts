@@ -7,8 +7,8 @@
  * ₹4,00,000 on a dashboard and ₹30,00,000 on their own tab.
  */
 import { describe, it, expect } from 'vitest';
-import { ValuationEngine, type Asset, type ChitFund } from '@porttrack/core-domain';
-import { inr } from '@porttrack/test-kit';
+import { ValuationEngine, type Asset, type ChitFund } from '@vantagepoint/core-domain';
+import { inr } from '@vantagepoint/test-kit';
 
 const AS_OF = '2025-12-31T00:00:00+05:30';
 

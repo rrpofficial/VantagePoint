@@ -5,7 +5,7 @@
  * capital gains engine cannot be written against the asset class alone.
  */
 import { describe, it, expect } from 'vitest';
-import { taxCharacterFor, taxCharacterOf, type MfSchemeCategory } from '@porttrack/core-domain';
+import { taxCharacterFor, taxCharacterOf, type MfSchemeCategory } from '@vantagepoint/core-domain';
 
 describe('US-5.7 mutual fund tax character', () => {
   describe('Scenario: Categories with a guaranteed equity mandate are equity-oriented', () => {

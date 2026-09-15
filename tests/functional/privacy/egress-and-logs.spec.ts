@@ -11,9 +11,9 @@ import { readFileSync } from 'node:fs';
 import { globSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { inspect } from 'node:util';
-import { AuditUC, ImportStatementUC, VaultUC } from '@porttrack/app-services';
-import { MaskingPipeline, PiiVerifier } from '@porttrack/pii-masker';
-import { expectNoPii, SYNTHETIC } from '@porttrack/test-kit';
+import { AuditUC, ImportStatementUC, VaultUC } from '@vantagepoint/app-services';
+import { MaskingPipeline, PiiVerifier } from '@vantagepoint/pii-masker';
+import { expectNoPii, SYNTHETIC } from '@vantagepoint/test-kit';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
 

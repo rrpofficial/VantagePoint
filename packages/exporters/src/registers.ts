@@ -13,7 +13,7 @@
  * made at export time and the file SAYS which way it was made — a recipient must
  * be able to tell a masked extract from a full one without being told.
  */
-import { Money, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import type {
   AcquisitionLot,
   Asset,
@@ -22,8 +22,8 @@ import type {
   ChitView,
   ExitTransaction,
   ImmovableProperty,
-} from '@porttrack/core-domain';
-import { totalOutlayOf, totalTaxOf } from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
+import { totalOutlayOf, totalTaxOf } from '@vantagepoint/core-domain';
 import type { ExportColumn, ExportTable } from './table.js';
 
 export interface ExportOptions {
@@ -72,7 +72,7 @@ export function chitTable(
   options: ExportOptions,
 ): ExportTable {
   return {
-    title: 'portTrack — Chit fund register',
+    title: 'VantagePoint — Chit fund register',
     columns: CHIT_COLUMNS,
     notes: notesFor(options, [
       'Carrying value is contributions at cost, and nil once the pot is drawn — the drawn amount is then cash in a bank account and is counted there.',
@@ -181,7 +181,7 @@ export function holdingTables(
   options: ExportOptions & { financialYearNote?: string },
 ): readonly ExportTable[] {
   const summary: ExportTable = {
-    title: 'portTrack — Holdings',
+    title: 'VantagePoint — Holdings',
     columns: HOLDING_COLUMNS,
     notes: notesFor(options, [
       'Cost basis is acquisition cost including charges — not market value.',
@@ -202,7 +202,7 @@ export function holdingTables(
   };
 
   const lots: ExportTable = {
-    title: 'portTrack — Acquisition lots',
+    title: 'VantagePoint — Acquisition lots',
     columns: LOT_COLUMNS,
     notes: notesFor(options, [
       'The rate column is the VALUATION rate used on the trade date, not the Rule 115 rate a capital gain is charged at (ADR-003).',
@@ -225,7 +225,7 @@ export function holdingTables(
   };
 
   const disposals: ExportTable = {
-    title: 'portTrack — Disposals',
+    title: 'VantagePoint — Disposals',
     columns: DISPOSAL_COLUMNS,
     notes: notesFor(options, [
       ...(options.financialYearNote === undefined ? [] : [options.financialYearNote]),
@@ -324,13 +324,13 @@ export function propertyTables(
 
   return [
     {
-      title: 'portTrack — Immovable property',
+      title: 'VantagePoint — Immovable property',
       columns: PROPERTY_COLUMNS,
       notes: notesFor(options, ['One row per transaction, so a sale appears beside its purchase.']),
       rows,
     },
     {
-      title: 'portTrack — Property duty and current value',
+      title: 'VantagePoint — Property duty and current value',
       columns: PROPERTY_VALUE_COLUMNS,
       notes: notesFor(options, [
         'Current value is optional, never summed into net worth, and is stated only with the basis and date that qualify it.',
@@ -359,7 +359,7 @@ export function balanceTable(
   options: ExportOptions,
 ): ExportTable {
   return {
-    title: 'portTrack — Deposits, retirement and cash',
+    title: 'VantagePoint — Deposits, retirement and cash',
     columns: BALANCE_COLUMNS,
     notes: notesFor(options, [
       'A blank rate means none was recorded, so the balance is carried flat rather than grown from an assumed one.',

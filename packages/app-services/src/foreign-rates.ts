@@ -47,11 +47,11 @@
  * `unconvertible` gains. A fabricated rate in a tax computation is the worst
  * failure this codebase can produce, because the number it yields looks ordinary.
  */
-import { DualRateConverter } from '@porttrack/fx-itbr';
-import { CapitalGainsEngine } from '@porttrack/tax-engine';
-import { Money } from '@porttrack/shared-kernel';
-import type { Asset, ExitTransaction } from '@porttrack/core-domain';
-import type { IsoDate } from '@porttrack/shared-kernel';
+import { DualRateConverter } from '@vantagepoint/fx-itbr';
+import { CapitalGainsEngine } from '@vantagepoint/tax-engine';
+import { Money } from '@vantagepoint/shared-kernel';
+import type { Asset, ExitTransaction } from '@vantagepoint/core-domain';
+import type { IsoDate } from '@vantagepoint/shared-kernel';
 
 const INR = 'INR' as const;
 

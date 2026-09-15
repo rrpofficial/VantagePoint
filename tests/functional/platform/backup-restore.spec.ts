@@ -17,12 +17,12 @@ import {
   ValuePortfolioUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { Backup, SnapshotRepository, Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { Backup, SnapshotRepository, Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
-const dir = () => mkdtempSync(join(tmpdir(), 'porttrack-backup-'));
+const dir = () => mkdtempSync(join(tmpdir(), 'vantagepoint-backup-'));
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
 
 /** A vault only exists on disk once it has been unlocked — migrations run then. */
@@ -53,13 +53,13 @@ afterEach(async () => {
 describe('US-8.8 Scenario: Encrypted backup round-trips exactly', () => {
   it('produces a backup artifact on disk', async () => {
     await openedVault();
-    const path = expectOk(await Backup.backup(join(dir(), 'backup.ptb')));
+    const path = expectOk(await Backup.backup(join(dir(), 'backup.vpb')));
     expect(existsSync(path)).toBe(true);
   });
 
   it('refuses to back up a vault that was never unlocked', async () => {
     expectOk(await Vault.open({ dataDir: dir(), fileName: 'vault.db' }));
-    const result = await Backup.backup(join(dir(), 'backup.ptb'));
+    const result = await Backup.backup(join(dir(), 'backup.vpb'));
     expect(result.ok).toBe(false);
   });
 
@@ -70,7 +70,7 @@ describe('US-8.8 Scenario: Encrypted backup round-trips exactly', () => {
       before.map(async (id) => (await SnapshotRepository.findById(id))?.contentHash),
     );
 
-    const archive = expectOk(await Backup.backup(join(dir(), 'backup.ptb')));
+    const archive = expectOk(await Backup.backup(join(dir(), 'backup.vpb')));
     const target = dir();
     expectOk(await Backup.restore(archive, target));
     await Vault.close();
@@ -87,7 +87,7 @@ describe('US-8.8 Scenario: Encrypted backup round-trips exactly', () => {
 
   it('keeps the backup encrypted at rest', async () => {
     await openedVault();
-    const archive = expectOk(await Backup.backup(join(dir(), 'backup.ptb')));
+    const archive = expectOk(await Backup.backup(join(dir(), 'backup.vpb')));
     const { readFileSync } = await import('node:fs');
     expect(readFileSync(archive, 'latin1')).not.toContain('ABCDE1234F');
   });
@@ -114,7 +114,7 @@ describe('Phase 7 Scenario: A backup taken from Settings restores to the same ne
     expect(before).not.toBe('0');
 
     const archive = expectOk(await BackupUC.create());
-    expect(archive.fileName).toMatch(/^portTrack-backup-.*\.ptb$/);
+    expect(archive.fileName).toMatch(/^VantagePoint-backup-.*\.vpb$/);
 
     // A directory that has never held a vault — the disaster-recovery path.
     await Vault.close();
@@ -148,7 +148,7 @@ describe('Phase 7 Scenario: A backup taken from Settings restores to the same ne
    * restore would write whatever `database` happened to decode to over the
    * vault, and the user would discover that with nothing left to compare it to.
    */
-  it('refuses a file that is not a portTrack archive, leaving the vault untouched', async () => {
+  it('refuses a file that is not a VantagePoint archive, leaving the vault untouched', async () => {
     const dataDir = await unlockedVault();
     expectOk(
       await TradeUC.record({
@@ -220,7 +220,7 @@ describe('Phase 7 Scenario: A backup taken from Settings restores to the same ne
     const corrupt = new Uint8Array(
       Buffer.from(
         JSON.stringify({
-          magic: 'porttrack.vault.backup',
+          magic: 'vantagepoint.vault.backup',
           version: 1,
           database: Buffer.from('not a database').toString('base64'),
           meta: 'this is not json',
@@ -241,7 +241,7 @@ describe('Phase 7 Scenario: A backup taken from Settings restores to the same ne
     const parsed = JSON.parse(Buffer.from(archive.bytes).toString('utf8')) as Record<string, unknown>;
     delete parsed.magic;
 
-    const legacy = join(dir(), 'legacy.ptb');
+    const legacy = join(dir(), 'legacy.vpb');
     writeFileSync(legacy, JSON.stringify(parsed));
     const target = dir();
 

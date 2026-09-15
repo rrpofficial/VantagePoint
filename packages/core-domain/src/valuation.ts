@@ -15,7 +15,7 @@ import {
   RateUnavailableError,
   type Clock,
   type Money as MoneyValue,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import { totalCostBasis } from './lots.js';
 import { handLoanAccruedInterest, handLoanOutstandingPrincipal } from './accruals.js';

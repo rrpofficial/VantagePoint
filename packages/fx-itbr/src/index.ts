@@ -2,7 +2,7 @@
  * fx-itbr — SBI ITBR rate store, fallback chain, Rule 115 and dual-rate conversion.
  * Pure: fetching rate sheets is `adapters-fx`; this package only reasons about them.
  */
-import type { Currency, IsoDate, Result } from '@porttrack/shared-kernel';
+import type { Currency, IsoDate, Result } from '@vantagepoint/shared-kernel';
 import { rateStore } from './rate-store.js';
 import {
   convert,

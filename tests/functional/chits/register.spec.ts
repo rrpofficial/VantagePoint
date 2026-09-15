@@ -15,16 +15,16 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ChitUC, EditModeUC, ValuePortfolioUC, resetPorts } from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+import { ChitUC, EditModeUC, ValuePortfolioUC, resetPorts } from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const AS_OF = '2025-12-31';
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-chits-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-chits-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await Vault.unlock(PASSPHRASE));
   resetPorts();

@@ -9,9 +9,9 @@
  * Cost is apportioned by REMAINING quantity: a partially sold lot contributes
  * only the cost of what is still held at year end.
  */
-import { Money, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
-import type { Asset, AssetClass, Liability } from '@porttrack/core-domain';
+import type { Asset, AssetClass, Liability } from '@vantagepoint/core-domain';
 import type { ScheduleAlHead, ScheduleAlItem } from './types.js';
 
 /**

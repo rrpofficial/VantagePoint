@@ -22,8 +22,8 @@ import {
   type Money as MoneyValue,
   type Percentage,
   type Result,
-} from '@porttrack/shared-kernel';
-import { JURISDICTION, LIQUIDITY, isAssetClass, type Asset, type AssetClass, type BalanceAccount } from '@porttrack/core-domain';
+} from '@vantagepoint/shared-kernel';
+import { JURISDICTION, LIQUIDITY, isAssetClass, type Asset, type AssetClass, type BalanceAccount } from '@vantagepoint/core-domain';
 import { createHash } from 'node:crypto';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

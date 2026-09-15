@@ -1,5 +1,5 @@
 {
-  "name": "@porttrack/fx-itbr",
+  "name": "@vantagepoint/fx-itbr",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,10 +9,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@porttrack/core-domain": "workspace:*",
-    "@porttrack/shared-kernel": "workspace:*"
+    "@vantagepoint/core-domain": "workspace:*",
+    "@vantagepoint/shared-kernel": "workspace:*"
   },
   "devDependencies": {
-    "@porttrack/test-kit": "workspace:*"
+    "@vantagepoint/test-kit": "workspace:*"
   }
 }

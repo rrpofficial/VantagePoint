@@ -24,9 +24,9 @@
  * for `rule115Rate`: collapsing the two satisfies the display requirement while
  * silently changing every taxable figure.
  */
-import { FallbackChain } from '@porttrack/fx-itbr';
-import type { FxSource } from '@porttrack/core-domain';
-import type { Currency, IsoDate, Rate } from '@porttrack/shared-kernel';
+import { FallbackChain } from '@vantagepoint/fx-itbr';
+import type { FxSource } from '@vantagepoint/core-domain';
+import type { Currency, IsoDate, Rate } from '@vantagepoint/shared-kernel';
 
 /**
  * Reads through whatever rate store is installed — the vault once unlocked, an

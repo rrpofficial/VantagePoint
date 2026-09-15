@@ -5,8 +5,8 @@
  * US-3.4 — Custom arbitrary-date snapshot
  */
 import { describe, it, expect } from 'vitest';
-import { CompliancePolicy, ContentHasher, SnapshotFactory, type Snapshot } from '@porttrack/snapshot';
-import { expectErr, expectOk, inr } from '@porttrack/test-kit';
+import { CompliancePolicy, ContentHasher, SnapshotFactory, type Snapshot } from '@vantagepoint/snapshot';
+import { expectErr, expectOk, inr } from '@vantagepoint/test-kit';
 
 /**
  * Builds a genuine snapshot: deeply frozen, with its real content hash. A literal

@@ -14,14 +14,14 @@ import {
   VaultStateError,
   type Currency,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import type {
   BorrowedLoan,
   BorrowedLoanStatus,
   LiabilityKind,
   LoanInstalment,
   PaymentMode,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 import { Vault } from './vault.js';
 
 interface LoanRow {

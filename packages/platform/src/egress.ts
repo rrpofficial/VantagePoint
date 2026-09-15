@@ -18,7 +18,7 @@ import {
   type EgressRequest,
   type IsoDateTime,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 
 export interface EgressPolicy {
   /** Master switch. `deny` (the default) refuses everything. */

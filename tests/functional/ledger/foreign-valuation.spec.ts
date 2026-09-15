@@ -35,9 +35,9 @@ import {
   ValuePortfolioUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const AS_OF = '2026-09-15T10:00:00+05:30';
@@ -81,7 +81,7 @@ const recordDomestic = () =>
   });
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-fx-value-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-fx-value-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

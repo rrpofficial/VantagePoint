@@ -10,8 +10,8 @@ import {
   ReturnsCalculator,
   type Snapshot,
   type SnapshotPosition,
-} from '@porttrack/snapshot';
-import { expectErr, expectMoney, expectOk, inr, usd } from '@porttrack/test-kit';
+} from '@vantagepoint/snapshot';
+import { expectErr, expectMoney, expectOk, inr, usd } from '@vantagepoint/test-kit';
 
 const position = (overrides: Partial<SnapshotPosition>): SnapshotPosition =>
   ({

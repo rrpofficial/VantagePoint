@@ -6,9 +6,9 @@
  * snapshots, proving the two halves fit and that flagging never mutates.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ContentHasher, type Snapshot } from '@porttrack/snapshot';
-import { RateAmendment, RateStore } from '@porttrack/fx-itbr';
-import { expectOk, inr, seedStandardRates } from '@porttrack/test-kit';
+import { ContentHasher, type Snapshot } from '@vantagepoint/snapshot';
+import { RateAmendment, RateStore } from '@vantagepoint/fx-itbr';
+import { expectOk, inr, seedStandardRates } from '@vantagepoint/test-kit';
 
 function frozenSnapshot(id: string, asOf: string, scope: 'DOMESTIC' | 'FOREIGN'): Snapshot {
   const draft = {

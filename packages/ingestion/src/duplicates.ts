@@ -7,7 +7,7 @@
  * same trade appearing at a different row of a different file is still the same
  * trade. Keying on file or row would duplicate every overlapping period.
  */
-import { equityLotId } from '@porttrack/core-domain';
+import { equityLotId } from '@vantagepoint/core-domain';
 import type { ParsedTransaction } from './types.js';
 
 export function naturalKey(txn: ParsedTransaction): string {

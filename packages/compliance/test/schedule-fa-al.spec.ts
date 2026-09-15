@@ -11,9 +11,9 @@ import {
   PeakValueCalculator,
   ScheduleAlGenerator,
   ScheduleFaGenerator,
-} from '@porttrack/compliance';
-import type { Snapshot } from '@porttrack/snapshot';
-import { expectMoney, expectNoPii, expectOk, inr, usd } from '@porttrack/test-kit';
+} from '@vantagepoint/compliance';
+import type { Snapshot } from '@vantagepoint/snapshot';
+import { expectMoney, expectNoPii, expectOk, inr, usd } from '@vantagepoint/test-kit';
 
 const foreignSnapshot: Snapshot = {
   snapshotId: 'FOR_31DEC2025',

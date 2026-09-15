@@ -10,7 +10,7 @@
  * different things: the container upgrade path wants a file on disk, and the SPA
  * wants a download it never has to clean up afterwards.
  */
-import { Err, Ok, VaultStateError, type Result } from '@porttrack/shared-kernel';
+import { Err, Ok, VaultStateError, type Result } from '@vantagepoint/shared-kernel';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { Vault } from './vault.js';
@@ -24,7 +24,7 @@ const META_SUFFIX = '.meta.json';
  * `database` happened to decode to over the vault — and the user discovers that
  * at the moment they have nothing else left.
  */
-const MAGIC = 'porttrack.vault.backup' as const;
+const MAGIC = 'vantagepoint.vault.backup' as const;
 
 interface Archive {
   readonly magic: typeof MAGIC;
@@ -40,7 +40,7 @@ function parseArchive(bytes: Uint8Array): Result<Archive> {
   try {
     parsed = JSON.parse(Buffer.from(bytes).toString('utf8'));
   } catch {
-    return Err(new VaultStateError('this file is not a portTrack backup archive'));
+    return Err(new VaultStateError('this file is not a VantagePoint backup archive'));
   }
 
   /*
@@ -59,7 +59,7 @@ function parseArchive(bytes: Uint8Array): Result<Archive> {
    * where the shape is otherwise right. A WRONG one never is.
    */
   if (archive.magic !== undefined && archive.magic !== MAGIC) {
-    return Err(new VaultStateError('this file is not a portTrack backup archive'));
+    return Err(new VaultStateError('this file is not a VantagePoint backup archive'));
   }
   if (typeof archive.database !== 'string' || typeof archive.meta !== 'string') {
     return Err(

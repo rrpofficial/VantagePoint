@@ -2,9 +2,9 @@
  * US-1.4 — Foreign equity lots with dual-currency cost basis, RSU/ESPP (PRD FR-1 AC, ADR-003)
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { FifoAllocator, LotBook } from '@porttrack/core-domain';
-import { DualRateConverter } from '@porttrack/fx-itbr';
-import { aDualRate, aLot, expectMoney, expectOk, inr, usd , seedStandardRates } from '@porttrack/test-kit';
+import { FifoAllocator, LotBook } from '@vantagepoint/core-domain';
+import { DualRateConverter } from '@vantagepoint/fx-itbr';
+import { aDualRate, aLot, expectMoney, expectOk, inr, usd , seedStandardRates } from '@vantagepoint/test-kit';
 
 beforeEach(() => {
   seedStandardRates();

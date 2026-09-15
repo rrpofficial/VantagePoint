@@ -1,5 +1,5 @@
 {
-  "name": "@porttrack/core-domain",
+  "name": "@vantagepoint/core-domain",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,11 +9,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@porttrack/shared-kernel": "workspace:*"
+    "@vantagepoint/shared-kernel": "workspace:*"
   },
   "devDependencies": {
-    "@porttrack/fx-itbr": "workspace:*",
-    "@porttrack/pii-masker": "workspace:*",
-    "@porttrack/test-kit": "workspace:*"
+    "@vantagepoint/fx-itbr": "workspace:*",
+    "@vantagepoint/pii-masker": "workspace:*",
+    "@vantagepoint/test-kit": "workspace:*"
   }
 }

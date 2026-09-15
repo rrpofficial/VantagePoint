@@ -9,8 +9,8 @@
  * the asset it was.
  */
 import { describe, it, expect } from 'vitest';
-import { LedgerProjector, TemplateRegistry, TemplateParser, Pipeline } from '@porttrack/ingestion';
-import { expectOk } from '@porttrack/test-kit';
+import { LedgerProjector, TemplateRegistry, TemplateParser, Pipeline } from '@vantagepoint/ingestion';
+import { expectOk } from '@vantagepoint/test-kit';
 
 /** The full register header, exactly as the generated template emits it. */
 const HAND_LOAN_HEADER = TemplateRegistry.definitions()
@@ -155,7 +155,7 @@ describe('US-4.6 Scenario: Naming the template buys a better error', () => {
 describe('US-4.6 Scenario: A downloaded template can be filled in and imported unchanged', () => {
   it('keeps its guidance comments out of the data', () => {
     const csv = TemplateRegistry.generate('Custom_Cash');
-    expect(csv).toContain('# portTrack template: Custom_Cash');
+    expect(csv).toContain('# VantagePoint template: Custom_Cash');
 
     const filled = `${csv}Salary account,2026-03-31,412500,INR\n`;
     const rows = expectOk(TemplateParser.parse(filled, 'cash.csv'));

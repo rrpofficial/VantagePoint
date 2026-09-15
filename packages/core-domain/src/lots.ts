@@ -43,11 +43,11 @@ import {
   Money,
   Ok,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import { addCalendarDays, compareIsoDates } from './daycount.js';
 import { SETTLEMENT_LAG_DAYS } from './taxonomy.js';
-import type { Money as MoneyValue } from '@porttrack/shared-kernel';
+import type { Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import type { AcquisitionLot, LotAllocation, RecordAcquisitionInput } from './types.js';
 
 const dec = (value: string) => new Decimal(value);

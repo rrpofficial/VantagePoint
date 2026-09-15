@@ -2,8 +2,8 @@
  * US-1.6 — Corporate actions: split, bonus, merger, demerger (PRD FR-1.2)
  */
 import { describe, it, expect } from 'vitest';
-import { CorporateActionEngine, type CorporateAction } from '@porttrack/core-domain';
-import { aLot, expectMoney, inr } from '@porttrack/test-kit';
+import { CorporateActionEngine, type CorporateAction } from '@vantagepoint/core-domain';
+import { aLot, expectMoney, inr } from '@vantagepoint/test-kit';
 
 const LOT = aLot({
   lotId: 'L1',

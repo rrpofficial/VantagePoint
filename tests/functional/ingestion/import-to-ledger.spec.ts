@@ -11,17 +11,17 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import { ImportStatementUC, LedgerUC, ValuePortfolioUC, resetPorts } from '@porttrack/app-services';
-import { AssetRepository, Vault } from '@porttrack/persistence';
-import { TemplateRegistry } from '@porttrack/ingestion';
-import { expectOk } from '@porttrack/test-kit';
+import { ImportStatementUC, LedgerUC, ValuePortfolioUC, resetPorts } from '@vantagepoint/app-services';
+import { AssetRepository, Vault } from '@vantagepoint/persistence';
+import { TemplateRegistry } from '@vantagepoint/ingestion';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
 const PASSPHRASE = 'correct horse battery staple';
 const tradebook = () => readFileSync(join(ROOT, 'tests/fixtures/zerodha/tradebook.csv'));
 
 async function unlocked(): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-import-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-import-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await Vault.unlock(PASSPHRASE));
   resetPorts();
@@ -168,7 +168,7 @@ describe('Scenario: Disposals are recorded, not merely subtracted', () => {
   });
 });
 
-describe('Scenario: A portTrack CSV template creates the asset it describes', () => {
+describe('Scenario: A VantagePoint CSV template creates the asset it describes', () => {
   it('imports a cash template as a bank balance, not as equity', async () => {
     const report = expectOk(
       await ImportStatementUC.execute({

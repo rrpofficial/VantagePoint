@@ -1,10 +1,10 @@
 /** Ingestion types. Types only — no runtime behaviour. */
-import type { IsoDate, IsoDateTime, Money, Quantity } from '@porttrack/shared-kernel';
+import type { IsoDate, IsoDateTime, Money, Quantity } from '@vantagepoint/shared-kernel';
 import type {
   EquityAward,
   ImmovableProperty,
   PropertyTransaction,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 
 /**
  * `MANUAL` is not a file format — it is a trade typed into the app by hand.
@@ -127,7 +127,7 @@ export interface ParsedTransaction {
   readonly pricePerUnit: Money;
   readonly perquisiteValue?: Money;
   /**
-   * Set only when the SOURCE FORMAT states it — a portTrack template says which
+   * Set only when the SOURCE FORMAT states it — a VantagePoint template says which
    * asset class it holds; a broker CSV does not. Left absent rather than guessed,
    * because asset class drives tax treatment and a wrong guess is invisible.
    */
@@ -248,7 +248,7 @@ export interface IngestInput {
   readonly mode: ImportMode;
   readonly password?: string;
   /**
-   * Which portTrack template this is meant to be, when the user chose one.
+   * Which VantagePoint template this is meant to be, when the user chose one.
    *
    * Optional: the template is still identified from its header, so an import
    * works without it. Supplying it turns a generic "matches no template" into a

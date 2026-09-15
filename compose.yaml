@@ -1,4 +1,4 @@
-# portTrack — full stack (US-9.3, PRD FR-8.1/8.2/8.3)
+# VantagePoint — full stack (US-9.3, PRD FR-8.1/8.2/8.3)
 #
 #   docker compose up
 #
@@ -11,29 +11,29 @@
 # volume" in FR-8.2 actually means.
 
 # Two instances can run side by side — a production one you actually use and a
-# testing one you break. PORTTRACK_PROJECT separates everything Docker namespaces
-# (project, containers, networks) and PORTTRACK_IMAGE_TAG separates what is BUILT,
+# testing one you break. VANTAGEPOINT_PROJECT separates everything Docker namespaces
+# (project, containers, networks) and VANTAGEPOINT_IMAGE_TAG separates what is BUILT,
 # so rebuilding test cannot replace the image production is running on. Both
 # default to today's values, so an existing `docker compose up` is unchanged.
-name: ${PORTTRACK_PROJECT:-porttrack}
+name: ${VANTAGEPOINT_PROJECT:-vantagepoint}
 
 services:
   api:
-    container_name: ${PORTTRACK_PROJECT:-porttrack}-api
+    container_name: ${VANTAGEPOINT_PROJECT:-vantagepoint}-api
     build:
       context: .
       dockerfile: docker/api.Dockerfile
       args:
-        PORTTRACK_UID: ${PORTTRACK_UID:-1000}
-        PORTTRACK_GID: ${PORTTRACK_GID:-1000}
-    image: porttrack-api:${PORTTRACK_IMAGE_TAG:-test}
-    user: "${PORTTRACK_UID:-1000}:${PORTTRACK_GID:-1000}"
+        VANTAGEPOINT_UID: ${VANTAGEPOINT_UID:-1000}
+        VANTAGEPOINT_GID: ${VANTAGEPOINT_GID:-1000}
+    image: vantagepoint-api:${VANTAGEPOINT_IMAGE_TAG:-test}
+    user: "${VANTAGEPOINT_UID:-1000}:${VANTAGEPOINT_GID:-1000}"
     environment:
-      PORTTRACK_DATA_DIR: /var/lib/porttrack
+      VANTAGEPOINT_DATA_DIR: /var/lib/vantagepoint
       PORT: "8080"
     volumes:
       # Your disk, your path, your ownership.
-      - ${PORTTRACK_DATA_DIR:-./data}:/var/lib/porttrack
+      - ${VANTAGEPOINT_DATA_DIR:-./data}:/var/lib/vantagepoint
     # Read-only root filesystem: the ONLY writable paths are the bind mount above
     # and the tmpfs below, so nothing can accumulate in the container layer.
     read_only: true
@@ -52,17 +52,17 @@ services:
     restart: unless-stopped
 
   web:
-    container_name: ${PORTTRACK_PROJECT:-porttrack}-web
+    container_name: ${VANTAGEPOINT_PROJECT:-vantagepoint}-web
     build:
       context: .
       dockerfile: docker/web.Dockerfile
       args:
-        PORTTRACK_UID: ${PORTTRACK_UID:-1000}
-        PORTTRACK_GID: ${PORTTRACK_GID:-1000}
-    image: porttrack-web:${PORTTRACK_IMAGE_TAG:-test}
-    user: "${PORTTRACK_UID:-1000}:${PORTTRACK_GID:-1000}"
+        VANTAGEPOINT_UID: ${VANTAGEPOINT_UID:-1000}
+        VANTAGEPOINT_GID: ${VANTAGEPOINT_GID:-1000}
+    image: vantagepoint-web:${VANTAGEPOINT_IMAGE_TAG:-test}
+    user: "${VANTAGEPOINT_UID:-1000}:${VANTAGEPOINT_GID:-1000}"
     ports:
-      - "${PORTTRACK_WEB_PORT:-5173}:80"
+      - "${VANTAGEPOINT_WEB_PORT:-5173}:80"
     read_only: true
     tmpfs:
       - /tmp

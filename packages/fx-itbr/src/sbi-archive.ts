@@ -27,7 +27,7 @@
  *     — better than naming the archive, because it points at SBI's own document.
  *     That URL is what gets stored against the rate.
  */
-import { DomainError, Err, Ok, type Currency, type Result } from '@porttrack/shared-kernel';
+import { DomainError, Err, Ok, type Currency, type Result } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import type { RateRecord } from './types.js';
 

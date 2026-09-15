@@ -29,7 +29,7 @@ import {
   type IsoDate,
   type Money as MoneyValue,
   type Percentage,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import { compareIsoDates } from './daycount.js';
 

@@ -10,13 +10,31 @@
  * `.node` binary, and the wink model ships as data rather than code.
  */
 import { build } from 'esbuild';
-import { copyFileSync, mkdirSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
 const pkg = (name) => resolve(root, `packages/${name}/src/index.ts`);
+
+/**
+ * Every workspace package, READ FROM DISK rather than listed by hand.
+ *
+ * This was a hand-maintained array, and `@vantagepoint/exporters` was added to
+ * the monorepo without being added to it. Nothing failed: the typecheck, the
+ * lint and all 1266 tests resolve through tsconfig paths and vitest aliases, so
+ * the gap was invisible until the image was next rebuilt — where the API died
+ * on startup with `ERR_MODULE_NOT_FOUND`, because esbuild had left an unknown
+ * `@vantagepoint/*` specifier external and nothing installs it at runtime.
+ *
+ * A list that must be updated whenever a package is added is a list that will
+ * eventually be wrong, and the failure lands in the container rather than in
+ * CI. Deriving it removes the step.
+ */
+const workspacePackages = readdirSync(resolve(root, 'packages'), { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && existsSync(pkg(entry.name)))
+  .map((entry) => entry.name);
 
 await build({
   entryPoints: [resolve(here, 'src/index.ts')],
@@ -36,20 +54,7 @@ await build({
    */
   packages: 'external',
   alias: Object.fromEntries(
-    [
-      'shared-kernel',
-      'core-domain',
-      'fx-itbr',
-      'tax-engine',
-      'snapshot',
-      'ingestion',
-      'compliance',
-      'pii-masker',
-      'persistence',
-      'adapters-fx',
-      'app-services',
-      'platform',
-    ].map((name) => [`@porttrack/${name}`, pkg(name)]),
+    workspacePackages.map((name) => [`@vantagepoint/${name}`, pkg(name)]),
   ),
   logLevel: 'info',
 });

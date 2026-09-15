@@ -25,17 +25,17 @@
  * not defaults this application is entitled to assume on their behalf — see the
  * note on that module.
  */
-import { Money, FyCalendar, type FinancialYear, type IsoDate, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, FyCalendar, type FinancialYear, type IsoDate, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import {
   AccrualEngine,
   balanceInterestAccruedBetween,
   chitViewOf,
   type Asset,
   type IncomeEvent,
-} from '@porttrack/core-domain';
-import { OtherSourcesAggregator } from '@porttrack/tax-engine';
-import type { TraceLine } from '@porttrack/tax-engine';
-import { AssetRepository } from '@porttrack/persistence';
+} from '@vantagepoint/core-domain';
+import { OtherSourcesAggregator } from '@vantagepoint/tax-engine';
+import type { TraceLine } from '@vantagepoint/tax-engine';
+import { AssetRepository } from '@vantagepoint/persistence';
 import { incomeInclusionsOf } from './income-inclusions.js';
 
 export interface DerivedOtherSources {
@@ -152,7 +152,7 @@ export async function deriveOtherSources(
             label: `Provident fund interest · ${account.label}`,
             amount,
             reason:
-              'provident fund interest is exempt under s.10(11)/(12) except on contributions above the ₹2,50,000 annual threshold, and portTrack does not hold the contribution history that decides the split',
+              'provident fund interest is exempt under s.10(11)/(12) except on contributions above the ₹2,50,000 annual threshold, and VantagePoint does not hold the contribution history that decides the split',
           });
         } else {
           accruals.push({ label, amount });

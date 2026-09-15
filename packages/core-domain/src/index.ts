@@ -8,7 +8,7 @@ import {
   UnsupportedAssetClassError,
   type Currency,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import {
   allocateFifo,
   allocateSpecific,

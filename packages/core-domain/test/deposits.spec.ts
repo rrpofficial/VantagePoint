@@ -4,8 +4,8 @@
  * US-1.13 — Cash in hand and bank balances
  */
 import { describe, it, expect } from 'vitest';
-import { AccrualEngine, AssetRegistry } from '@porttrack/core-domain';
-import { expectMoney, inr } from '@porttrack/test-kit';
+import { AccrualEngine, AssetRegistry } from '@vantagepoint/core-domain';
+import { expectMoney, inr } from '@vantagepoint/test-kit';
 
 describe('US-1.9 deposits', () => {
   describe('Scenario: FD accrues quarterly compounded interest to the valuation date', () => {

@@ -10,8 +10,8 @@ import {
   FallbackChain,
   RateAmendment,
   Rule115Resolver,
-} from '@porttrack/fx-itbr';
-import { aDualRate, expectErr, expectMoney, expectOk, inr, usd , seedStandardRates } from '@porttrack/test-kit';
+} from '@vantagepoint/fx-itbr';
+import { aDualRate, expectErr, expectMoney, expectOk, inr, usd , seedStandardRates } from '@vantagepoint/test-kit';
 
 beforeEach(() => {
   seedStandardRates();

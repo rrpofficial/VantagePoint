@@ -2,7 +2,7 @@
  * Edit mode — the session-scoped permission to change or destroy an existing
  * record.
  *
- * Everything portTrack holds is a record of money that has already moved. Adding
+ * Everything VantagePoint holds is a record of money that has already moved. Adding
  * to that is routine and additive: a wrong entry is visible, and correcting it
  * leaves a trail. Changing or deleting one is neither — a mistaken delete looks
  * exactly like a record that was never made, and there is nothing left to notice
@@ -27,8 +27,8 @@
  * owner — and would mean the SPA's tabs disagreed about whether an edit is
  * currently allowed, which is precisely what the user asked not to happen.
  */
-import { EditModeRequiredError, Err, Ok, type IsoDateTime, type Result } from '@porttrack/shared-kernel';
-import { Vault } from '@porttrack/persistence';
+import { EditModeRequiredError, Err, Ok, type IsoDateTime, type Result } from '@vantagepoint/shared-kernel';
+import { Vault } from '@vantagepoint/persistence';
 import { currentPorts } from './context.js';
 
 export interface EditModeState {

@@ -6,12 +6,12 @@ import type {
   Percentage,
   Quantity,
   Rate,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import type {
   AssetClass,
   Jurisdiction,
   ValuedPosition,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 
 export type SnapshotKind = 'DOMESTIC_COMPLIANCE' | 'FOREIGN_COMPLIANCE' | 'CUSTOM';
 export type SnapshotScope = 'DOMESTIC' | 'FOREIGN' | 'ALL';

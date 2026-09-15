@@ -13,7 +13,7 @@
  * Table D's accounts are the other half: they were not modelled at all, so a
  * real foreign bank account read as "nothing to disclose".
  */
-import { Err, Money, Ok, VaultStateError, type Currency, type IsoDate, type Money as MoneyValue, type Result } from '@porttrack/shared-kernel';
+import { Err, Money, Ok, VaultStateError, type Currency, type IsoDate, type Money as MoneyValue, type Result } from '@vantagepoint/shared-kernel';
 import { Vault } from './vault.js';
 
 export interface ForeignHoldingDetail {

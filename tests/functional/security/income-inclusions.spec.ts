@@ -26,14 +26,14 @@ import {
   resetIncomeInclusions,
   resetPorts,
   saveIncomeInclusions,
-} from '@porttrack/app-services';
-import { SettingsRepository, Vault } from '@porttrack/persistence';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { SettingsRepository, Vault } from '@vantagepoint/persistence';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-inclusions-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-inclusions-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await Vault.unlock(PASSPHRASE));
   resetPorts();

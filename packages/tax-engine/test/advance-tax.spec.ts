@@ -11,8 +11,8 @@ import {
   OtherSourcesAggregator,
   TaxRuleTable,
   type IncomeProfile,
-} from '@porttrack/tax-engine';
-import { anExit, expectMoney, expectOk, inr } from '@porttrack/test-kit';
+} from '@vantagepoint/tax-engine';
+import { anExit, expectMoney, expectOk, inr } from '@vantagepoint/test-kit';
 
 const RULES = () => expectOk(TaxRuleTable.rulesFor('2025-26'));
 

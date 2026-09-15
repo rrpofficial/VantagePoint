@@ -7,7 +7,7 @@
  * application — which is the failure these tests exist to prevent.
  */
 import { describe, it, expect } from 'vitest';
-import { ALL_ASSET_CLASSES, HOLDING_BUCKETS, bucketOf } from '@porttrack/core-domain';
+import { ALL_ASSET_CLASSES, HOLDING_BUCKETS, bucketOf } from '@vantagepoint/core-domain';
 
 describe('US-8.5 Scenario: Classes that are equity however they are held', () => {
   it.each([

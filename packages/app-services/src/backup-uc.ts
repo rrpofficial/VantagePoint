@@ -22,10 +22,10 @@
  *     in force now, and silently re-unlocking would either fail confusingly or
  *     succeed against the wrong key.
  */
-import { EditModeRequiredError, Err, Ok, VaultStateError, type Result } from '@porttrack/shared-kernel';
+import { EditModeRequiredError, Err, Ok, VaultStateError, type Result } from '@vantagepoint/shared-kernel';
 import { copyFileSync, existsSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
-import { Backup, Vault } from '@porttrack/persistence';
+import { Backup, Vault } from '@vantagepoint/persistence';
 import { currentPorts } from './context.js';
 import { requireEditMode } from './edit-mode.js';
 import { VaultUC } from './use-cases.js';
@@ -43,9 +43,9 @@ export interface RestoreReport {
   readonly replacedExistingVault: boolean;
 }
 
-/** `portTrack-backup-2026-09-15T101530Z.ptb` — sorts chronologically in a folder. */
+/** `VantagePoint-backup-2026-09-15T101530Z.vpb` — sorts chronologically in a folder. */
 function fileNameFor(createdAt: string): string {
-  return `portTrack-backup-${createdAt.replace(/[-:]/g, '').replace(/\.\d+/, '')}.ptb`;
+  return `VantagePoint-backup-${createdAt.replace(/[-:]/g, '').replace(/\.\d+/, '')}.vpb`;
 }
 
 export const BackupUC = {

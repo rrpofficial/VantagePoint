@@ -12,9 +12,9 @@ export function Card({ children, title, action }: {
   action?: ReactNode;
 }) {
   return (
-    <section className="pt-card">
+    <section className="vp-card">
       {title !== undefined && (
-        <header className="pt-card__head">
+        <header className="vp-card__head">
           <h2>{title}</h2>
           {action}
         </header>
@@ -63,7 +63,7 @@ export function Delta({ value }: { value: Money }) {
   const arrow = amount > 0 ? '▲' : amount < 0 ? '▼' : '■';
   const sign = amount > 0 ? '+' : '';
   return (
-    <span className={`pt-delta pt-delta--${direction} pt-numeric`}>
+    <span className={`vp-delta vp-delta--${direction} vp-numeric`}>
       <span aria-hidden="true">{arrow}</span> {sign}
       {formatMoney(value)}
     </span>
@@ -71,11 +71,11 @@ export function Delta({ value }: { value: Money }) {
 }
 
 export function Amount({ value }: { value: Money }) {
-  return <span className="pt-numeric">{formatMoney(value)}</span>;
+  return <span className="vp-numeric">{formatMoney(value)}</span>;
 }
 
 export function Chip({ children }: { children: ReactNode }) {
-  return <span className="pt-chip">{children}</span>;
+  return <span className="vp-chip">{children}</span>;
 }
 
 /**
@@ -94,7 +94,7 @@ export function GoToImport({ testId }: { testId?: string }) {
   return (
     <button
       type="button"
-      className="pt-button-inline"
+      className="vp-button-inline"
       data-testid={testId ?? 'go-to-import'}
       onClick={() => {
         navigate('Import');
@@ -130,7 +130,7 @@ export function ProvisionalBanner({
   if (status !== 'PROVISIONAL') return null;
 
   return (
-    <div className="pt-banner" role="status" data-testid="provisional-banner">
+    <div className="vp-banner" role="status" data-testid="provisional-banner">
       <strong>Provisional tax rates.</strong>{' '}
       {note ??
         'These figures are computed from an unverified rule set and cannot be used for filing until the rates are sourced from the Finance Act.'}

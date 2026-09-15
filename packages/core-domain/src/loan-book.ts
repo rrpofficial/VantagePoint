@@ -21,7 +21,7 @@
  *     repayment, only the remaining principal earns. Charging the original sum
  *     throughout overstates what is owed and is the error a borrower notices.
  */
-import { Money, type IsoDate, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, type IsoDate, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import { compareIsoDates, monthsBetween } from './daycount.js';
 import { handLoanAccruedInterest, handLoanOutstandingPrincipal } from './accruals.js';

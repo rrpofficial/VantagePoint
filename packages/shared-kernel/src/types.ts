@@ -56,7 +56,7 @@ export type Percentage = string;
 
 /** `YYYY-MM-DD`. */
 export type IsoDate = string;
-/** ISO-8601 with offset, always `+05:30` at portTrack boundaries (ADR-008). */
+/** ISO-8601 with offset, always `+05:30` at VantagePoint boundaries (ADR-008). */
 export type IsoDateTime = string;
 
 export const IST_OFFSET = '+05:30' as const;

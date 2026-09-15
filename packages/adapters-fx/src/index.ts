@@ -2,8 +2,8 @@
  * adapters-fx — the only place that speaks HTTP for rate data. Every call goes
  * through the EgressGateway, which is default-deny (ADR-010).
  */
-import { notImplemented, type Currency, type IsoDate, type Result } from '@porttrack/shared-kernel';
-import type { RateRecord } from '@porttrack/fx-itbr';
+import { notImplemented, type Currency, type IsoDate, type Result } from '@vantagepoint/shared-kernel';
+import type { RateRecord } from '@vantagepoint/fx-itbr';
 
 export interface RateFetcher {
   fetchSheet(date: IsoDate): Promise<Result<string>>;

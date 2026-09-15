@@ -6,7 +6,7 @@
  * wrong layer, and the API's "thin shell" test exists to keep it that way.
  */
 import { Decimal } from 'decimal.js';
-import { DualRateConverter } from '@porttrack/fx-itbr';
+import { DualRateConverter } from '@vantagepoint/fx-itbr';
 import {
   DuplicateLoanError,
   DuplicateTradeError,
@@ -25,7 +25,7 @@ import {
   type Money as MoneyValue,
   type Quarter,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { createHash } from 'node:crypto';
 import {
   AREA_UNITS,
@@ -38,6 +38,7 @@ import {
   LoanExporter,
   ValuationEngine,
   applyLoanEdit,
+  balanceViewOf,
   bucketOf,
   dailyQuantities,
   firstAcquisitionOf,
@@ -76,8 +77,8 @@ import {
   type PaymentMode,
   type PortfolioValuation,
   type SortDirection,
-} from '@porttrack/core-domain';
-import { borrowerRef } from '@porttrack/ingestion';
+} from '@vantagepoint/core-domain';
+import { borrowerRef } from '@vantagepoint/ingestion';
 import {
   ScheduleAlGenerator,
   ScheduleFaGenerator,
@@ -86,7 +87,7 @@ import {
   type ScheduleAl,
   type ScheduleFaA3Row,
   type ScheduleFaDRow,
-} from '@porttrack/compliance';
+} from '@vantagepoint/compliance';
 import {
   CompliancePolicy,
   DeltaEngine,
@@ -94,7 +95,7 @@ import {
   type Snapshot,
   type SnapshotSpec,
   type VarianceReport,
-} from '@porttrack/snapshot';
+} from '@vantagepoint/snapshot';
 import {
   AdvanceTaxEngine,
   CapitalGainsEngine,
@@ -106,7 +107,7 @@ import {
   type IncomeProfile,
   type RegimeComparison,
   type TaxRuleSet,
-} from '@porttrack/tax-engine';
+} from '@vantagepoint/tax-engine';
 import {
   LedgerProjector,
   ledgerNaturalKeys,
@@ -116,7 +117,7 @@ import {
   type ImportReport,
   type ParsedTransaction,
   type ParserName,
-} from '@porttrack/ingestion';
+} from '@vantagepoint/ingestion';
 import {
   BorrowedLoanRepository,
   AssetRepository,
@@ -133,7 +134,7 @@ import {
   SnapshotRepository,
   Vault,
   type SnapshotSummary,
-} from '@porttrack/persistence';
+} from '@vantagepoint/persistence';
 import { currentPorts } from './context.js';
 import { requireEditMode, resetEditMode } from './edit-mode.js';
 import {
@@ -2664,7 +2665,31 @@ export const LedgerUC = {
     const today = currentPorts().clock.today();
 
     return assets.map((asset) => {
-      const { cost, quantity } = heldCostBasis(asset);
+      const { cost: lotCost, quantity } = heldCostBasis(asset);
+
+      /*
+       * A balance account is valued by its own arithmetic, not from its lots.
+       *
+       * `heldCostBasis` walks `asset.lots`, and a deposit entered by hand has
+       * NONE — `buildBalanceEntry` creates the asset with `lots: []`, because a
+       * fixed deposit is a balance rather than a quantity at a price. So every
+       * deposit, PF and bank balance came back at ₹0 here while the Dashboard
+       * showed the right figure through `ValuationEngine`'s balance valuer: two
+       * screens disagreeing about what the user owns, which is precisely what
+       * computing the split server-side is supposed to prevent.
+       *
+       * The accrued figure is reported as the VALUE rather than as cost. It is
+       * not a market price — nothing quotes a fixed deposit — but it is a
+       * genuine current value, computed from the account's own contractual rate,
+       * and carrying it at cost would understate it by every rupee of interest
+       * earned. `marketPricePerUnit` and `priceAsOf` stay absent, so no screen
+       * claims a price or a price date that does not exist.
+       */
+      const balance =
+        asset.balanceAccount === undefined
+          ? undefined
+          : balanceViewOf(asset.balanceAccount, today);
+      const cost = balance === undefined ? lotCost : balance.contributed;
 
       /*
        * `ratesFor` walks back from today over non-publishing days, so this is the
@@ -2686,17 +2711,19 @@ export const LedgerUC = {
        * dollars would make the difference between them meaningless.
        */
       const recorded =
-        new Decimal(quantity).lessThanOrEqualTo(0)
+        balance !== undefined || new Decimal(quantity).lessThanOrEqualTo(0)
           ? undefined
           : PriceRepository.latest(asset.isin ?? asset.symbol ?? '', today);
 
       const marketValue =
-        recorded === undefined
-          ? undefined
-          : Money.of(
-              new Decimal(recorded.price).times(quantity).toFixed(2),
-              recorded.currency,
-            );
+        balance !== undefined
+          ? balance.value
+          : recorded === undefined
+            ? undefined
+            : Money.of(
+                new Decimal(recorded.price).times(quantity).toFixed(2),
+                recorded.currency,
+              );
 
       const marketValueInr =
         marketValue === undefined

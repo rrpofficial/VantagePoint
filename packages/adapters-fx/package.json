@@ -1,5 +1,5 @@
 {
-  "name": "@porttrack/adapters-fx",
+  "name": "@vantagepoint/adapters-fx",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,10 +9,10 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@porttrack/fx-itbr": "workspace:*",
-    "@porttrack/shared-kernel": "workspace:*"
+    "@vantagepoint/fx-itbr": "workspace:*",
+    "@vantagepoint/shared-kernel": "workspace:*"
   },
   "devDependencies": {
-    "@porttrack/test-kit": "workspace:*"
+    "@vantagepoint/test-kit": "workspace:*"
   }
 }

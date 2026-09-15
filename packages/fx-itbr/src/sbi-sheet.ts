@@ -11,7 +11,7 @@
  *
  * Pure: the caller supplies `retrievedAt`, since this package may not read a clock.
  */
-import { DomainError, Err, Ok, type Currency, type Result } from '@porttrack/shared-kernel';
+import { DomainError, Err, Ok, type Currency, type Result } from '@vantagepoint/shared-kernel';
 import type { RateRecord } from './types.js';
 
 /** Columns the sheet must expose, in order. */

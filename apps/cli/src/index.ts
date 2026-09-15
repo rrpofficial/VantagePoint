@@ -1,4 +1,4 @@
-/** Container/host entrypoint for the `porttrack` CLI. */
+/** Container/host entrypoint for the `vantagepoint` CLI. */
 import { runCli } from './main.js';
 
 const result = await runCli(process.argv.slice(2));

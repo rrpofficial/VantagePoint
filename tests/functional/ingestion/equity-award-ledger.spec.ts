@@ -24,10 +24,10 @@ import {
   RatesUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { AssetRepository, ExitRepository, Vault } from '@porttrack/persistence';
-import { CapitalGainsEngine, TaxRuleTable } from '@porttrack/tax-engine';
-import { expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { AssetRepository, ExitRepository, Vault } from '@vantagepoint/persistence';
+import { CapitalGainsEngine, TaxRuleTable } from '@vantagepoint/tax-engine';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const FIXTURE = join(import.meta.dirname, '../../fixtures/etrade/gains-losses-expanded.csv');
@@ -46,7 +46,7 @@ const RATES = [
 ].join('\n');
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-award-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-award-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

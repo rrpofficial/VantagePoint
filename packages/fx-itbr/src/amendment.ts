@@ -14,8 +14,8 @@
  * is real but does not need to be a build-order dependency: the snapshot lookup is
  * an injected port, defaulting to "no snapshots known".
  */
-import { Err, NotOfficialRateError, Ok, type IsoDate, type Result } from '@porttrack/shared-kernel';
-import type { DualRate } from '@porttrack/core-domain';
+import { Err, NotOfficialRateError, Ok, type IsoDate, type Result } from '@vantagepoint/shared-kernel';
+import type { DualRate } from '@vantagepoint/core-domain';
 import { rateStore } from './rate-store.js';
 import { ratesFor } from './resolvers.js';
 import type { RateAmendmentRecord, RateRecord, SnapshotIndex } from './types.js';

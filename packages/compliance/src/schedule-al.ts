@@ -9,7 +9,7 @@
  * Required only when total income exceeds the statutory threshold. Generating it
  * regardless would invite a filing that is not owed.
  */
-import { Money, Ok, type Money as MoneyValue, type Result } from '@porttrack/shared-kernel';
+import { Money, Ok, type Money as MoneyValue, type Result } from '@vantagepoint/shared-kernel';
 import type { ScheduleAl, ScheduleAlInput, ScheduleAlItem, ScheduleAlSection } from './types.js';
 
 const INR = 'INR' as const;

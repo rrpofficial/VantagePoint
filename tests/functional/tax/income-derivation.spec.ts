@@ -31,9 +31,9 @@ import {
   saveIncomeInclusions,
   saveIncomeProfile,
   setIncomeProfile,
-} from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const FY = '2025-26';
@@ -71,7 +71,7 @@ const holding = async (): Promise<string> => {
 };
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-income-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-income-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

@@ -13,7 +13,7 @@ import {
   TemplateHeaderMismatchError,
   type Money as MoneyValue,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { columnIndex, isPositiveNumber, normaliseDate, parseCsv } from './csv.js';
 import { deterministicImportedAt, provenanceFor } from './provenance.js';
 import type { ParsedTransaction, RowError, TransactionKind } from './types.js';

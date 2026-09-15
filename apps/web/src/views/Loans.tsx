@@ -72,10 +72,10 @@ function Tile({
   testId: string;
 }) {
   return (
-    <div className="pt-tile" data-testid={testId}>
-      <span className="pt-tile__label">{label}</span>
-      <strong className="pt-tile__value pt-numeric">{value}</strong>
-      {hint !== undefined && <span className="pt-tile__hint">{hint}</span>}
+    <div className="vp-tile" data-testid={testId}>
+      <span className="vp-tile__label">{label}</span>
+      <strong className="vp-tile__value vp-numeric">{value}</strong>
+      {hint !== undefined && <span className="vp-tile__hint">{hint}</span>}
     </div>
   );
 }
@@ -130,14 +130,14 @@ export function Loans() {
   const totals = register?.totals;
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <Card
         title="Hand loans"
         action={
-          <div className="pt-actions pt-actions--inline">
+          <div className="vp-actions vp-actions--inline">
             <button
               type="button"
-              className="pt-button-inline"
+              className="vp-button-inline"
               onClick={() => {
                 setShowNewLoan((open) => !open);
               }}
@@ -148,7 +148,7 @@ export function Loans() {
           </div>
         }
       >
-        <div className="pt-tiles" data-testid="loan-tiles">
+        <div className="vp-tiles" data-testid="loan-tiles">
           <Tile
             label="Total lent"
             value={INR.format(Number(totals?.totalPrincipal.amount ?? '0'))}
@@ -189,10 +189,10 @@ export function Loans() {
       </Card>
 
       <Card title="Filter and sort">
-        <div className="pt-controls">
-          <span className="pt-controls__label">Status</span>
+        <div className="vp-controls">
+          <span className="vp-controls__label">Status</span>
           {STATUSES.map((status) => (
-            <label key={status.value} className="pt-check">
+            <label key={status.value} className="vp-check">
               <input
                 type="checkbox"
                 checked={statuses.includes(status.value)}
@@ -203,10 +203,10 @@ export function Loans() {
               {status.label}
             </label>
           ))}
-          {statuses.length === 0 && <span className="pt-muted">none selected — showing all</span>}
+          {statuses.length === 0 && <span className="vp-muted">none selected — showing all</span>}
         </div>
 
-        <div className="pt-controls">
+        <div className="vp-controls">
           <label htmlFor="borrower-search">Borrower</label>
           <input
             id="borrower-search"
@@ -244,12 +244,12 @@ export function Loans() {
         </div>
 
         {borrowers.length > 0 && (
-          <div className="pt-controls" data-testid="borrower-chips">
+          <div className="vp-controls" data-testid="borrower-chips">
             {borrowers.map((name) => (
               <button
                 key={name}
                 type="button"
-                className="pt-chip pt-chip--removable"
+                className="vp-chip vp-chip--removable"
                 aria-label={`Remove ${name} from the filter`}
                 onClick={() => {
                   toggleBorrower(name);
@@ -260,7 +260,7 @@ export function Loans() {
             ))}
             <button
               type="button"
-              className="pt-link pt-link--inline"
+              className="vp-link vp-link--inline"
               onClick={() => {
                 setBorrowers([]);
               }}
@@ -270,7 +270,7 @@ export function Loans() {
           </div>
         )}
 
-        <div className="pt-controls">
+        <div className="vp-controls">
           <label htmlFor="sort-by">Sort by</label>
           <select
             id="sort-by"
@@ -287,7 +287,7 @@ export function Loans() {
           </select>
           <button
             type="button"
-            className="pt-link pt-link--inline"
+            className="vp-link vp-link--inline"
             onClick={() => {
               setDirection((current) => (current === 'ASC' ? 'DESC' : 'ASC'));
             }}
@@ -295,12 +295,12 @@ export function Loans() {
             {direction === 'ASC' ? 'Ascending' : 'Descending'}
           </button>
 
-          <span className="pt-controls__spacer" />
+          <span className="vp-controls__spacer" />
           {/* Carry the current filters, so the file matches the screen. */}
-          <a className="pt-link pt-link--inline" href={api.loanCsvUrl(query)} download>
+          <a className="vp-link vp-link--inline" href={api.loanCsvUrl(query)} download>
             Export CSV
           </a>
-          <a className="pt-link pt-link--inline" href={api.loanPdfUrl(query)} download>
+          <a className="vp-link vp-link--inline" href={api.loanPdfUrl(query)} download>
             Export PDF
           </a>
         </div>
@@ -308,31 +308,31 @@ export function Loans() {
 
       <Card title="Register" action={<Chip>{`${String(register?.loans.length ?? 0)} shown`}</Chip>}>
         {error !== undefined && (
-          <p className="pt-error" role="alert">
+          <p className="vp-error" role="alert">
             {error}
           </p>
         )}
 
-        <div className="pt-table-scroll">
-          <table className="pt-table" data-testid="loan-table">
+        <div className="vp-table-scroll">
+          <table className="vp-table" data-testid="loan-table">
             <thead>
               <tr>
                 <th scope="col">Borrower</th>
                 <th scope="col">Loan date</th>
                 <th scope="col">Status</th>
-                <th scope="col" className="pt-align-end">
+                <th scope="col" className="vp-align-end">
                   Amount
                 </th>
-                <th scope="col" className="pt-align-end">
+                <th scope="col" className="vp-align-end">
                   Outstanding
                 </th>
-                <th scope="col" className="pt-align-end">
+                <th scope="col" className="vp-align-end">
                   Rate
                 </th>
-                <th scope="col" className="pt-align-end">
+                <th scope="col" className="vp-align-end">
                   Interest owed
                 </th>
-                <th scope="col" className="pt-align-end">
+                <th scope="col" className="vp-align-end">
                   Months
                 </th>
               </tr>
@@ -340,14 +340,14 @@ export function Loans() {
             <tbody>
               {register === undefined && (
                 <tr>
-                  <td colSpan={8} className="pt-muted">
+                  <td colSpan={8} className="vp-muted">
                     Loading…
                   </td>
                 </tr>
               )}
               {register?.loans.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="pt-muted" data-testid="loan-empty">
+                  <td colSpan={8} className="vp-muted" data-testid="loan-empty">
                     No loans match these filters.
                   </td>
                 </tr>
@@ -386,31 +386,31 @@ function LoanRow({
     <>
       <tr>
         <td>
-          <button type="button" className="pt-link pt-link--inline" aria-expanded={expanded} onClick={onToggle}>
+          <button type="button" className="vp-link vp-link--inline" aria-expanded={expanded} onClick={onToggle}>
             {loan.borrowerName}
           </button>
-          {loan.notes.length > 0 && <div className="pt-muted">{loan.notes}</div>}
+          {loan.notes.length > 0 && <div className="vp-muted">{loan.notes}</div>}
         </td>
         <td>{loan.loanDate}</td>
         <td>
-          <span className={`pt-status pt-status--${loan.status.toLowerCase()}`}>
+          <span className={`vp-status vp-status--${loan.status.toLowerCase()}`}>
             {STATUS_LABEL[loan.status]}
           </span>
         </td>
-        <td className="pt-align-end">
+        <td className="vp-align-end">
           <Amount value={loan.principal} />
         </td>
-        <td className="pt-align-end">
+        <td className="vp-align-end">
           <Amount value={loan.outstandingPrincipal} />
         </td>
-        <td className="pt-align-end pt-numeric">{loan.interestRatePct}%</td>
-        <td className="pt-align-end">
+        <td className="vp-align-end vp-numeric">{loan.interestRatePct}%</td>
+        <td className="vp-align-end">
           <Amount value={loan.interestBalance} />
         </td>
-        <td className="pt-align-end pt-numeric">{loan.totalInterestMonths}</td>
+        <td className="vp-align-end vp-numeric">{loan.totalInterestMonths}</td>
       </tr>
       {expanded && (
-        <tr className="pt-table__detail">
+        <tr className="vp-table__detail">
           <td colSpan={8}>
             <LoanDetail loan={loan} onChanged={onChanged} />
           </td>
@@ -437,17 +437,17 @@ function LoanDetail({ loan, onChanged }: { loan: LoanView; onChanged: () => void
   }, [onChanged]);
 
   return (
-    <div className="pt-stack" data-testid={`loan-detail-${loan.loanId}`}>
+    <div className="vp-stack" data-testid={`loan-detail-${loan.loanId}`}>
       {/*
         Editing and deleting appear together, and only in edit mode. Recording a
         payment stays below regardless: adding to a loan's history is the
         everyday path and nothing about it is destructive.
       */}
       {editMode.enabled ? (
-        <div className="pt-actions">
+        <div className="vp-actions">
           <button
             type="button"
-            className="pt-button-inline"
+            className="vp-button-inline"
             data-testid={`edit-toggle-${loan.loanId}`}
             onClick={() => {
               setEditing((open) => !open);
@@ -478,7 +478,7 @@ function LoanDetail({ loan, onChanged }: { loan: LoanView; onChanged: () => void
         />
       )}
 
-      <dl className="pt-stats">
+      <dl className="vp-stats">
         <div>
           <dt>Interest accrued</dt>
           <dd>
@@ -499,7 +499,7 @@ function LoanDetail({ loan, onChanged }: { loan: LoanView; onChanged: () => void
         </div>
         <div>
           <dt>Balance months</dt>
-          <dd className="pt-numeric">{loan.interestBalanceMonths}</dd>
+          <dd className="vp-numeric">{loan.interestBalanceMonths}</dd>
         </div>
         <div>
           <dt>Principal repaid</dt>
@@ -516,7 +516,7 @@ function LoanDetail({ loan, onChanged }: { loan: LoanView; onChanged: () => void
         empty="No interest received yet."
       />
 
-      <div className="pt-grid">
+      <div className="vp-grid">
         <PaymentForm
           title="Record an interest payment"
           testId={`interest-form-${loan.loanId}`}
@@ -569,9 +569,9 @@ function AuditTrail({ loanId, revision }: { loanId: string; revision: number }) 
 
   return (
     <div>
-      <h4 className="pt-subhead">History</h4>
-      <div className="pt-table-scroll">
-        <table className="pt-table" data-testid={`loan-audit-${loanId}`}>
+      <h4 className="vp-subhead">History</h4>
+      <div className="vp-table-scroll">
+        <table className="vp-table" data-testid={`loan-audit-${loanId}`}>
           <thead>
             <tr>
               <th scope="col">When</th>
@@ -585,21 +585,21 @@ function AuditTrail({ loanId, revision }: { loanId: string; revision: number }) 
           <tbody>
             {entries === undefined && (
               <tr>
-                <td colSpan={6} className="pt-muted">
+                <td colSpan={6} className="vp-muted">
                   Loading history…
                 </td>
               </tr>
             )}
             {entries?.length === 0 && (
               <tr>
-                <td colSpan={6} className="pt-muted">
+                <td colSpan={6} className="vp-muted">
                   Nothing recorded against this loan yet.
                 </td>
               </tr>
             )}
             {entries?.map((entry) => (
               <tr key={entry.entryId}>
-                <td className="pt-hash">{entry.recordedAt.replace('T', ' ').slice(0, 19)}</td>
+                <td className="vp-hash">{entry.recordedAt.replace('T', ' ').slice(0, 19)}</td>
                 <td>{ACTION_LABEL[entry.action]}</td>
                 <td>{entry.field ?? '—'}</td>
                 <td>{entry.oldValue ?? '—'}</td>
@@ -665,7 +665,7 @@ function EditLoanForm({ loan, onSaved }: { loan: LoanView; onSaved: () => void }
 
   return (
     <form
-      className="pt-form pt-form--grid"
+      className="vp-form vp-form--grid"
       onSubmit={onFormSubmit}
       data-testid={`edit-loan-form-${loan.loanId}`}
     >
@@ -737,7 +737,7 @@ function EditLoanForm({ loan, onSaved }: { loan: LoanView; onSaved: () => void }
           }}
         />
       </div>
-      <div className="pt-form__wide">
+      <div className="vp-form__wide">
         <label htmlFor={`edit-reason-${loan.loanId}`}>Reason for this change</label>
         <input
           id={`edit-reason-${loan.loanId}`}
@@ -753,7 +753,7 @@ function EditLoanForm({ loan, onSaved }: { loan: LoanView; onSaved: () => void }
         {busy ? 'Saving…' : 'Save changes'}
       </button>
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}
@@ -772,15 +772,15 @@ function PaymentHistory({
 }) {
   return (
     <div>
-      <h3 className="pt-subhead">{title}</h3>
+      <h3 className="vp-subhead">{title}</h3>
       {payments.length === 0 ? (
-        <p className="pt-muted">{empty}</p>
+        <p className="vp-muted">{empty}</p>
       ) : (
-        <table className="pt-table pt-table--nested">
+        <table className="vp-table vp-table--nested">
           <thead>
             <tr>
               <th scope="col">Date</th>
-              <th scope="col" className="pt-align-end">
+              <th scope="col" className="vp-align-end">
                 Amount
               </th>
               <th scope="col">Mode</th>
@@ -791,7 +791,7 @@ function PaymentHistory({
             {payments.map((payment, index) => (
               <tr key={payment.paymentId ?? `${payment.date}-${String(index)}`}>
                 <td>{payment.date}</td>
-                <td className="pt-align-end">
+                <td className="vp-align-end">
                   <Amount value={payment.amount} />
                 </td>
                 <td>{payment.mode.replaceAll('_', ' ').toLowerCase()}</td>
@@ -863,9 +863,9 @@ function PaymentForm({
   }
 
   return (
-    <form className="pt-form" onSubmit={onFormSubmit} data-testid={testId}>
-      <h3 className="pt-subhead">{title}</h3>
-      {hint !== undefined && <p className="pt-muted">{hint}</p>}
+    <form className="vp-form" onSubmit={onFormSubmit} data-testid={testId}>
+      <h3 className="vp-subhead">{title}</h3>
+      {hint !== undefined && <p className="vp-muted">{hint}</p>}
 
       <label htmlFor={`${testId}-date`}>Date</label>
       <input
@@ -918,7 +918,7 @@ function PaymentForm({
         {busy ? 'Saving…' : submitLabel}
       </button>
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}
@@ -990,9 +990,9 @@ function NewLoanForm({
 
   if (duplicates !== undefined) {
     return (
-      <div className="pt-callout pt-callout--warn" role="alertdialog" data-testid="duplicate-warning">
-        <h3 className="pt-subhead">This borrower already has a loan dated {loanDate}</h3>
-        <p className="pt-muted">
+      <div className="vp-callout vp-callout--warn" role="alertdialog" data-testid="duplicate-warning">
+        <h3 className="vp-subhead">This borrower already has a loan dated {loanDate}</h3>
+        <p className="vp-muted">
           {matched.length === 1
             ? 'One loan already on the register matches. '
             : `${String(duplicates.length)} loans already on the register match. `}
@@ -1000,14 +1000,14 @@ function NewLoanForm({
           re-entering a loan you already recorded, cancel and edit the existing one instead.
         </p>
 
-        <div className="pt-table-scroll">
-          <table className="pt-table" data-testid="duplicate-matches">
+        <div className="vp-table-scroll">
+          <table className="vp-table" data-testid="duplicate-matches">
             <thead>
               <tr>
                 <th scope="col">Borrower</th>
                 <th scope="col">Loan date</th>
-                <th scope="col" className="pt-align-end">Amount</th>
-                <th scope="col" className="pt-align-end">Outstanding</th>
+                <th scope="col" className="vp-align-end">Amount</th>
+                <th scope="col" className="vp-align-end">Outstanding</th>
                 <th scope="col">Status</th>
                 <th scope="col">Notes</th>
               </tr>
@@ -1017,10 +1017,10 @@ function NewLoanForm({
                 <tr key={loan.loanId}>
                   <td>{loan.borrowerName}</td>
                   <td>{loan.loanDate}</td>
-                  <td className="pt-numeric">
+                  <td className="vp-numeric">
                     <Amount value={loan.principal} />
                   </td>
-                  <td className="pt-numeric">
+                  <td className="vp-numeric">
                     <Amount value={loan.outstandingPrincipal} />
                   </td>
                   <td>{STATUS_LABEL[loan.status]}</td>
@@ -1029,7 +1029,7 @@ function NewLoanForm({
               ))}
               {matched.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="pt-muted">
+                  <td colSpan={6} className="vp-muted">
                     The matching loans are outside the current filter.
                   </td>
                 </tr>
@@ -1038,7 +1038,7 @@ function NewLoanForm({
           </table>
         </div>
 
-        <div className="pt-actions">
+        <div className="vp-actions">
           <button
             type="button"
             disabled={busy}
@@ -1049,7 +1049,7 @@ function NewLoanForm({
           </button>
           <button
             type="button"
-            className="pt-button-inline"
+            className="vp-button-inline"
             onClick={() => {
               setDuplicates(undefined);
             }}
@@ -1058,7 +1058,7 @@ function NewLoanForm({
           </button>
         </div>
         {error !== undefined && (
-          <p className="pt-error" role="alert">
+          <p className="vp-error" role="alert">
             {error}
           </p>
         )}
@@ -1067,7 +1067,7 @@ function NewLoanForm({
   }
 
   return (
-    <form className="pt-form pt-form--grid" onSubmit={onFormSubmit} data-testid="new-loan-form">
+    <form className="vp-form vp-form--grid" onSubmit={onFormSubmit} data-testid="new-loan-form">
       <div>
         <label htmlFor="loan-borrower">Borrower name</label>
         <input
@@ -1129,7 +1129,7 @@ function NewLoanForm({
         {busy ? 'Saving…' : 'Save loan'}
       </button>
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}

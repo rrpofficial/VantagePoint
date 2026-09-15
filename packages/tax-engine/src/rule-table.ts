@@ -15,7 +15,7 @@
  * is usable for computation and testing, but {@link assertFilingReady} refuses it,
  * so no filing artifact can be produced from unverified rates.
  */
-import { Err, Ok, TaxRulesUnavailableError, type FinancialYear, type Result } from '@porttrack/shared-kernel';
+import { Err, Ok, TaxRulesUnavailableError, type FinancialYear, type Result } from '@vantagepoint/shared-kernel';
 import { FY_2024_25 } from '../rules/fy-2024-25.js';
 import { FY_2025_26 } from '../rules/fy-2025-26.js';
 import { FY_2026_27 } from '../rules/fy-2026-27.js';

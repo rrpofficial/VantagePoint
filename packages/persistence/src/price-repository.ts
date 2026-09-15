@@ -19,8 +19,8 @@
  * the last statement was imported in March should answer with March's price and
  * say so — not refuse, and certainly not silently use a price from the future.
  */
-import { Money, Ok, VaultStateError, type Currency, type Result } from '@porttrack/shared-kernel';
-import type { PriceQuote } from '@porttrack/core-domain';
+import { Money, Ok, VaultStateError, type Currency, type Result } from '@vantagepoint/shared-kernel';
+import type { PriceQuote } from '@vantagepoint/core-domain';
 import { Vault } from './vault.js';
 
 export interface AssetPrice {

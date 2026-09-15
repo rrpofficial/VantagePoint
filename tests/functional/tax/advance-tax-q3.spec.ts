@@ -9,13 +9,13 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ComputeAdvanceTaxUC, setIncomeProfile, VaultUC } from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectOk, inr } from '@porttrack/test-kit';
+import { ComputeAdvanceTaxUC, setIncomeProfile, VaultUC } from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectOk, inr } from '@vantagepoint/test-kit';
 
 describe('FUNCTIONAL US-5.10 — advance tax Q3', () => {
   beforeEach(async () => {
-    const dataDir = mkdtempSync(join(tmpdir(), 'porttrack-func-'));
+    const dataDir = mkdtempSync(join(tmpdir(), 'vantagepoint-func-'));
     expectOk(await Vault.open({ dataDir, fileName: 'vault.db' }));
     expectOk(await VaultUC.unlock('correct horse battery staple'));
 

@@ -22,9 +22,9 @@ import {
   RatesUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { AssetRepository, ExitRepository, Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { AssetRepository, ExitRepository, Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const REF = 'sbi-fx-ratekeeper/SBI_REFERENCE_RATES_USD.csv';
@@ -59,7 +59,7 @@ const RATES = [
 let dir: string;
 
 beforeEach(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'porttrack-gl-'));
+  dir = mkdtempSync(join(tmpdir(), 'vantagepoint-gl-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

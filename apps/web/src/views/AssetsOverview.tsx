@@ -9,7 +9,7 @@
  * debt turns on tax character, not asset class), and the valuation is the same
  * one the Dashboard shows, so the two screens cannot disagree about net worth.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import {
   api,
   type AssetBucket,
@@ -32,6 +32,25 @@ interface BucketLine {
   /** Holdings left out entirely: foreign, and no exchange rate held. */
   readonly unconverted: number;
   readonly hint: string;
+  /**
+   * The asset classes inside this kind.
+   *
+   * A kind is a tax-and-treatment grouping, not a thing anyone owns — "Non-equity"
+   * spans a fixed deposit, a PPF balance, gold and a debt fund, which have
+   * nothing in common except how they are taxed. Without the split the row says
+   * how much but not what.
+   *
+   * Empty for Loans and Chits, which come from their own registers and are a
+   * single kind of thing each.
+   */
+  readonly classes: readonly ClassLine[];
+}
+
+interface ClassLine {
+  readonly assetClass: string;
+  readonly label: string;
+  readonly count: number;
+  readonly value: number;
 }
 
 export function AssetsOverview() {
@@ -62,7 +81,7 @@ export function AssetsOverview() {
   if (error !== undefined) {
     return (
       <Card title="Assets">
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       </Card>
@@ -72,7 +91,7 @@ export function AssetsOverview() {
   if (lines === undefined) {
     return (
       <Card title="Assets">
-        <p className="pt-muted">Loading…</p>
+        <p className="vp-muted">Loading…</p>
       </Card>
     );
   }
@@ -82,7 +101,7 @@ export function AssetsOverview() {
   const unconverted = lines.reduce((sum, line) => sum + line.unconverted, 0);
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       {/*
         Above the figures, not below them. Everything on this screen is derived
         from the ledger, so when history is missing every number here is
@@ -94,7 +113,7 @@ export function AssetsOverview() {
         !reconciliation.noStatementLoaded &&
         reconciliation.discrepancies.length > 0 && (
           <Card title="Your broker and this ledger disagree">
-            <p className="pt-callout pt-callout--warn" role="status" data-testid="reconciliation-warning">
+            <p className="vp-callout vp-callout--warn" role="status" data-testid="reconciliation-warning">
               <strong>
                 {reconciliation.discrepancies.length} holding
                 {reconciliation.discrepancies.length === 1 ? '' : 's'} carry more units here than
@@ -105,15 +124,15 @@ export function AssetsOverview() {
               one made outside the plan account. Until it is resolved these holdings are overstated,
               and so is any gain computed from them.
             </p>
-            <div className="pt-table-scroll">
-              <table className="pt-table" data-testid="reconciliation-table">
+            <div className="vp-table-scroll">
+              <table className="vp-table" data-testid="reconciliation-table">
                 <thead>
                   <tr>
                     <th scope="col">Acquired</th>
                     <th scope="col">Asset</th>
-                    <th scope="col" className="pt-align-end">Your statement</th>
-                    <th scope="col" className="pt-align-end">This ledger</th>
-                    <th scope="col" className="pt-align-end">Unaccounted</th>
+                    <th scope="col" className="vp-align-end">Your statement</th>
+                    <th scope="col" className="vp-align-end">This ledger</th>
+                    <th scope="col" className="vp-align-end">Unaccounted</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -121,9 +140,9 @@ export function AssetsOverview() {
                     <tr key={row.lotId}>
                       <td>{row.acquisitionDate}</td>
                       <td>{row.symbol ?? row.assetId}</td>
-                      <td className="pt-align-end pt-numeric">{row.stated}</td>
-                      <td className="pt-align-end pt-numeric">{row.computed}</td>
-                      <td className="pt-align-end pt-numeric">{row.difference}</td>
+                      <td className="vp-align-end vp-numeric">{row.stated}</td>
+                      <td className="vp-align-end vp-numeric">{row.computed}</td>
+                      <td className="vp-align-end vp-numeric">{row.difference}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -133,12 +152,12 @@ export function AssetsOverview() {
         )}
 
       <Card title="What you own">
-        <p className="pt-muted">
+        <p className="vp-muted">
           Split by what each holding <strong>is</strong>. A fund appears under Equity or Non-Equity
           according to its scheme — equity-oriented and debt-oriented funds share an asset class and
           are taxed differently, so the split follows the tax character rather than the label.
         </p>
-        <p className="pt-display pt-numeric" data-testid="assets-total">
+        <p className="vp-display vp-numeric" data-testid="assets-total">
           {formatInr(total)}
         </p>
         {/*
@@ -146,7 +165,7 @@ export function AssetsOverview() {
           basis under a heading that read "value" — the number nobody would have
           questioned, and the one most likely to be acted on.
         */}
-        <p className="pt-muted" data-testid="assets-basis">
+        <p className="vp-muted" data-testid="assets-basis">
           Across all five, before liabilities. Priced holdings are at{' '}
           <strong>market value</strong>; everything else — property, unlisted shares, loans and
           chits — is carried at <strong>cost</strong>, which for those is the only honest figure.
@@ -166,40 +185,68 @@ export function AssetsOverview() {
       </Card>
 
       <Card title="By kind">
-        <div className="pt-table-scroll">
-          <table className="pt-table" data-testid="assets-breakdown">
+        <div className="vp-table-scroll">
+          <table className="vp-table" data-testid="assets-breakdown">
             <thead>
               <tr>
                 <th scope="col">Kind</th>
-                <th scope="col" className="pt-align-end">Holdings</th>
-                <th scope="col" className="pt-align-end">Value</th>
-                <th scope="col" className="pt-align-end">Share</th>
+                <th scope="col" className="vp-align-end">Holdings</th>
+                <th scope="col" className="vp-align-end">Value</th>
+                <th scope="col" className="vp-align-end">Share</th>
               </tr>
             </thead>
             <tbody>
               {lines.map((line) => (
-                <tr key={line.tab}>
-                  <td>
-                    <button
-                      type="button"
-                      className="pt-link pt-link--inline"
-                      data-testid={`assets-goto-${line.tab.toLowerCase()}`}
-                      onClick={() => {
-                        navigateToAsset(line.tab);
-                      }}
+                <Fragment key={line.tab}>
+                  <tr>
+                    <td>
+                      <button
+                        type="button"
+                        className="vp-link vp-link--inline"
+                        data-testid={`assets-goto-${line.tab.toLowerCase()}`}
+                        onClick={() => {
+                          navigateToAsset(line.tab);
+                        }}
+                      >
+                        {line.label}
+                      </button>
+                      <div className="vp-tile__hint">{line.hint}</div>
+                    </td>
+                    <td className="vp-align-end vp-numeric">{line.count}</td>
+                    <td className="vp-align-end">
+                      <Amount value={{ amount: String(line.value), currency: 'INR' }} />
+                    </td>
+                    <td className="vp-align-end vp-numeric">
+                      {total === 0 ? '—' : `${((line.value / total) * 100).toFixed(1)}%`}
+                    </td>
+                  </tr>
+
+                  {/*
+                    What the kind is actually made of. "Non-equity" spans a fixed
+                    deposit, a PPF balance, gold and a debt fund — one row saying
+                    how much tells the reader nothing about what.
+                  */}
+                  {line.classes.map((entry) => (
+                    <tr
+                      key={`${line.tab}-${entry.assetClass}`}
+                      className="vp-table__detail"
+                      data-testid={`assets-class-${entry.assetClass.toLowerCase()}`}
                     >
-                      {line.label}
-                    </button>
-                    <div className="pt-tile__hint">{line.hint}</div>
-                  </td>
-                  <td className="pt-align-end pt-numeric">{line.count}</td>
-                  <td className="pt-align-end">
-                    <Amount value={{ amount: String(line.value), currency: 'INR' }} />
-                  </td>
-                  <td className="pt-align-end pt-numeric">
-                    {total === 0 ? '—' : `${((line.value / total) * 100).toFixed(1)}%`}
-                  </td>
-                </tr>
+                      <td>&nbsp;&nbsp;{entry.label}</td>
+                      <td className="vp-align-end vp-numeric">{entry.count}</td>
+                      <td className="vp-align-end">
+                        <Amount value={{ amount: String(entry.value), currency: 'INR' }} />
+                      </td>
+                      {/* Share of the KIND, not of the portfolio — the column
+                          above already answers the portfolio question. */}
+                      <td className="vp-align-end vp-numeric">
+                        {line.value === 0
+                          ? '—'
+                          : `${((entry.value / line.value) * 100).toFixed(1)}%`}
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -263,6 +310,43 @@ function carriedValue(
 const countIn = (assets: Ledger['assets'], bucket: AssetBucket) =>
   assets.filter((asset) => asset.bucket === bucket).length;
 
+/** `FIXED_DEPOSIT` → `Fixed deposit`. The server sends the class, not a label. */
+const humanise = (value: string) =>
+  value
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/^./, (c) => c.toUpperCase())
+    .replace(/\b(epf|vpf|ppf|nps|etf|sgb)\b/gi, (m) => m.toUpperCase());
+
+/**
+ * The asset classes inside one kind, largest first.
+ *
+ * Grouped by class WITHIN the bucket rather than globally, because one class can
+ * legitimately land in two kinds: `DOMESTIC_MUTUAL_FUND` splits across Equity
+ * and Non-equity on its tax character (ADR-016), and a global grouping would
+ * merge the two halves back into a single row that belongs to neither.
+ *
+ * The per-class value uses the same market-else-cost rule as the kind's total,
+ * so the rows sum to the row above them.
+ */
+function classesIn(assets: Ledger['assets'], bucket: AssetBucket): readonly ClassLine[] {
+  const byClass = new Map<string, { count: number; value: number }>();
+
+  for (const asset of assets.filter((candidate) => candidate.bucket === bucket)) {
+    const running = byClass.get(asset.assetClass) ?? { count: 0, value: 0 };
+    const value =
+      asset.marketValueInr !== undefined
+        ? Number(asset.marketValueInr.amount)
+        : Number(asset.costBasisInr?.amount ?? 0);
+
+    byClass.set(asset.assetClass, { count: running.count + 1, value: running.value + value });
+  }
+
+  return [...byClass]
+    .map(([assetClass, totals]) => ({ assetClass, label: humanise(assetClass), ...totals }))
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+}
+
 function summarise(
   ledger: Ledger,
   loans: LoanRegister | undefined,
@@ -274,6 +358,7 @@ function summarise(
       label: 'Equity',
       count: countIn(ledger.assets, 'EQUITY'),
       ...carriedValue(ledger.assets, 'EQUITY'),
+      classes: classesIn(ledger.assets, 'EQUITY'),
       hint: 'Listed and unlisted shares, equity funds and ETFs, RSUs and ESPP',
     },
     {
@@ -281,6 +366,7 @@ function summarise(
       label: 'Non-equity',
       count: countIn(ledger.assets, 'NON_EQUITY'),
       ...carriedValue(ledger.assets, 'NON_EQUITY'),
+      classes: classesIn(ledger.assets, 'NON_EQUITY'),
       hint: 'Deposits, retirement schemes, bullion, crypto, cash and debt funds',
     },
     {
@@ -288,6 +374,7 @@ function summarise(
       label: 'Immovable property',
       count: countIn(ledger.assets, 'IMMOVABLE'),
       ...carriedValue(ledger.assets, 'IMMOVABLE'),
+      classes: classesIn(ledger.assets, 'IMMOVABLE'),
       hint: 'Carried at what was paid, including stamp duty and registration',
     },
     {
@@ -299,6 +386,8 @@ function summarise(
       value: Number(loans?.totals.totalOutstanding.amount ?? 0),
       atCost: Number(loans?.totals.totalOutstanding.amount ?? 0),
       unconverted: 0,
+      // One kind of thing, from its own register — nothing to sub-divide.
+      classes: [],
       hint: 'Money lent to people, at principal outstanding',
     },
     {
@@ -310,6 +399,7 @@ function summarise(
       value: Number(chits?.totals.activeCarryingValue.amount ?? 0),
       atCost: Number(chits?.totals.activeCarryingValue.amount ?? 0),
       unconverted: 0,
+      classes: [],
       hint: 'Carried at instalments paid in, not at the pot’s face value',
     },
   ];

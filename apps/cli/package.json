@@ -1,13 +1,13 @@
 {
-  "name": "@porttrack/app-cli",
+  "name": "@vantagepoint/app-cli",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "./src/index.ts",
   "dependencies": {
-    "@porttrack/app-services": "workspace:*",
-    "@porttrack/persistence": "workspace:*",
-    "@porttrack/pii-masker": "workspace:*",
-    "@porttrack/shared-kernel": "workspace:*"
+    "@vantagepoint/app-services": "workspace:*",
+    "@vantagepoint/persistence": "workspace:*",
+    "@vantagepoint/pii-masker": "workspace:*",
+    "@vantagepoint/shared-kernel": "workspace:*"
   }
 }

@@ -12,11 +12,11 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CryptoEnvelope, Vault } from '@porttrack/persistence';
-import { expectNoPii, expectOk, SYNTHETIC } from '@porttrack/test-kit';
+import { CryptoEnvelope, Vault } from '@vantagepoint/persistence';
+import { expectNoPii, expectOk, SYNTHETIC } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
-const dataDir = () => mkdtempSync(join(tmpdir(), 'porttrack-vault-'));
+const dataDir = () => mkdtempSync(join(tmpdir(), 'vantagepoint-vault-'));
 
 /** Opens a vault, seeds recognisable data, and returns the on-disk path. */
 async function seededVault(): Promise<string> {
@@ -77,7 +77,7 @@ describe('US-8.2 Scenario: Schema metadata is encrypted, not just values (ADR-01
    */
   it('control: an unencrypted database with the same schema DOES leak them', async () => {
     const { default: Database } = await import('better-sqlite3-multiple-ciphers');
-    const { MIGRATIONS } = await import('@porttrack/persistence');
+    const { MIGRATIONS } = await import('@vantagepoint/persistence');
     const file = join(dataDir(), 'plain.db');
     const db = new Database(file);
     for (const migration of MIGRATIONS) db.exec(migration.up);

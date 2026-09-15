@@ -6,8 +6,8 @@
  * still trusted. Re-persisting an IDENTICAL snapshot is a no-op, so a scheduler
  * that runs twice is harmless.
  */
-import { Err, Ok, SnapshotDivergenceError, type Result } from '@porttrack/shared-kernel';
-import type { Snapshot } from '@porttrack/snapshot';
+import { Err, Ok, SnapshotDivergenceError, type Result } from '@vantagepoint/shared-kernel';
+import type { Snapshot } from '@vantagepoint/snapshot';
 import { Vault } from './vault.js';
 
 interface SnapshotRow {

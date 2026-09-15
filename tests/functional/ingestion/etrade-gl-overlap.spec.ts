@@ -20,9 +20,9 @@ import {
   TradeUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { AssetRepository, ExitRepository, Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { AssetRepository, ExitRepository, Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const FIXTURE = join(import.meta.dirname, '../../fixtures/etrade/gains-losses-expanded.csv');
@@ -41,7 +41,7 @@ const RATES = [
 ].join('\n');
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-gl-overlap-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-gl-overlap-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

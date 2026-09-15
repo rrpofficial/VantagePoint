@@ -10,8 +10,8 @@
  * table, and a partial update that left a stale month behind would produce a
  * withdrawal figure that matches no agreement anyone made.
  */
-import { Err, Money, Ok, VaultStateError, type Currency, type Result } from '@porttrack/shared-kernel';
-import type { ChitWithdrawalSchedule } from '@porttrack/core-domain';
+import { Err, Money, Ok, VaultStateError, type Currency, type Result } from '@vantagepoint/shared-kernel';
+import type { ChitWithdrawalSchedule } from '@vantagepoint/core-domain';
 import { Vault } from './vault.js';
 
 interface ScheduleRow {

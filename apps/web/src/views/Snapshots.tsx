@@ -126,21 +126,21 @@ export function Snapshots() {
   );
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <Card
         title="Snapshots"
         action={
-          <button type="button" className="pt-button-inline" disabled={busy} onClick={() => void create()}>
+          <button type="button" className="vp-button-inline" disabled={busy} onClick={() => void create()}>
             {busy ? 'Creating…' : 'Create snapshot'}
           </button>
         }
       >
-        <p className="pt-muted">
+        <p className="vp-muted">
           Statutory snapshots freeze on 31 March (domestic) and 31 December (foreign). A frozen
           snapshot is never rewritten — re-running the scheduler returns the existing one.
         </p>
 
-        <div className="pt-controls">
+        <div className="vp-controls">
           <label htmlFor="as-of">As of</label>
           <input
             id="as-of"
@@ -151,19 +151,19 @@ export function Snapshots() {
               setAsOf(event.target.value);
             }}
           />
-          <span className="pt-muted">
+          <span className="vp-muted">
             A snapshot covers a whole day, so the latest available date is yesterday.
           </span>
         </div>
 
         {error !== undefined && (
-          <p className="pt-error" role="alert">
+          <p className="vp-error" role="alert">
             {error}
           </p>
         )}
 
-        <div className="pt-table-scroll">
-          <table className="pt-table" data-testid="snapshot-list">
+        <div className="vp-table-scroll">
+          <table className="vp-table" data-testid="snapshot-list">
             <thead>
               <tr>
                 <th scope="col">Snapshot</th>
@@ -177,14 +177,14 @@ export function Snapshots() {
             <tbody>
               {snapshots === undefined && (
                 <tr>
-                  <td colSpan={6} className="pt-muted">
+                  <td colSpan={6} className="vp-muted">
                     Loading…
                   </td>
                 </tr>
               )}
               {snapshots?.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="pt-muted">
+                  <td colSpan={6} className="vp-muted">
                     No snapshots yet.
                   </td>
                 </tr>
@@ -195,8 +195,8 @@ export function Snapshots() {
                   <td>{snapshot.kind}</td>
                   <td>{snapshot.scope}</td>
                   <td>{snapshot.asOf.slice(0, 10)}</td>
-                  <td className="pt-numeric pt-hash">{snapshot.contentHash.slice(0, 12)}…</td>
-                  <td className="pt-align-end">
+                  <td className="vp-numeric vp-hash">{snapshot.contentHash.slice(0, 12)}…</td>
+                  <td className="vp-align-end">
                     {/*
                       A select rather than two buttons: "against what" is one
                       question with several answers, and a row of buttons per
@@ -237,7 +237,7 @@ export function Snapshots() {
           title={comparedWith === 'live' ? 'Variance against live' : 'Variance between snapshots'}
           action={comparing === undefined ? undefined : <Chip>{comparing}</Chip>}
         >
-          <dl className="pt-stats">
+          <dl className="vp-stats">
             <div>
               <dt>Then</dt>
               <dd>
@@ -258,11 +258,11 @@ export function Snapshots() {
             </div>
             <div>
               <dt>Change %</dt>
-              <dd className="pt-numeric">{variance.netWorthDeltaPct}%</dd>
+              <dd className="vp-numeric">{variance.netWorthDeltaPct}%</dd>
             </div>
           </dl>
 
-          <div className="pt-controls">
+          <div className="vp-controls">
             <label htmlFor="variance-bucket">Show</label>
             <select
               id="variance-bucket"
@@ -283,19 +283,19 @@ export function Snapshots() {
               change with this filter. Saying so beats letting a reader assume
               the ₹ change at the top belongs to the sleeve below it.
             */}
-            <span className="pt-muted">
+            <span className="vp-muted">
               Filters the rows below. The net worth figures above cover the whole portfolio.
             </span>
           </div>
 
-          <div className="pt-table-scroll">
-            <table className="pt-table" data-testid="variance-table">
+          <div className="vp-table-scroll">
+            <table className="vp-table" data-testid="variance-table">
               <thead>
                 <tr>
                   <th scope="col">Movement</th>
                   <th scope="col">Asset</th>
                   <th scope="col">Class</th>
-                  <th scope="col" className="pt-align-end">
+                  <th scope="col" className="vp-align-end">
                     Change
                   </th>
                 </tr>
@@ -309,7 +309,7 @@ export function Snapshots() {
                   if (rows.length === 0) {
                     return (
                       <tr>
-                        <td colSpan={4} className="pt-muted">
+                        <td colSpan={4} className="vp-muted">
                           {variance.positions.length === 0
                             ? 'Nothing moved between the two points being compared.'
                             : 'Nothing in this asset class moved. Widen the filter to see the rest.'}
@@ -323,7 +323,7 @@ export function Snapshots() {
                       <td>{row.bucket.replaceAll('_', ' ').toLowerCase()}</td>
                       <td>{row.assetId}</td>
                       <td>{row.assetClass.replaceAll('_', ' ').toLowerCase()}</td>
-                      <td className="pt-align-end">
+                      <td className="vp-align-end">
                         <Delta value={row.valueDelta} />
                       </td>
                     </tr>

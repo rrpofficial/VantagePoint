@@ -1,5 +1,5 @@
 {
-  "name": "@porttrack/app-web",
+  "name": "@vantagepoint/app-web",
   "version": "0.1.0",
   "private": true,
   "type": "module",

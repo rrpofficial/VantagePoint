@@ -137,7 +137,7 @@ function buildContentStream() {
 function build() {
   const keyLen = 16;
   const permissions = -3904; // print + copy denied; standard restrictive mask
-  const id = createHash('md5').update('porttrack-cas-fixture-v1').digest();
+  const id = createHash('md5').update('vantagepoint-cas-fixture-v1').digest();
 
   const o = computeO(PASSWORD, keyLen);
   const key = computeKey(PASSWORD, o, permissions, id, keyLen);

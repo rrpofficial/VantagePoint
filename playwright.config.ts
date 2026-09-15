@@ -22,7 +22,7 @@ import { existsSync } from 'node:fs';
 const envFile = ['.env.test', '.env'].find((candidate) => existsSync(candidate));
 if (envFile !== undefined) process.loadEnvFile(envFile);
 
-const port = process.env.PORTTRACK_WEB_PORT ?? '5173';
+const port = process.env.VANTAGEPOINT_WEB_PORT ?? '5173';
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -37,7 +37,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? 'github' : 'list',
   use: {
-    baseURL: process.env.PORTTRACK_BASE_URL ?? `http://localhost:${port}`,
+    baseURL: process.env.VANTAGEPOINT_BASE_URL ?? `http://localhost:${port}`,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },

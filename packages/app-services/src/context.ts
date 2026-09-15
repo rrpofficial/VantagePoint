@@ -6,15 +6,15 @@
  * functional test swap the price feed or the clock without a mock framework, and
  * what keeps every use case free of hidden global state except this.
  */
-import { Money, type Clock } from '@porttrack/shared-kernel';
-import { liabilityOf, type Asset, type FxSource, type Liability, type PriceSource } from '@porttrack/core-domain';
+import { Money, type Clock } from '@vantagepoint/shared-kernel';
+import { liabilityOf, type Asset, type FxSource, type Liability, type PriceSource } from '@vantagepoint/core-domain';
 import {
   AssetRepository,
   BorrowedLoanRepository,
   LiabilityRepository,
   vaultPriceSource,
-} from '@porttrack/persistence';
-import { createLogger, type Logger } from '@porttrack/platform';
+} from '@vantagepoint/persistence';
+import { createLogger, type Logger } from '@vantagepoint/platform';
 import { vaultFxSource } from './fx-source.js';
 
 export interface AppContext {

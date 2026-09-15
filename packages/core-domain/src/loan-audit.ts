@@ -19,7 +19,7 @@
  *     touching anything must leave no trace, or the trail fills with noise and
  *     stops being read — which is the same as not having one.
  */
-import type { IsoDate } from '@porttrack/shared-kernel';
+import type { IsoDate } from '@vantagepoint/shared-kernel';
 import type { HandLoan } from './types.js';
 
 export type LoanAuditAction =

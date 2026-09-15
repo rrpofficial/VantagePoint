@@ -42,9 +42,9 @@ import {
   TemplateHeaderMismatchError,
   type Money as MoneyValue,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
-import { grantRefOf, type EquityAward, type EquityAwardKind } from '@porttrack/core-domain';
+import { grantRefOf, type EquityAward, type EquityAwardKind } from '@vantagepoint/core-domain';
 import { parseCsv, columnIndex, normaliseDate } from './csv.js';
 import { deterministicImportedAt, provenanceFor } from './provenance.js';
 import type { ParsedTransaction, RowError } from './types.js';

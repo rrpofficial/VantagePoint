@@ -13,8 +13,8 @@ import {
   PiiVerifier,
   Pseudonymiser,
   RegexRules,
-} from '@porttrack/pii-masker';
-import { expectNoPii, SYNTHETIC } from '@porttrack/test-kit';
+} from '@vantagepoint/pii-masker';
+import { expectNoPii, SYNTHETIC } from '@vantagepoint/test-kit';
 
 describe('US-7.1 regex masking rules', () => {
   describe('Scenario: PAN is masked', () => {

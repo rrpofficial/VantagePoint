@@ -7,6 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, globSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { resolve, join } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
@@ -69,7 +70,7 @@ describe('US-8.1 Scenario: Layering violations fail the build', () => {
     for (const pkg of DOMAIN_PACKAGES) {
       for (const file of globSync(`${ROOT}/packages/${pkg}/src/**/*.ts`)) {
         const source = readFileSync(file, 'utf8');
-        if (/@porttrack\/(persistence|adapters-|app-services)/.test(source)) {
+        if (/@vantagepoint\/(persistence|adapters-|app-services)/.test(source)) {
           offenders.push(file.replace(ROOT, ''));
         }
       }
@@ -96,10 +97,10 @@ describe('US-8.1 Scenario: The workspace is coherent', () => {
     expect(readFileSync(join(ROOT, 'pnpm-workspace.yaml'), 'utf8')).toContain('packages/*');
   });
 
-  it('gives every package a @porttrack-scoped name', () => {
+  it('gives every package a @vantagepoint-scoped name', () => {
     for (const manifest of globSync(`${ROOT}/packages/*/package.json`)) {
       expect((JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string }).name).toMatch(
-        /^@porttrack\//,
+        /^@vantagepoint\//,
       );
     }
   });
@@ -135,6 +136,32 @@ describe('US-8.1 Scenario: Test hygiene rules from the plan hold', () => {
       /toBeCloseTo\(\s*(?:inr|usd|money)\(/.test(readFileSync(file, 'utf8')),
     );
     expect(offenders.map((f) => f.replace(ROOT, ''))).toEqual([]);
+  });
+
+  /*
+   * The container's API died on startup with `ERR_MODULE_NOT_FOUND` after
+   * `@vantagepoint/exporters` was added: `apps/api/build.mjs` aliased workspace
+   * packages from a HAND-MAINTAINED list, the new one was not on it, and esbuild
+   * therefore left the specifier external — where nothing installs it.
+   *
+   * Nothing caught it. The typecheck, the lint and every test resolve through
+   * tsconfig paths and vitest aliases, none of which touch the bundler, so the
+   * failure only appeared on the next image rebuild. The list is now read from
+   * disk; this asserts the OUTCOME rather than the mechanism, so it still holds
+   * if someone reverts to enumerating packages by hand.
+   */
+  it('bundles the API with every workspace package resolved, none left external', () => {
+    // Run as a subprocess, exactly as the Dockerfile invokes it — and because a
+    // dynamic import of an untyped `.mjs` is an implicit `any` that the
+    // typecheck rejects, correctly, for a file with no declarations.
+    execFileSync('node', ['apps/api/build.mjs'], { cwd: ROOT, stdio: 'pipe' });
+
+    const bundle = readFileSync(join(ROOT, 'apps/api/dist/server.mjs'), 'utf8');
+    const unresolved = [...bundle.matchAll(/["']@vantagepoint\/[a-z-]+["']/g)].map((m) => m[0]);
+
+    expect(unresolved, 'workspace specifiers left unbundled would fail at container startup').toEqual(
+      [],
+    );
   });
 
   it('ships a fixture directory with no real PAN or Aadhaar', () => {

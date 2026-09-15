@@ -4,8 +4,8 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Form16Parser, SlabCalculator, TaxRuleTable, type IncomeProfile } from '@porttrack/tax-engine';
-import { expectMoney, expectNoPii, expectOk, inr } from '@porttrack/test-kit';
+import { Form16Parser, SlabCalculator, TaxRuleTable, type IncomeProfile } from '@vantagepoint/tax-engine';
+import { expectMoney, expectNoPii, expectOk, inr } from '@vantagepoint/test-kit';
 
 const FIXTURES = resolve(import.meta.dirname, '../../../tests/fixtures/form16');
 const load = (name: string) => new Uint8Array(readFileSync(resolve(FIXTURES, name)));

@@ -20,19 +20,19 @@ import type { Currency } from '../packages/shared-kernel/src/index.js';
 const [, , file, currencyArg, dataDirArg] = process.argv;
 const currency = (currencyArg ?? 'USD').toUpperCase() as Currency;
 const dataDir = dataDirArg ?? './data';
-const passphrase = process.env.PORTTRACK_PASSPHRASE ?? '';
+const passphrase = process.env.VANTAGEPOINT_PASSPHRASE ?? '';
 
 if (file === undefined || passphrase.length === 0) {
   console.error(
     [
-      'usage: PORTTRACK_PASSPHRASE=... pnpm vault:rates:import <csv> [currency] [data-dir]',
+      'usage: VANTAGEPOINT_PASSPHRASE=... pnpm vault:rates:import <csv> [currency] [data-dir]',
       '',
       'Type the passphrase into a prompt rather than the command line, so it does',
       'not land in your shell history:',
       '',
-      "  read -rs -p 'passphrase: ' PORTTRACK_PASSPHRASE && export PORTTRACK_PASSPHRASE",
+      "  read -rs -p 'passphrase: ' VANTAGEPOINT_PASSPHRASE && export VANTAGEPOINT_PASSPHRASE",
       '  pnpm vault:rates:import ./SBI_REFERENCE_RATES_USD.csv USD ./data',
-      '  unset PORTTRACK_PASSPHRASE',
+      '  unset VANTAGEPOINT_PASSPHRASE',
       '',
       'Get the CSV from:',
       '  https://github.com/sahilgupta/sbi-fx-ratekeeper/blob/main/csv_files/SBI_REFERENCE_RATES_USD.csv',

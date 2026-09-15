@@ -70,7 +70,7 @@ export function Holdings({ bucket, title, blurb, tradeClasses }: HoldingsProps) 
   if (error !== undefined) {
     return (
       <Card title={title}>
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       </Card>
@@ -80,7 +80,7 @@ export function Holdings({ bucket, title, blurb, tradeClasses }: HoldingsProps) 
   if (ledger === undefined) {
     return (
       <Card title={title}>
-        <p className="pt-muted">Loading…</p>
+        <p className="vp-muted">Loading…</p>
       </Card>
     );
   }
@@ -94,7 +94,7 @@ export function Holdings({ bucket, title, blurb, tradeClasses }: HoldingsProps) 
   const recordButton = offered.length > 0 && (
     <button
       type="button"
-      className="pt-button-inline"
+      className="vp-button-inline"
       data-testid={`record-trade-${bucket.toLowerCase()}`}
       onClick={() => {
         setRecording((open) => !open);
@@ -110,7 +110,7 @@ export function Holdings({ bucket, title, blurb, tradeClasses }: HoldingsProps) 
    * an empty state.
    */
   const actions = (
-    <div className="pt-actions pt-actions--inline">
+    <div className="vp-actions vp-actions--inline">
       {recordButton}
       <GoToImport testId={`go-to-import-${bucket.toLowerCase()}`} />
       {/* Holdings and LOTS, which is what makes an export usable for a
@@ -120,9 +120,9 @@ export function Holdings({ bucket, title, blurb, tradeClasses }: HoldingsProps) 
   );
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <Card title={title} action={actions}>
-        <p className="pt-muted">{blurb}</p>
+        <p className="vp-muted">{blurb}</p>
         {/*
           `onSaved` RELOADS, `onClose` closes — deliberately separate. A sell that
           found nothing to sell is reported rather than celebrated, so the form
@@ -143,31 +143,31 @@ export function Holdings({ bucket, title, blurb, tradeClasses }: HoldingsProps) 
 
       {holdings.length === 0 ? (
         <Card title="Holdings">
-          <p className="pt-muted" data-testid={`holdings-empty-${bucket.toLowerCase()}`}>
+          <p className="vp-muted" data-testid={`holdings-empty-${bucket.toLowerCase()}`}>
             Nothing here yet. Import a statement, or record a trade above.
           </p>
         </Card>
       ) : (
         <Card title="Holdings" action={<Chip>{`${String(holdings.length)} assets`}</Chip>}>
-          <div className="pt-table-scroll">
-            <table className="pt-table" data-testid={`holdings-table-${bucket.toLowerCase()}`}>
+          <div className="vp-table-scroll">
+            <table className="vp-table" data-testid={`holdings-table-${bucket.toLowerCase()}`}>
               <thead>
                 <tr>
                   <th scope="col">Asset</th>
                   <th scope="col">Class</th>
                   <th scope="col">Where</th>
-                  <th scope="col" className="pt-align-end">Lots</th>
-                  <th scope="col" className="pt-align-end">Held</th>
-                  <th scope="col" className="pt-align-end">Value</th>
+                  <th scope="col" className="vp-align-end">Lots</th>
+                  <th scope="col" className="vp-align-end">Held</th>
+                  <th scope="col" className="vp-align-end">Value</th>
                   {/*
                     Blank for a rupee holding rather than a repeat of the column
                     beside it: an Indian equity has no "source currency" distinct
                     from the one it is reported in, and echoing ₹ twice invites
                     the reader to look for a difference that cannot exist.
                   */}
-                  <th scope="col" className="pt-align-end">Cost (source currency)</th>
-                  <th scope="col" className="pt-align-end">Cost</th>
-                  <th scope="col" className="pt-align-end">Unrealised</th>
+                  <th scope="col" className="vp-align-end">Cost (source currency)</th>
+                  <th scope="col" className="vp-align-end">Cost</th>
+                  <th scope="col" className="vp-align-end">Unrealised</th>
                   {editMode.enabled && <th scope="col" />}
                 </tr>
               </thead>
@@ -192,18 +192,18 @@ export function Holdings({ bucket, title, blurb, tradeClasses }: HoldingsProps) 
 
       {exits.length > 0 && (
         <Card title="Disposals" action={<Chip>{`${String(exits.length)} exits`}</Chip>}>
-          <p className="pt-muted">
+          <p className="vp-muted">
             Sales of the holdings above. Deleting one returns its units to the lots it took them
             from, so the holding becomes whole again.
           </p>
-          <div className="pt-table-scroll">
-            <table className="pt-table" data-testid={`exit-table-${bucket.toLowerCase()}`}>
+          <div className="vp-table-scroll">
+            <table className="vp-table" data-testid={`exit-table-${bucket.toLowerCase()}`}>
               <thead>
                 <tr>
                   <th scope="col">Date</th>
                   <th scope="col">Asset</th>
-                  <th scope="col" className="pt-align-end">Quantity</th>
-                  <th scope="col" className="pt-align-end">Price</th>
+                  <th scope="col" className="vp-align-end">Quantity</th>
+                  <th scope="col" className="vp-align-end">Price</th>
                   {editMode.enabled && <th scope="col" />}
                 </tr>
               </thead>
@@ -261,7 +261,7 @@ function HoldingRow({
         <td>
           <button
             type="button"
-            className="pt-link pt-link--inline"
+            className="vp-link vp-link--inline"
             aria-expanded={expanded}
             onClick={onToggle}
           >
@@ -270,8 +270,8 @@ function HoldingRow({
         </td>
         <td>{asset.assetClass.replaceAll('_', ' ').toLowerCase()}</td>
         <td>{asset.jurisdiction.toLowerCase()}</td>
-        <td className="pt-align-end pt-numeric">{asset.lots.length}</td>
-        <td className="pt-align-end pt-numeric">{held}</td>
+        <td className="vp-align-end vp-numeric">{asset.lots.length}</td>
+        <td className="vp-align-end vp-numeric">{held}</td>
 
         {/*
           Value first, cost second, difference third — and the value column says
@@ -284,21 +284,21 @@ function HoldingRow({
           never will, and carrying them at cost is the correct answer, not a
           missing one.
         */}
-        <td className="pt-align-end">
+        <td className="vp-align-end">
           {value === undefined ? (
-            <span className="pt-muted" data-testid={`value-at-cost-${asset.assetId}`}>
+            <span className="vp-muted" data-testid={`value-at-cost-${asset.assetId}`}>
               at cost
             </span>
           ) : (
             <>
               <Amount value={value} />
               {valueInr !== undefined && asset.currency !== 'INR' && (
-                <div className="pt-muted pt-numeric" data-testid={`value-inr-${asset.assetId}`}>
+                <div className="vp-muted vp-numeric" data-testid={`value-inr-${asset.assetId}`}>
                   <Amount value={valueInr} />
                 </div>
               )}
               {asset.priceAsOf !== undefined && (
-                <div className="pt-tile__hint" data-testid={`price-as-of-${asset.assetId}`}>
+                <div className="vp-tile__hint" data-testid={`price-as-of-${asset.assetId}`}>
                   {asset.marketPricePerUnit !== undefined && (
                     <>
                       <Amount value={asset.marketPricePerUnit} /> as at{' '}
@@ -315,23 +315,23 @@ function HoldingRow({
           What it cost in the currency it was actually bought in. Empty for a
           rupee holding, where the next column already says it.
         */}
-        <td className="pt-align-end">
+        <td className="vp-align-end">
           {asset.currency === 'INR' ? (
-            <span className="pt-muted">—</span>
+            <span className="vp-muted">—</span>
           ) : (
             <span data-testid={`cost-source-${asset.assetId}`}>
               <Amount value={cost} />
               {asset.conversionRate !== undefined && (
-                <div className="pt-tile__hint">@ {asset.conversionRate}</div>
+                <div className="vp-tile__hint">@ {asset.conversionRate}</div>
               )}
             </span>
           )}
         </td>
 
         {/* Always rupees, so the column adds up down the page. */}
-        <td className="pt-align-end">
+        <td className="vp-align-end">
           {costInr === undefined ? (
-            <span className="pt-muted" data-testid={`cost-inr-missing-${asset.assetId}`}>
+            <span className="vp-muted" data-testid={`cost-inr-missing-${asset.assetId}`}>
               rate unavailable
             </span>
           ) : (
@@ -341,9 +341,9 @@ function HoldingRow({
           )}
         </td>
 
-        <td className="pt-align-end">
+        <td className="vp-align-end">
           {unrealised === undefined ? (
-            <span className="pt-muted">—</span>
+            <span className="vp-muted">—</span>
           ) : (
             <span data-testid={`unrealised-${asset.assetId}`}>
               <Delta value={unrealised} />
@@ -363,27 +363,27 @@ function HoldingRow({
         )}
       </tr>
       {expanded && (
-        <tr className="pt-table__detail">
+        <tr className="vp-table__detail">
           <td colSpan={showActions ? 10 : 9}>
-            <table className="pt-table pt-table--nested">
+            <table className="vp-table vp-table--nested">
               <thead>
                 <tr>
                   <th scope="col">Acquired</th>
-                  <th scope="col" className="pt-align-end">Quantity</th>
+                  <th scope="col" className="vp-align-end">Quantity</th>
                   {/* Remaining beside original is the only visible sign that a
                       disposal was applied — showing one alone looks identical
                       whether or not sells have been recorded. */}
-                  <th scope="col" className="pt-align-end">Remaining</th>
-                  <th scope="col" className="pt-align-end">Cost per unit</th>
+                  <th scope="col" className="vp-align-end">Remaining</th>
+                  <th scope="col" className="vp-align-end">Cost per unit</th>
                 </tr>
               </thead>
               <tbody>
                 {asset.lots.map((lot) => (
                   <tr key={lot.lotId}>
                     <td>{lot.acquisitionDate}</td>
-                    <td className="pt-align-end pt-numeric">{lot.quantity}</td>
-                    <td className="pt-align-end pt-numeric">{lot.remainingQuantity}</td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end vp-numeric">{lot.quantity}</td>
+                    <td className="vp-align-end vp-numeric">{lot.remainingQuantity}</td>
+                    <td className="vp-align-end">
                       <Amount value={lot.costPerUnit} />
                     </td>
                   </tr>
@@ -410,8 +410,8 @@ function ExitRow({
     <tr>
       <td>{exit.exitDate}</td>
       <td>{exit.assetId}</td>
-      <td className="pt-align-end pt-numeric">{exit.quantity}</td>
-      <td className="pt-align-end">
+      <td className="vp-align-end vp-numeric">{exit.quantity}</td>
+      <td className="vp-align-end">
         <Amount value={exit.pricePerUnit} />
       </td>
       {showActions && (

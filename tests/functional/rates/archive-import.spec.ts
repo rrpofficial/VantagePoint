@@ -11,10 +11,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { EditModeUC, RatesUC, VaultUC, resetPorts } from '@porttrack/app-services';
-import { DualRateConverter, Rule115Resolver } from '@porttrack/fx-itbr';
-import { Vault } from '@porttrack/persistence';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+import { EditModeUC, RatesUC, VaultUC, resetPorts } from '@vantagepoint/app-services';
+import { DualRateConverter, Rule115Resolver } from '@vantagepoint/fx-itbr';
+import { Vault } from '@vantagepoint/persistence';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const REF = 'sbi-fx-ratekeeper/SBI_REFERENCE_RATES_USD.csv';
@@ -39,7 +39,7 @@ const REAL = csv(
 let dir: string;
 
 beforeEach(async () => {
-  dir = mkdtempSync(join(tmpdir(), 'porttrack-rates-'));
+  dir = mkdtempSync(join(tmpdir(), 'vantagepoint-rates-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

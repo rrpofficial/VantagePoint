@@ -12,7 +12,7 @@
  * risk mitigation (R5) claimed this guard was the backstop for NER false
  * negatives; that claim was wrong and is corrected in the plan.
  */
-import { Err, Ok, PiiLeakError, type Result } from '@porttrack/shared-kernel';
+import { Err, Ok, PiiLeakError, type Result } from '@vantagepoint/shared-kernel';
 import { detect } from './regex-rules.js';
 import { detectPersonNames } from './ner.js';
 import type { PiiKind } from './types.js';
