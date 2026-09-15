@@ -257,18 +257,18 @@ function EntityDetailForm({ assetId, onSaved }: { assetId: string; onSaved: () =
           setNatureOfEntity(event.target.value);
         }}
       />
-      <div className="vp-actions vp-form__full">
+      <div className="vp-actions vp-form__wide">
         <button type="button" onClick={() => void submit()} data-testid="save-entity-detail">
           Save
         </button>
       </div>
-      <p className="vp-muted vp-form__full">
+      <p className="vp-muted vp-form__wide">
         A USD-denominated fund is routinely domiciled outside the United States, so the country is
         recorded rather than inferred from the currency — a wrong country is a defect in the
         disclosure.
       </p>
       {error !== undefined && (
-        <p className="vp-error vp-form__full" role="alert">
+        <p className="vp-error vp-form__wide" role="alert">
           {error}
         </p>
       )}
@@ -380,13 +380,13 @@ function ForeignAccountForm({
           setClosingBalance(event.target.value);
         }}
       />
-      <div className="vp-actions vp-form__full">
+      <div className="vp-actions vp-form__wide">
         <button type="button" onClick={() => void submit()} data-testid="save-foreign-account">
           Save
         </button>
       </div>
       {error !== undefined && (
-        <p className="vp-error vp-form__full" role="alert">
+        <p className="vp-error vp-form__wide" role="alert">
           {error}
         </p>
       )}

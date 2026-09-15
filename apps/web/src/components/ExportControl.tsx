@@ -43,8 +43,10 @@ export function ExportControl({
 
   return (
     <div className="vp-actions" data-testid={testId ?? `export-${register}`}>
+      {/* `vp-check` is already inline-flex at body size — the size the export
+          links beside it use — so a modifier here would add nothing. */}
       {hasPii && (
-        <label className="vp-check vp-check--inline">
+        <label className="vp-check">
           <input
             type="checkbox"
             checked={includePii}

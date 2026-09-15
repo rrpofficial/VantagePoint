@@ -136,7 +136,7 @@ function NewBalanceForm({
       </select>
 
       {option !== undefined && (
-        <p className="vp-form__full vp-muted" data-testid="balance-guidance">
+        <p className="vp-form__wide vp-muted" data-testid="balance-guidance">
           {option.guidance}
         </p>
       )}
@@ -306,7 +306,7 @@ function NewBalanceForm({
         }}
       />
 
-      <div className="vp-actions vp-form__full">
+      <div className="vp-actions vp-form__wide">
         <button type="submit" disabled={busy} data-testid="save-balance">
           {busy ? 'Saving…' : 'Save'}
         </button>
@@ -316,7 +316,7 @@ function NewBalanceForm({
       </div>
 
       {error !== undefined && (
-        <p className="vp-error vp-form__full" role="alert" data-testid="balance-error">
+        <p className="vp-error vp-form__wide" role="alert" data-testid="balance-error">
           {error}
         </p>
       )}
@@ -422,17 +422,17 @@ function Row({ view, onChanged }: { view: BalanceView; onChanged: () => void }) 
                   setAsOf(event.target.value);
                 }}
               />
-              <div className="vp-actions vp-form__full">
+              <div className="vp-actions vp-form__wide">
                 <button type="button" onClick={() => void submit()}>
                   Restate
                 </button>
               </div>
-              <p className="vp-muted vp-form__full">
+              <p className="vp-muted vp-form__wide">
                 Accrual restarts from this date. A new figure with the old start date would
                 re-accrue interest that is already inside it.
               </p>
               {error !== undefined && (
-                <p className="vp-error vp-form__full" role="alert">
+                <p className="vp-error vp-form__wide" role="alert">
                   {error}
                 </p>
               )}
