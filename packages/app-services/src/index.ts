@@ -54,11 +54,28 @@ export {
 } from './edit-mode.js';
 
 export {
+  DEFAULT_INCOME_INCLUSIONS,
+  IncomeInclusionsUC,
+  enabledInclusionLabels,
+  incomeInclusionsOf,
+  loadIncomeInclusions,
+  resetIncomeInclusions,
+  saveIncomeInclusions,
+  type IncomeInclusions,
+} from './income-inclusions.js';
+
+export {
   RatesUC,
   type ImportRatesInput,
   type ImportRatesReport,
   type RateCoverage,
 } from './rates.js';
+
+export {
+  stampForeignRates,
+  type RateStampResult,
+  type UnpricedLeg,
+} from './foreign-rates.js';
 
 export { useVaultRateStore, useMemoryRateStore, vaultRateStore } from './vault-rate-store.js';
 

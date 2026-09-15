@@ -17,6 +17,8 @@ import {
   templateDefinitions,
   validateHeaders,
 } from './templates.js';
+import { parseEtradeGainsLosses } from './etrade-gl.js';
+import { parseEtradeHoldings } from './etrade-holdings.js';
 import { naturalKey, partition } from './duplicates.js';
 import { ingest } from './pipeline.js';
 import { ledgerNaturalKeys, projectToLedger } from './ledger.js';
@@ -60,6 +62,44 @@ export const EtradeParser = {
     const parsed = parseEtrade(csv, fileName);
     return parsed.ok ? { ok: true as const, value: parsed.value.transactions } : parsed;
   },
+};
+
+/**
+ * US-4.5b — E*TRADE Gains & Losses (Expanded).
+ *
+ * Each row is a closed round trip, so one row yields TWO transactions: the
+ * acquisition and the disposal that ended it. That is what lets each leg be
+ * converted at its own Rule 115 basis month.
+ */
+export const EtradeGainsLossesParser = {
+  parse: (csv: string, fileName: string) => {
+    const parsed = parseEtradeGainsLosses(csv, fileName);
+    return parsed.ok ? { ok: true as const, value: parsed.value.transactions } : parsed;
+  },
+  /**
+   * The full outcome, transactions AND row errors.
+   *
+   * Exposed alongside the narrowed `parse` because this format rejects by row as
+   * a matter of course — 47 columns, hand-exportable, one unparseable date in an
+   * otherwise good file — so a caller that can only see the transactions cannot
+   * tell a clean import from one that dropped a disposal.
+   */
+  parseWithErrors: parseEtradeGainsLosses,
+};
+
+/**
+ * US-4.5d — E*TRADE "By Status → Sellable": the tranches still held.
+ *
+ * The other half of the G&L export. Together they account for a grant in full:
+ * one states what was disposed of, the other what remains, and they merge on the
+ * same grant-and-tranche identity rather than duplicating.
+ */
+export const EtradeHoldingsParser = {
+  parse: (csv: string, fileName: string) => {
+    const parsed = parseEtradeHoldings(csv, fileName);
+    return parsed.ok ? { ok: true as const, value: parsed.value.transactions } : parsed;
+  },
+  parseWithErrors: parseEtradeHoldings,
 };
 
 /** US-4.6 — standardised CSV templates. */

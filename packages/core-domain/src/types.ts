@@ -77,8 +77,60 @@ export interface DualRate {
   readonly fallbackNote?: string;
 }
 
+/**
+ * Where an equity-compensation lot came from: the grant, and the event that
+ * turned part of that grant into shares.
+ *
+ * Three levels, because the broker's own data has three:
+ *
+ *   grant   →  many vests / purchases  →  many sell orders
+ *
+ * One grant vests in tranches over years; one tranche is commonly sold across
+ * several orders (a sell-to-cover on vest day, a manual sale later). A real
+ * E*TRADE export shows 33 disposal rows resolving to 28 tranches from 5 grants.
+ *
+ * **This is what makes a lot identifiable across FILES.** Lot ids were derived
+ * from the source file name and row number, so the same vest read from a Gains &
+ * Losses export and from a holdings export produced two different ids, and
+ * deduplication fell back to matching quantity and price — which breaks on a
+ * cent of rounding. A grant reference plus the acquisition date is stable
+ * wherever it is read from.
+ */
+export interface EquityAward {
+  readonly kind: 'RSU' | 'ESPP';
+  /**
+   * The grant's own identifier.
+   *
+   * E*TRADE gives RSUs a `Grant Number`. ESPP rows carry no grant number, so the
+   * offering's grant date stands in — see `grantDate`.
+   */
+  readonly grantRef: string;
+  /** When the grant (RSU) or the offering period (ESPP) was made. */
+  readonly grantDate?: IsoDate;
+  /** RSU: when this tranche vested. Absent on ESPP, which does not vest. */
+  readonly vestDate?: IsoDate;
+  /** ESPP: when the shares were bought under the offering. Absent on RSU. */
+  readonly purchaseDate?: IsoDate;
+  /**
+   * ESPP: what was actually PAID per share, after the plan discount.
+   *
+   * Kept beside `costPerUnit` rather than replacing it, because they differ and
+   * only one of them is the cost basis. Section 49(2AA) sets the basis at fair
+   * market value on the acquisition date; the discount below it was already
+   * charged as a salary perquisite. Using the price paid would tax that discount
+   * a second time.
+   */
+  readonly purchasePrice?: Money;
+  /** ESPP: FMV less price paid — the per-share discount taxed as salary. */
+  readonly discountPerUnit?: Money;
+  /** Fair market value per share on the vest or purchase date: the cost basis. */
+  readonly fmvAtAcquisition?: Money;
+}
+
 export interface AcquisitionLot {
   readonly lotId: string;
+  /** Present on RSU and ESPP lots; absent on ordinary purchases. */
+  readonly equityAward?: EquityAward;
   readonly acquisitionDate: IsoDate;
   readonly settlementDate: IsoDate;
   readonly quantity: Quantity;
@@ -92,6 +144,22 @@ export interface AcquisitionLot {
   readonly grandfatheredFmv?: Money;
   /** ESPP discount / RSU vest value taxable as a perquisite. */
   readonly perquisiteValue?: Money;
+  /**
+   * What the BROKER says is still held of this tranche, when a holdings export
+   * has stated it.
+   *
+   * Kept beside `remainingQuantity`, which the ledger derives by applying its own
+   * disposals — deliberately not merged with it. The two disagreeing is the
+   * single most useful fact a holdings import can produce: it means disposals
+   * exist that were never imported, and no figure on screen can reveal that
+   * otherwise, because every one of them is internally consistent and wrong.
+   *
+   * Stored on the lot rather than computed at import so the check stands
+   * afterwards. An import-time comparison only fires on the import that happened
+   * to carry the stated figure — load the holdings file first and the disposals
+   * second, and nothing would ever be compared.
+   */
+  readonly statedRemainingQuantity?: Quantity;
   readonly isBonus?: boolean;
 }
 
@@ -119,9 +187,86 @@ export interface ExitTransaction {
   readonly fees: Money;
   readonly stt: Money;
   readonly allocations: readonly LotAllocation[];
+
+  /**
+   * Why the shares left.
+   *
+   * `SELL_TO_COVER` is the block sold on vest day to fund the employer's
+   * withholding. It is a genuine transfer and is recorded like any other — the
+   * units must deplete the lot, and Schedule FA counts them — but whether it is
+   * charged to capital gains is a position the taxpayer takes, not a fact, so it
+   * is flagged here and filtered downstream rather than dropped at import.
+   *
+   * The gain on one is usually a rounding error, because the sale is same-day at
+   * roughly the vest price. That holds only while both legs fall in the SAME
+   * month: a vest on the 31st sold on the 1st takes Rule 115 basis rates a month
+   * apart, and the taxable difference is then the whole proceeds times the rate
+   * movement, not the few dollars of price movement.
+   */
+  readonly disposalKind?: 'SALE' | 'SELL_TO_COVER';
+  /** The broker's own order identifier, where the source states one. */
+  readonly orderRef?: string;
+  /**
+   * Which lot-identification convention produced this disposal's allocations.
+   *
+   * Recorded rather than assumed, because the two give different answers and a
+   * filed figure should say which one it rests on. `SPECIFIC` means the source
+   * named the tranche and it was matched to it; `FIFO` means oldest-first, the
+   * convention CBDT Circular 768 prescribes for fungible demat holdings.
+   */
+  readonly lotMatching?: 'SPECIFIC' | 'FIFO';
   readonly fx?: DualRate;
+
+  /*
+   * ---------------------------------------------------------------------------
+   * The rupee figures. FOUR of them, and the distinction between them is not
+   * cosmetic — mixing two up misstates a tax liability by the whole cost basis.
+   *
+   * For a lot vested on d1 at vp$ and sold on d2 at sp$, quantity q:
+   *
+   *   valuationInr    = sp$ × q × rate(d2)              ← trade-date rate
+   *   proceedsTaxInr  = sp$ × q × rate(month-end before d2)
+   *   costBasisTaxInr = vp$ × q × rate(month-end before d1)
+   *   taxableGainInr  = proceedsTaxInr − costBasisTaxInr
+   *
+   * Only the last is the figure tax is charged on. The first uses a DIFFERENT
+   * rate from the other three (ADR-003) and must never reach a tax computation.
+   * ---------------------------------------------------------------------------
+   */
+
+  /**
+   * Gross proceeds at the rate on the SALE DAY ITSELF.
+   *
+   * Portfolio display only. Present so a holding's realised value reads
+   * consistently with the rest of the portfolio, which is marked at trade-date
+   * rates. **Never a tax figure** — Rule 115 names the preceding month-end, not
+   * the transaction date, and these differ by real money.
+   */
   readonly valuationInr?: Money;
-  readonly taxableInr?: Money;
+
+  /** Gross proceeds at the Rule 115 rate for the month preceding the SALE. */
+  readonly proceedsTaxInr?: Money;
+
+  /**
+   * Cost of the units sold, each allocation converted at the Rule 115 rate for
+   * the month preceding ITS OWN acquisition.
+   *
+   * Summed per allocation rather than converted once, because one sale order
+   * routinely consumes lots from several vests with basis months years apart.
+   */
+  readonly costBasisTaxInr?: Money;
+
+  /**
+   * `proceedsTaxInr − costBasisTaxInr`. The figure tax is charged on.
+   *
+   * Named for what it IS rather than for the rate that produced it. Its
+   * predecessor was `taxableInr`, which sat beside `valuationInr` and read as
+   * the same quantity at a second rate — so it was populated with converted
+   * PROCEEDS at least once, while the capital-gains engine reads it as the
+   * finished GAIN and returns it unchanged. That substitutes the whole sale
+   * value for the profit, and the resulting number looks entirely ordinary.
+   */
+  readonly taxableGainInr?: Money;
 }
 
 export type IncomeEventKind =
@@ -291,6 +436,8 @@ export interface RecordAcquisitionInput {
   readonly perquisiteValue?: Money;
   /** Fair market value per unit at vest/purchase; drives the ESPP discount. */
   readonly fmvPerUnit?: Money;
+  /** Grant and tranche detail, for an RSU or ESPP lot. */
+  readonly equityAward?: EquityAward;
   readonly lotId?: string;
 }
 

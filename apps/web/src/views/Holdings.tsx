@@ -24,7 +24,7 @@ import {
   type LedgerExit,
   type TradeClass,
 } from '../api.js';
-import { Amount, Card, Chip } from '../components/primitives.js';
+import { Amount, Card, Chip, GoToImport } from '../components/primitives.js';
 import { DeleteControl } from '../components/DeleteControl.js';
 import { useEditMode } from '../edit-mode.js';
 import { TradeForm } from './TradeForm.js';
@@ -103,9 +103,21 @@ export function Holdings({ bucket, title, blurb, tradeClasses }: HoldingsProps) 
     </button>
   );
 
+  /*
+   * Both routes into this tab, side by side: one trade by hand, or a whole
+   * statement at once. Import is the one that scales, so it is not hidden behind
+   * an empty state.
+   */
+  const actions = (
+    <div className="pt-actions pt-actions--inline">
+      {recordButton}
+      <GoToImport testId={`go-to-import-${bucket.toLowerCase()}`} />
+    </div>
+  );
+
   return (
     <div className="pt-stack">
-      <Card title={title} action={recordButton || undefined}>
+      <Card title={title} action={actions}>
         <p className="pt-muted">{blurb}</p>
         {/*
           `onSaved` RELOADS, `onClose` closes — deliberately separate. A sell that

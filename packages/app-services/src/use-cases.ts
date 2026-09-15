@@ -31,6 +31,8 @@ import {
   ValuationEngine,
   applyLoanEdit,
   bucketOf,
+  reconcileHoldings,
+  type HoldingsReconciliation,
   type AssetBucket,
   loanDuplicatesOf,
   type Asset,
@@ -101,6 +103,8 @@ import {
 } from '@porttrack/persistence';
 import { currentPorts } from './context.js';
 import { requireEditMode, resetEditMode } from './edit-mode.js';
+import { loadIncomeInclusions, resetIncomeInclusions } from './income-inclusions.js';
+import { stampForeignRates } from './foreign-rates.js';
 import { useMemoryRateStore, useVaultRateStore } from './vault-rate-store.js';
 
 /* ------------------------------------------------------------------- vault */
@@ -111,6 +115,7 @@ export const VaultUC = {
     if (!result.ok) return result;
     // Vault-backed state can only be read once the key exists.
     await loadIncomeProfile();
+    await loadIncomeInclusions();
     /*
      * Rate resolution moves to the vault here, and only here. Before this point
      * `fx-itbr` resolves against an empty in-memory store, which is correct: a
@@ -126,6 +131,10 @@ export const VaultUC = {
     // Salary is as sensitive as holdings; it must not outlive the session in
     // memory once the vault it came from is closed.
     setIncomeProfile(undefined);
+    // Back to the default (both excluded) rather than to the last vault's
+    // choice: the next unlock may be a different vault, and inheriting its
+    // predecessor's tax position would apply a setting nobody chose here.
+    resetIncomeInclusions();
     // The passphrase was entered to open one window on one session. Leaving edit
     // mode on across a lock would hand the next person who unlocks a permission
     // they never asked for.
@@ -429,12 +438,30 @@ export const ImportStatementUC = {
     });
     if (!projected.ok) return projected;
 
-    const saved = await AssetRepository.saveAll(projected.value.assets);
+    /*
+     * Rule 115 rates are stamped here rather than in the projector, because
+     * `ingestion` is pure and resolving a rate is a lookup against the vault's
+     * rate store. Each foreign lot is stamped from its acquisition date and each
+     * disposal from its exit date, so a vest and the sale that ended it are
+     * converted at the basis months that actually apply to them.
+     */
+    const stamped = stampForeignRates({
+      assets: projected.value.assets,
+      exits: projected.value.exits,
+    });
+
+    const saved = await AssetRepository.saveAll(stamped.assets);
     if (!saved.ok) return saved;
 
     // After the assets: an exit references its asset by foreign key.
-    const savedExits = await ExitRepository.saveAll(projected.value.exits);
+    const savedExits = await ExitRepository.saveAll(stamped.exits);
     if (!savedExits.ok) return savedExits;
+
+    if (stamped.unpriced.length > 0) {
+      currentPorts().logger.info(
+        `import stored ${String(stamped.unpriced.length)} foreign record(s) with no INR rate`,
+      );
+    }
 
     return Ok({
       ...report.value,
@@ -443,6 +470,13 @@ export const ImportStatementUC = {
       // Stated figures the engine recomputed differently — shown, not silently
       // overridden in either direction.
       reconciliation: projected.value.reconciliation,
+      /*
+       * Foreign figures that were stored WITHOUT an INR value, because no rate
+       * could be resolved for their Rule 115 basis date. Surfaced on the import
+       * report for the same reason a rejected row is: an amount silently missing
+       * its rupee value is one that quietly drops out of a tax total later.
+       */
+      ...(stamped.unpriced.length === 0 ? {} : { unpriced: stamped.unpriced }),
     });
   },
 };
@@ -1735,6 +1769,17 @@ export const LedgerUC = {
   },
   exits(): Promise<readonly ExitTransaction[]> {
     return ExitRepository.all();
+  },
+
+  /**
+   * Whether the imported history accounts for what the broker says is held.
+   *
+   * A standing check, not an import-time one. The stated figures live on the
+   * lots, so this answers the same question whatever order the files were loaded
+   * in — and keeps answering it as more history arrives.
+   */
+  async reconciliation(): Promise<HoldingsReconciliation> {
+    return reconcileHoldings(await AssetRepository.all());
   },
 
   /**

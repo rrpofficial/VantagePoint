@@ -122,6 +122,46 @@ export interface UnconvertibleGain {
   readonly reason: string;
 }
 
+/**
+ * A disposal left out of the totals because it was a sell-to-cover and the
+ * taxpayer has chosen not to charge those.
+ *
+ * **The amount is reported, because it is frequently not small.** The reasoning
+ * that makes the exclusion look harmless — "sold same-day at the vest price, so
+ * the gain is a rounding error" — holds under US specific-lot matching, where the
+ * sale is matched to the shares that just vested. Indian law matches FIFO, so a
+ * sell-to-cover disposes of the OLDEST lot held, which may have vested years
+ * earlier at a fraction of today's price. In a real file a sell-to-cover of 10
+ * units nominally covering a $200 vest was matched to a 2021 lot costing $150
+ * and sold at $201: a $510 gain, not a rounding error.
+ *
+ * So this carries what was actually left out, and every screen showing a gain
+ * total must show it too.
+ */
+export interface ExcludedDisposal {
+  readonly txnId: string;
+  readonly exitDate: IsoDate;
+  /**
+   * The taxable gain that was NOT charged, in INR.
+   *
+   * Absent only when no exchange rate could be resolved for it — in which case
+   * the amount is unknown rather than zero, and must not be read as nil.
+   */
+  readonly gainInr?: Money;
+  /**
+   * True when the acquisition and the sale fall either side of a month end, so
+   * the two Rule 115 legs convert at different rates. Under FIFO this is common
+   * even for a same-day sell-to-cover, because the lot it was matched to is
+   * rarely the one that just vested.
+   */
+  readonly straddlesBasisMonths: boolean;
+}
+
+export interface CapitalGainsOptions {
+  /** Charge sell-to-cover disposals to capital gains. Default false. */
+  readonly includeSellToCover?: boolean;
+}
+
 export interface CapitalGainsResult {
   readonly gains: readonly ClassifiedGain[];
   readonly ltcgBeforeExemption: Money;
@@ -134,6 +174,12 @@ export interface CapitalGainsResult {
    * the figure; a filing artifact must refuse outright.
    */
   readonly unconvertible: readonly UnconvertibleGain[];
+  /**
+   * Sell-to-cover disposals omitted from every total above. Non-empty means the
+   * figures reflect a position the taxpayer took, which a filing artifact must
+   * state rather than imply.
+   */
+  readonly excludedSellToCover: readonly ExcludedDisposal[];
 }
 
 export interface AdvanceTaxInstallment {
@@ -192,4 +238,11 @@ export interface AdvanceTaxInput {
   readonly alreadyPaid: Money;
   readonly rules: TaxRuleSet;
   readonly regime?: TaxRegime;
+  /**
+   * Charge sell-to-cover disposals. Default false — the taxpayer's position,
+   * carried here so an instalment reflects the same choice the year-end figure
+   * will. An instalment computed on one basis and a return filed on another is a
+   * shortfall that only surfaces at assessment.
+   */
+  readonly includeSellToCover?: boolean;
 }

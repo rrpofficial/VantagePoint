@@ -297,6 +297,17 @@ body {
 }
 
 /*
+ * The same row inside a card header, where the block margin would push the
+ * buttons out of line with the heading they sit beside. `flex-end` so a wrap at
+ * phone width stacks them against the right edge rather than centring them under
+ * the title.
+ */
+.pt-actions--inline {
+  margin-top: 0;
+  justify-content: flex-end;
+}
+
+/*
  * A question, not an error. Warm rather than red: the user has done nothing
  * wrong, and colouring this like a failure makes them cancel a legitimate entry.
  */

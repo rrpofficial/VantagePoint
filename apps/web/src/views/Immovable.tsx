@@ -15,7 +15,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Ledger as LedgerData, type LedgerAsset } from '../api.js';
-import { Amount, Card, Chip } from '../components/primitives.js';
+import { Amount, Card, Chip, GoToImport } from '../components/primitives.js';
 import { DeleteControl } from '../components/DeleteControl.js';
 import { useEditMode } from '../edit-mode.js';
 import { navigate } from '../router.js';
@@ -99,7 +99,12 @@ export function Immovable() {
     <div className="pt-stack">
       <Card
         title="Immovable property"
-        action={<Chip>{`${String(properties.length)} propert${properties.length === 1 ? 'y' : 'ies'}`}</Chip>}
+        action={
+          <div className="pt-actions pt-actions--inline">
+            <Chip>{`${String(properties.length)} propert${properties.length === 1 ? 'y' : 'ies'}`}</Chip>
+            <GoToImport testId="go-to-import-immovable" />
+          </div>
+        }
       >
         <p className="pt-muted">
           Carried at what was <strong>paid</strong> — purchase price plus stamp duty and

@@ -28,10 +28,12 @@ import {
   type ExitTransaction,
   type TaxSubject,
 } from '@porttrack/core-domain';
-import { DualRateConverter } from '@porttrack/fx-itbr';
+import { DualRateConverter, Rule115Resolver } from '@porttrack/fx-itbr';
 import type {
+  CapitalGainsOptions,
   CapitalGainsResult,
   ClassifiedGain,
+  ExcludedDisposal,
   GainKind,
   TaxRuleSet,
   UnconvertibleGain,
@@ -157,6 +159,28 @@ function legToInr(amount: MoneyValue, onDate: IsoDate): Result<MoneyValue> {
 }
 
 /**
+ * Both legs of a disposal in rupees, and the gain between them.
+ *
+ * This is the one implementation of the Rule 115 two-date conversion. The import
+ * path stores what it returns and the engine reads it back, so there is no second
+ * copy of the arithmetic to drift.
+ */
+export interface Rule115Legs {
+  /** `sp$ × quantity`, at the rate for the month-end before the SALE. */
+  readonly proceedsInr: MoneyValue;
+  /** `Σ vp$ × quantity`, each at the rate for the month-end before ITS vest. */
+  readonly costBasisInr: MoneyValue;
+  /** `proceedsInr − costBasisInr`. The figure tax is charged on. */
+  readonly gainInr: MoneyValue;
+  /**
+   * False when the source stated a net gain with no lot detail. The gain is
+   * still right; `proceedsInr` then carries it against a zero cost, and the two
+   * legs are not independently meaningful.
+   */
+  readonly legsSeparable: boolean;
+}
+
+/**
  * The taxable gain in INR, converting EACH LEG at its own Rule 115 basis date.
  *
  * Cost is converted at the last day of the month preceding acquisition; proceeds
@@ -174,14 +198,22 @@ function legToInr(amount: MoneyValue, onDate: IsoDate): Result<MoneyValue> {
  * from several vests, each with its own basis month. Converting the whole cost
  * at the oldest lot's rate would misprice every other lot in the order.
  */
-function taxableGainInr(exit: ExitTransaction): Result<MoneyValue> {
-  // An explicitly recorded figure wins. Nothing in the projector sets this today,
-  // but a correction applied upstream must not be silently recomputed away.
-  if (exit.taxableInr !== undefined) return Ok(exit.taxableInr);
-
+export function rule115Legs(exit: ExitTransaction): Result<Rule115Legs> {
   if (exit.allocations.length === 0) {
-    // Net-gain shape: there are no legs to convert separately.
-    return legToInr(realisedGain(exit), exit.exitDate);
+    /*
+     * Net-gain shape: the source reported a realised gain with no lot detail, so
+     * there are no two legs to convert separately. The gain is still converted at
+     * the sale month's basis, and `legsSeparable` says the split is not real —
+     * rather than reporting a zero cost basis as though it had been measured.
+     */
+    const gain = legToInr(realisedGain(exit), exit.exitDate);
+    if (!gain.ok) return gain;
+    return Ok({
+      proceedsInr: gain.value,
+      costBasisInr: money(new Decimal(0)),
+      gainInr: gain.value,
+      legsSeparable: false,
+    });
   }
 
   const proceedsCurrency = exit.pricePerUnit.currency;
@@ -213,21 +245,81 @@ function taxableGainInr(exit: ExitTransaction): Result<MoneyValue> {
   const proceedsInr = legToInr(money(proceeds, proceedsCurrency), exit.exitDate);
   if (!proceedsInr.ok) return proceedsInr;
 
-  return Ok(money(new Decimal(proceedsInr.value.amount).minus(costInr)));
+  return Ok({
+    proceedsInr: proceedsInr.value,
+    costBasisInr: money(costInr),
+    gainInr: money(new Decimal(proceedsInr.value.amount).minus(costInr)),
+    legsSeparable: true,
+  });
+}
+
+function taxableGainInr(exit: ExitTransaction): Result<MoneyValue> {
+  /*
+   * A stored figure wins. The import path writes it from THIS function, so the
+   * stored and recomputed values agree by construction; what the short-circuit
+   * protects is a correction applied upstream, which must not be silently
+   * recomputed away.
+   */
+  if (exit.taxableGainInr !== undefined) return Ok(exit.taxableGainInr);
+
+  const legs = rule115Legs(exit);
+  return legs.ok ? Ok(legs.value.gainInr) : legs;
+}
+
+/**
+ * Whether a sell-to-cover's two legs take Rule 115 rates from DIFFERENT months.
+ *
+ * The case that makes excluding them material. Sold same-day in the same month,
+ * both legs convert at one rate and the gain really is a rounding error. Vested
+ * on a month's last day and sold on the next month's first, the two basis months
+ * differ — and the taxable amount is then the whole proceeds times the rate
+ * movement, not the few dollars of price movement.
+ */
+function straddlesBasisMonths(exit: ExitTransaction): boolean {
+  const acquired = exit.allocations[0]?.acquisitionDate ?? exit.acquisitionDate;
+  if (acquired === undefined) return false;
+  return Rule115Resolver.basisDateFor(acquired) !== Rule115Resolver.basisDateFor(exit.exitDate);
 }
 
 export function compute(
   exits: readonly ExitTransaction[],
   subjects: Readonly<Record<string, AssetClass | TaxSubject>>,
   rules: TaxRuleSet,
+  options: CapitalGainsOptions = {},
 ): CapitalGainsResult {
   const gains: ClassifiedGain[] = [];
   const unconvertible: UnconvertibleGain[] = [];
+  const excludedSellToCover: ExcludedDisposal[] = [];
 
   for (const exit of exits) {
     // Keyed by transaction first: one asset can hold lots of differing character.
     const subject = subjects[exit.txnId] ?? subjects[exit.assetId];
     if (subject === undefined) continue;
+
+    /*
+     * Sell-to-cover, left out because the taxpayer has taken that position.
+     *
+     * Recorded in `excludedSellToCover` rather than skipped silently, and the
+     * ones whose legs straddle a month boundary are marked: those are the ones
+     * where "the gain is immaterial" stops being true, and the reader needs to
+     * see them to know whether the position still holds.
+     */
+    if (exit.disposalKind === 'SELL_TO_COVER' && options.includeSellToCover !== true) {
+      /*
+       * The gain is computed even though it is not charged, because the size of
+       * what is being left out is the whole question. Under FIFO a sell-to-cover
+       * is matched to the OLDEST lot, not to the vest it nominally funds, so the
+       * "same-day sale, negligible gain" reasoning routinely does not apply.
+       */
+      const excluded = taxableGainInr(exit);
+      excludedSellToCover.push({
+        txnId: exit.txnId,
+        exitDate: exit.exitDate,
+        ...(excluded.ok ? { gainInr: excluded.value } : {}),
+        straddlesBasisMonths: straddlesBasisMonths(exit),
+      });
+      continue;
+    }
 
     const classified = classify(exit, subject, rules);
     const gain = taxableGainInr(exit);
@@ -281,5 +373,6 @@ export function compute(
     taxableStcg: money(taxableStcg),
     tax: money(tax),
     unconvertible,
+    excludedSellToCover,
   };
 }

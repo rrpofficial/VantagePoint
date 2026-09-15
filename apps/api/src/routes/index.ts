@@ -30,8 +30,11 @@ import {
   TradeUC,
   ValuePortfolioUC,
   VaultUC,
+  enabledInclusionLabels,
   hasIncomeProfile,
+  incomeInclusionsOf,
   incomeProfileOf,
+  saveIncomeInclusions,
   saveIncomeProfile,
 } from '@porttrack/app-services';
 import { PiiVerifier } from '@porttrack/pii-masker';
@@ -338,6 +341,17 @@ export function registerRoutes(app: FastifyInstance): void {
       const { status, body } = refusal(result.error, 422);
       return reply.code(status).send(body);
     },
+  );
+
+  /*
+   * Does the imported history account for what the broker says is held?
+   *
+   * Its own route rather than a field on the ledger: it answers a question about
+   * COMPLETENESS, and folding it into the holdings payload would let a screen
+   * render the positions while ignoring the warning that they are short.
+   */
+  app.get('/api/ledger/reconciliation', async (_request, reply) =>
+    reply.send(await LedgerUC.reconciliation()),
   );
 
   /* ------------------------------------------------------------- trades */
@@ -715,6 +729,43 @@ export function registerRoutes(app: FastifyInstance): void {
     }
     const saved = await saveIncomeProfile(body.profile as Parameters<typeof saveIncomeProfile>[0]);
     if (saved.ok) return reply.send({ present: true });
+    const { status, body: failed } = refusal(saved.error, 409);
+    return reply.code(status).send(failed);
+  });
+
+  /*
+   * Which ledger-derived receipts count as income. Both off by default; see the
+   * note in `app-services/income-inclusions.ts` for why the product declines to
+   * take that position on the user's behalf.
+   */
+  app.get('/api/tax/income-inclusions', (_request, reply) =>
+    reply.send({
+      inclusions: incomeInclusionsOf(),
+      // Sent rather than derived in the browser, so the words beside a tax
+      // figure and the flags that produced it cannot disagree.
+      enabled: enabledInclusionLabels(),
+    }),
+  );
+
+  app.put('/api/tax/income-inclusions', async (request, reply) => {
+    const body = request.body as
+      | { handLoanInterest?: unknown; chitFundReturns?: unknown; sellToCoverGains?: unknown }
+      | undefined;
+
+    // Absent means false, never "leave as it was": this is a PUT of the whole
+    // position, and a partial body that silently kept a flag on would be the one
+    // way to enable something without asking for it.
+    const saved = await saveIncomeInclusions({
+      handLoanInterest: body?.handLoanInterest === true,
+      chitFundReturns: body?.chitFundReturns === true,
+      sellToCoverGains: body?.sellToCoverGains === true,
+    });
+    if (saved.ok) {
+      return reply.send({
+        inclusions: incomeInclusionsOf(),
+        enabled: enabledInclusionLabels(),
+      });
+    }
     const { status, body: failed } = refusal(saved.error, 409);
     return reply.code(status).send(failed);
   });

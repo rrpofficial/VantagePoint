@@ -1,10 +1,40 @@
 /**
- * Acquisition lots and FIFO allocation (US-1.2, US-1.3, PRD FR-1.2).
+ * Acquisition lots and lot identification (US-1.2, US-1.3, PRD FR-1.2).
  *
- * FIFO is not a preference — it is the lot-identification method Indian capital
- * gains computation assumes. Allocation is therefore ordered by acquisition date
- * regardless of the order lots arrive in, and an oversell mutates nothing: a
- * partially-applied exit would silently corrupt every later gain calculation.
+ * ## Two matching methods, and when each applies
+ *
+ * FIFO is the right default, but it is NOT a universal rule — an earlier version
+ * of this comment claimed it was, which overstated the position.
+ *
+ * FIFO for shares comes from CBDT Circular No. 768 (1998), which addresses
+ * securities held in DEMATERIALISED form with a depository. Its rationale is
+ * fungibility: once shares sit in a demat account they have no individual
+ * identity, so a convention is needed to decide which ones left. That reasoning
+ * is sound, and FIFO is what this applies to domestic demat holdings.
+ *
+ * It does not obviously extend to shares in a foreign stock-plan account. Those
+ * are not demat securities under the Depositories Act, and their identity is not
+ * lost: the plan administrator tracks every share to its grant and release and
+ * states, on the statement it issues, exactly which tranche a given sale came
+ * out of. Where identity is preserved and evidenced, specific identification is
+ * the more defensible reading — and matching such a sale FIFO produces a figure
+ * the taxpayer cannot reconcile to their own broker statement.
+ *
+ * The concrete case: a sell-to-cover sold on vest day, matched FIFO, consumes
+ * the OLDEST lot held rather than the vest it funded. In real data that turned a
+ * few dollars of intraday movement into a five-figure rupee gain against a lot
+ * bought five years earlier — an artefact of discarding the lot reference the
+ * source supplied, not a tax outcome.
+ *
+ * So: `allocateSpecific` where the source names the lot, `allocateFifo`
+ * otherwise. Which one was used is recorded on the disposal, because a filed
+ * figure should say which convention produced it.
+ *
+ * **Specific identification for foreign stock-plan shares is a defensible
+ * position, not settled authority.** It is recorded rather than assumed.
+ *
+ * An oversell mutates nothing under either method: a partially-applied exit
+ * would silently corrupt every later gain calculation.
  */
 import {
   Err,
@@ -47,6 +77,7 @@ export function recordAcquisition(input: RecordAcquisitionInput): Result<Acquisi
 
   const lot: AcquisitionLot = {
     lotId: input.lotId ?? `lot_${String(++lotCounter).padStart(6, '0')}`,
+    ...(input.equityAward ? { equityAward: input.equityAward } : {}),
     acquisitionDate: input.tradeDate,
     settlementDate: input.settlementDate ?? addCalendarDays(input.tradeDate, lag),
     quantity: quantity.toFixed(),
@@ -137,6 +168,21 @@ export function allocateFifo(
       lotId: lot.lotId,
       quantity: take.toFixed(),
       costPerUnit: lot.costPerUnit,
+      /*
+       * Carried from the lot, and load-bearing rather than informational.
+       *
+       * Rule 115 converts the cost leg at the month-end BEFORE the units were
+       * acquired, and this is the only place that date survives into the
+       * disposal. Without it `capital-gains.rule115Legs` falls back to the exit's
+       * own date and converts cost at the SALE month's rate — which silently
+       * collapses the two-date conversion into a one-date one and erases the
+       * rupee movement between vest and sale. For a lot vested at ₹73 to the
+       * dollar and sold at ₹94 that is most of the taxable gain.
+       */
+      acquisitionDate: lot.acquisitionDate,
+      // Likewise: grandfathering is decided per lot, and the disposal cannot
+      // look the lot up again once allocated.
+      ...(lot.grandfatheredFmv === undefined ? {} : { grandfatheredFmv: lot.grandfatheredFmv }),
     });
     consumed.set(lot.lotId, remaining.minus(take).toFixed());
     outstanding = outstanding.minus(take);
@@ -148,6 +194,71 @@ export function allocateFifo(
   });
 
   return Ok({ allocations, updatedLots });
+}
+
+/**
+ * Allocates against the ONE lot the source named.
+ *
+ * For a disposal whose origin is documented — a stock-plan sale that states its
+ * grant and vest date — this reproduces what the broker's own statement says,
+ * rather than re-deriving a different answer from a convention meant for
+ * fungible demat holdings.
+ *
+ * Refuses rather than part-fills. A named lot that cannot cover the sale means
+ * the ledger's picture of that tranche disagrees with the source — typically
+ * because some of its history has not been imported — and quietly taking the
+ * rest from elsewhere would bury that. The caller falls back to FIFO explicitly
+ * and records that it did.
+ */
+export function allocateSpecific(
+  lots: readonly AcquisitionLot[],
+  lotId: string,
+  quantity: string,
+): Result<AllocationResult> {
+  let wanted: Decimal;
+  try {
+    wanted = dec(quantity);
+  } catch {
+    return Err(new InvalidQuantityError(`"${quantity}" is not a valid quantity`));
+  }
+  if (!wanted.isFinite() || wanted.lessThanOrEqualTo(0)) {
+    return Err(new InvalidQuantityError('exit quantity must be greater than zero'));
+  }
+
+  const lot = lots.find((candidate) => candidate.lotId === lotId);
+  if (lot === undefined) {
+    return Err(
+      new InsufficientQuantityError(`lot ${lotId} is not held; cannot match this sale to it`),
+    );
+  }
+
+  const remaining = dec(lot.remainingQuantity);
+  if (remaining.lessThan(wanted)) {
+    return Err(
+      new InsufficientQuantityError(
+        `lot ${lotId} holds ${remaining.toFixed()} units; the sale is for ${wanted.toFixed()}`,
+      ),
+    );
+  }
+
+  return Ok({
+    allocations: [
+      {
+        lotId: lot.lotId,
+        quantity: wanted.toFixed(),
+        costPerUnit: lot.costPerUnit,
+        // Carried for the same reason FIFO carries it: Rule 115 converts the
+        // cost leg at the month-end before THIS lot was acquired.
+        acquisitionDate: lot.acquisitionDate,
+        ...(lot.grandfatheredFmv === undefined ? {} : { grandfatheredFmv: lot.grandfatheredFmv }),
+      },
+    ],
+    updatedLots: lots.map((candidate) =>
+      candidate.lotId === lotId
+        ? { ...candidate, remainingQuantity: remaining.minus(wanted).toFixed() }
+        : candidate,
+    ),
+  });
 }
 
 /**

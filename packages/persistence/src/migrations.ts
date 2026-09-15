@@ -357,6 +357,117 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX idx_fx_rates_lookup ON fx_rates(currency, source, rate_date);
     `,
   },
+  {
+    version: 9,
+    name: 'disposal-rupee-legs',
+    up: `
+      -- Both legs of a disposal in rupees, stored rather than re-derived.
+      --
+      -- For a lot vested on d1 at vp$ and sold on d2 at sp$, quantity q:
+      --
+      --   valuation_inr      = sp$ × q × rate(d2)                  display only
+      --   proceeds_tax_inr   = sp$ × q × rate(month-end before d2)
+      --   cost_basis_tax_inr = vp$ × q × rate(month-end before d1)
+      --   taxable_gain_inr   = proceeds_tax_inr − cost_basis_tax_inr
+      --
+      -- Only the last is charged to tax. valuation_inr uses a DIFFERENT rate
+      -- (ADR-003) and must never reach a tax computation.
+      --
+      -- The rename is the point of this migration. The column was taxable_inr,
+      -- sitting beside valuation_inr, and the pair read as one quantity at two
+      -- rates — so it was populated at least once with converted PROCEEDS while
+      -- the capital-gains engine reads it as the finished GAIN and returns it
+      -- unchanged. That charges tax on the whole sale value instead of the
+      -- profit, and the figure it produces looks entirely ordinary.
+      --
+      -- Safe as a rename rather than a rebuild: nothing in the product ever
+      -- wrote this column (the projector did not set it), so every existing row
+      -- holds NULL. There is no stored value to reinterpret.
+      ALTER TABLE exits RENAME COLUMN taxable_inr TO taxable_gain_inr;
+      ALTER TABLE exits ADD COLUMN proceeds_tax_inr TEXT;
+      ALTER TABLE exits ADD COLUMN cost_basis_tax_inr TEXT;
+    `,
+  },
+  {
+    version: 10,
+    name: 'equity-award-identity',
+    up: `
+      -- Grant → tranche → disposal, the three levels a stock plan actually has.
+      --
+      -- One grant vests in tranches over years; one tranche is commonly sold
+      -- across several orders (a sell-to-cover on vest day, a manual sale
+      -- later). Without the grant reference a lot is identified by the file it
+      -- was read from, so the same vest appearing in a Gains & Losses export and
+      -- in a holdings export becomes two lots.
+      --
+      -- ESPP carries no grant number, so grant_date stands in as the offering's
+      -- identifier; the tranche is then the PURCHASE date, because one offering
+      -- commonly has several purchase dates.
+      ALTER TABLE lots ADD COLUMN award_kind   TEXT CHECK (award_kind IN ('RSU','ESPP'));
+      ALTER TABLE lots ADD COLUMN grant_ref    TEXT;
+      ALTER TABLE lots ADD COLUMN grant_date   TEXT;
+      ALTER TABLE lots ADD COLUMN vest_date    TEXT;
+      ALTER TABLE lots ADD COLUMN purchase_date TEXT;
+      -- ESPP: what was actually PAID, which is NOT the cost basis. Section
+      -- 49(2AA) sets the basis at fair market value on the acquisition date; the
+      -- discount below it was already charged as a salary perquisite, and using
+      -- the price paid would tax that discount a second time.
+      ALTER TABLE lots ADD COLUMN purchase_price TEXT;
+      ALTER TABLE lots ADD COLUMN discount_per_unit TEXT;
+      ALTER TABLE lots ADD COLUMN fmv_at_acquisition TEXT;
+
+      CREATE INDEX idx_lots_grant ON lots(grant_ref);
+
+      -- Why the shares left, and under which order.
+      --
+      -- A sell-to-cover is a genuine transfer: the units deplete the lot and
+      -- Schedule FA counts them. Whether it is CHARGED to capital gains is a
+      -- position the taxpayer takes, so it is flagged rather than dropped.
+      ALTER TABLE exits ADD COLUMN disposal_kind TEXT
+        CHECK (disposal_kind IN ('SALE','SELL_TO_COVER'));
+      ALTER TABLE exits ADD COLUMN order_ref TEXT;
+    `,
+  },
+  {
+    version: 11,
+    name: 'lot-matching-method',
+    up: `
+      -- Which lot-identification convention produced a disposal's allocations.
+      --
+      -- FIFO comes from CBDT Circular 768 (1998), which addresses securities
+      -- held in DEMATERIALISED form. Its rationale is fungibility: demat shares
+      -- have no individual identity, so a convention is needed. That does not
+      -- obviously extend to a foreign stock-plan account, where the plan
+      -- administrator tracks every share to its grant and release and says so on
+      -- the statement — and where matching FIFO produces a figure the taxpayer
+      -- cannot reconcile against their own broker report.
+      --
+      -- Stored rather than assumed because the two methods give different
+      -- answers, and a filed figure should record which one it rests on. Rows
+      -- written before this column existed were all FIFO, which is what a NULL
+      -- reads as.
+      ALTER TABLE exits ADD COLUMN lot_matching TEXT
+        CHECK (lot_matching IN ('SPECIFIC','FIFO'));
+    `,
+  },
+  {
+    version: 12,
+    name: 'stated-remaining-quantity',
+    up: `
+      -- What the BROKER says is left of a tranche, beside what the ledger works
+      -- out for itself.
+      --
+      -- Deliberately a second column rather than a correction to
+      -- remaining_quantity. When they disagree, disposals exist that were never
+      -- imported — and that is invisible any other way, because every figure
+      -- derived from the ledger is internally consistent and simply wrong.
+      --
+      -- Stored rather than compared at import time: an import-time check only
+      -- fires on the file that carried the stated figure, so loading holdings
+      -- first and disposals second would compare nothing at all.
+      ALTER TABLE lots ADD COLUMN stated_remaining_quantity TEXT;
+    `,
+  },
 ];
 
 const SCHEMA_TABLE = `

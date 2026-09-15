@@ -173,8 +173,28 @@ export type ParserName =
   | 'ZERODHA_TAX_PNL'
   | 'VESTED'
   | 'ETRADE'
+  | 'ETRADE_GL'
+  | 'ETRADE_HOLDINGS'
   | 'CAMS'
   | 'TEMPLATE';
+
+export interface TrancheDiscrepancy {
+  readonly assetId: string;
+  readonly lotId: string;
+  readonly symbol?: string;
+  readonly acquisitionDate: string;
+  readonly grantRef?: string;
+  readonly stated: string;
+  readonly computed: string;
+  readonly difference: string;
+}
+
+export interface HoldingsReconciliation {
+  readonly discrepancies: readonly TrancheDiscrepancy[];
+  readonly agreed: number;
+  readonly unaccountedUnits: string;
+  readonly noStatementLoaded: boolean;
+}
 
 export interface RowError {
   readonly row: number;
@@ -494,6 +514,20 @@ export interface IncomeProfileState {
   readonly profile: Record<string, unknown> | null;
 }
 
+/** Ledger-derived receipts the user has opted INTO taxing. Both off by default. */
+export interface IncomeInclusions {
+  readonly handLoanInterest: boolean;
+  readonly chitFundReturns: boolean;
+  /** Charge shares sold on vest day to fund withholding. Off by default. */
+  readonly sellToCoverGains: boolean;
+}
+
+export interface IncomeInclusionsState {
+  readonly inclusions: IncomeInclusions;
+  /** Labels for what is switched on, phrased by the API so the two cannot drift. */
+  readonly enabled: readonly string[];
+}
+
 export interface ScheduleAlSection {
   readonly head: string;
   readonly items: readonly { readonly description: string; readonly costOfAcquisition: Money }[];
@@ -735,6 +769,15 @@ export const api = {
     request<{ present: boolean }>('/tax/income-profile', {
       method: 'POST',
       body: JSON.stringify({ profile }),
+    }),
+
+  reconciliation: () => request<HoldingsReconciliation>('/ledger/reconciliation'),
+
+  incomeInclusions: () => request<IncomeInclusionsState>('/tax/income-inclusions'),
+  saveIncomeInclusions: (inclusions: IncomeInclusions) =>
+    request<IncomeInclusionsState>('/tax/income-inclusions', {
+      method: 'PUT',
+      body: JSON.stringify(inclusions),
     }),
 
   scheduleFa: (calendarYear: number) =>

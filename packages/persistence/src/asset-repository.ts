@@ -29,6 +29,7 @@ import type {
   ChitFund,
   CorporateAction,
   DualRate,
+  EquityAward,
   ExitTransaction,
   HandLoan,
   IncomeEvent,
@@ -77,6 +78,15 @@ interface LotRow {
   readonly grandfathered_fmv: string | null;
   readonly perquisite_value: string | null;
   readonly is_bonus: number;
+  readonly award_kind: string | null;
+  readonly grant_ref: string | null;
+  readonly grant_date: string | null;
+  readonly vest_date: string | null;
+  readonly purchase_date: string | null;
+  readonly purchase_price: string | null;
+  readonly discount_per_unit: string | null;
+  readonly fmv_at_acquisition: string | null;
+  readonly stated_remaining_quantity: string | null;
 }
 
 interface IncomeRow {
@@ -202,10 +212,39 @@ function toDualRate(row: LotRow): DualRate | undefined {
   };
 }
 
+/**
+ * The grant this lot came out of.
+ *
+ * Keyed on `grant_ref` being present: every equity-award lot has one, and an
+ * ordinary purchase has none. Rebuilt whole rather than field by field so a
+ * half-written award can never masquerade as a complete one.
+ */
+function toEquityAward(row: LotRow): EquityAward | undefined {
+  if (row.grant_ref === null || row.award_kind === null) return undefined;
+  return {
+    kind: row.award_kind as EquityAward['kind'],
+    grantRef: row.grant_ref,
+    ...(row.grant_date === null ? {} : { grantDate: row.grant_date }),
+    ...(row.vest_date === null ? {} : { vestDate: row.vest_date }),
+    ...(row.purchase_date === null ? {} : { purchaseDate: row.purchase_date }),
+    ...(row.purchase_price === null
+      ? {}
+      : { purchasePrice: money(row.purchase_price, row.cost_currency) }),
+    ...(row.discount_per_unit === null
+      ? {}
+      : { discountPerUnit: money(row.discount_per_unit, row.cost_currency) }),
+    ...(row.fmv_at_acquisition === null
+      ? {}
+      : { fmvAtAcquisition: money(row.fmv_at_acquisition, row.cost_currency) }),
+  };
+}
+
 function toLot(row: LotRow): AcquisitionLot {
   const fx = toDualRate(row);
+  const equityAward = toEquityAward(row);
   return {
     lotId: row.lot_id,
+    ...(equityAward === undefined ? {} : { equityAward }),
     acquisitionDate: row.acquisition_date,
     settlementDate: row.settlement_date,
     quantity: row.quantity,
@@ -221,6 +260,9 @@ function toLot(row: LotRow): AcquisitionLot {
     ...(row.perquisite_value === null
       ? {}
       : { perquisiteValue: money(row.perquisite_value, row.cost_currency) }),
+    ...(row.stated_remaining_quantity === null
+      ? {}
+      : { statedRemainingQuantity: row.stated_remaining_quantity }),
     ...(row.is_bonus === 1 ? { isBonus: true } : {}),
   };
 }
@@ -428,8 +470,10 @@ function writeAsset(asset: Asset): void {
        (lot_id, asset_id, acquisition_date, settlement_date, quantity, remaining_quantity,
         cost_per_unit, cost_currency, fees, stt, other_charges, valuation_rate, tax_rate,
         rate_source, tax_rate_source, fx_is_fallback, fx_fallback_note, grandfathered_fmv,
-        perquisite_value, is_bonus)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        perquisite_value, is_bonus, award_kind, grant_ref, grant_date, vest_date,
+        purchase_date, purchase_price, discount_per_unit, fmv_at_acquisition,
+        stated_remaining_quantity)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   for (const lot of asset.lots) {
     insertLot.run(
@@ -453,6 +497,15 @@ function writeAsset(asset: Asset): void {
       lot.grandfatheredFmv?.amount ?? null,
       lot.perquisiteValue?.amount ?? null,
       lot.isBonus === true ? 1 : 0,
+      lot.equityAward?.kind ?? null,
+      lot.equityAward?.grantRef ?? null,
+      lot.equityAward?.grantDate ?? null,
+      lot.equityAward?.vestDate ?? null,
+      lot.equityAward?.purchaseDate ?? null,
+      lot.equityAward?.purchasePrice?.amount ?? null,
+      lot.equityAward?.discountPerUnit?.amount ?? null,
+      lot.equityAward?.fmvAtAcquisition?.amount ?? null,
+      lot.statedRemainingQuantity ?? null,
     );
   }
 
@@ -674,7 +727,12 @@ interface ExitRow {
   readonly fx_is_fallback: number | null;
   readonly fx_fallback_note: string | null;
   readonly valuation_inr: string | null;
-  readonly taxable_inr: string | null;
+  readonly proceeds_tax_inr: string | null;
+  readonly cost_basis_tax_inr: string | null;
+  readonly taxable_gain_inr: string | null;
+  readonly disposal_kind: string | null;
+  readonly order_ref: string | null;
+  readonly lot_matching: string | null;
 }
 
 function toExit(row: ExitRow): ExitTransaction {
@@ -702,7 +760,22 @@ function toExit(row: ExitRow): ExitTransaction {
     allocations: JSON.parse(row.allocations) as LotAllocation[],
     ...(fx === undefined ? {} : { fx }),
     ...(row.valuation_inr === null ? {} : { valuationInr: money(row.valuation_inr, 'INR') }),
-    ...(row.taxable_inr === null ? {} : { taxableInr: money(row.taxable_inr, 'INR') }),
+    ...(row.proceeds_tax_inr === null
+      ? {}
+      : { proceedsTaxInr: money(row.proceeds_tax_inr, 'INR') }),
+    ...(row.cost_basis_tax_inr === null
+      ? {}
+      : { costBasisTaxInr: money(row.cost_basis_tax_inr, 'INR') }),
+    ...(row.taxable_gain_inr === null
+      ? {}
+      : { taxableGainInr: money(row.taxable_gain_inr, 'INR') }),
+    ...(row.disposal_kind === null
+      ? {}
+      : { disposalKind: row.disposal_kind as NonNullable<ExitTransaction['disposalKind']> }),
+    ...(row.order_ref === null ? {} : { orderRef: row.order_ref }),
+    // NULL reads as FIFO: every disposal written before the column existed was
+    // matched that way, and leaving it absent would make them look unrecorded.
+    lotMatching: (row.lot_matching ?? 'FIFO') as NonNullable<ExitTransaction['lotMatching']>,
   };
 }
 
@@ -723,8 +796,9 @@ export const ExitRepository = {
       `INSERT INTO exits
          (txn_id, asset_id, exit_date, acquisition_date, quantity, price_per_unit, currency,
           fees, stt, allocations, valuation_rate, tax_rate, rate_source, tax_rate_source,
-          fx_is_fallback, fx_fallback_note, valuation_inr, taxable_inr)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          fx_is_fallback, fx_fallback_note, valuation_inr, proceeds_tax_inr,
+          cost_basis_tax_inr, taxable_gain_inr, disposal_kind, order_ref, lot_matching)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(txn_id) DO NOTHING`,
     );
 
@@ -748,7 +822,12 @@ export const ExitRepository = {
           exit.fx === undefined ? null : exit.fx.isFallback ? 1 : 0,
           exit.fx?.fallbackNote ?? null,
           exit.valuationInr?.amount ?? null,
-          exit.taxableInr?.amount ?? null,
+          exit.proceedsTaxInr?.amount ?? null,
+          exit.costBasisTaxInr?.amount ?? null,
+          exit.taxableGainInr?.amount ?? null,
+          exit.disposalKind ?? null,
+          exit.orderRef ?? null,
+          exit.lotMatching ?? null,
         );
       }
     })();

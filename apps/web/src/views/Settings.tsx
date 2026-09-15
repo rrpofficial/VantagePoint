@@ -6,7 +6,7 @@
  * entries" must not read as "logging is broken".
  */
 import { useCallback, useEffect, useState, type SyntheticEvent } from 'react';
-import { api } from '../api.js';
+import { api, type IncomeInclusions, type IncomeInclusionsState } from '../api.js';
 import { Card, Chip } from '../components/primitives.js';
 import { useEditMode } from '../edit-mode.js';
 
@@ -34,6 +34,7 @@ export function Settings({ onLocked }: { onLocked: () => void }) {
   return (
     <div className="pt-stack">
       <EditModeCard />
+      <IncomeInclusionsCard />
 
       <Card
         title="Vault"
@@ -108,6 +109,148 @@ export function Settings({ onLocked }: { onLocked: () => void }) {
         )}
       </Card>
     </div>
+  );
+}
+
+/**
+ * Which ledger-derived receipts count as taxable income.
+ *
+ * Both are off, and the copy says so in words rather than leaving the reader to
+ * infer it from two unchecked boxes. A tax figure that quietly omits something
+ * is worse than one that omits it loudly: the user cannot audit an exclusion
+ * they were never told about.
+ *
+ * The toggles are edit-mode gated because switching one moves every advance-tax
+ * figure at once — the same reason replacing an income profile is gated.
+ */
+function IncomeInclusionsCard() {
+  const editMode = useEditMode();
+  const [state, setState] = useState<IncomeInclusionsState | undefined>();
+  const [error, setError] = useState<string | undefined>();
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(async (): Promise<void> => {
+    const result = await api.incomeInclusions();
+    if (result.ok) setState(result.value);
+    else setError(result.error.message);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const toggle = useCallback(
+    async (key: keyof IncomeInclusions): Promise<void> => {
+      if (state === undefined || saving) return;
+      setSaving(true);
+      setError(undefined);
+      const next = { ...state.inclusions, [key]: !state.inclusions[key] };
+      const result = await api.saveIncomeInclusions(next);
+      setSaving(false);
+      if (result.ok) setState(result.value);
+      else setError(result.error.message);
+    },
+    [saving, state],
+  );
+
+  const inclusions = state?.inclusions;
+  const enabled = state?.enabled ?? [];
+
+  return (
+    <Card
+      title="What counts as income"
+      action={
+        <Chip>
+          {state === undefined
+            ? 'Loading'
+            : enabled.length === 0
+              ? 'Defaults'
+              : `${String(enabled.length)} added`}
+        </Chip>
+      }
+    >
+      <p className="pt-muted">
+        Hand-loan interest and chit-fund returns are <strong>excluded</strong> from tax
+        calculations unless you turn them on here. Both are positions that depend on facts this
+        application does not have — whether you are taxed on receipt or on accrual, and whether a
+        chit surplus is income at all — so it declines to decide either for you.
+      </p>
+      <p className="pt-muted">
+        They are counted in net worth either way. This setting changes what is taxed, not what you
+        are shown to own.
+      </p>
+
+      {inclusions !== undefined && (
+        <div className="pt-form">
+          <label className="pt-check">
+            <input
+              type="checkbox"
+              checked={inclusions.handLoanInterest}
+              disabled={saving || !editMode.enabled}
+              data-testid="include-hand-loan-interest"
+              onChange={() => void toggle('handLoanInterest')}
+            />
+            <span>
+              Tax interest accrued on hand loans given out
+            </span>
+          </label>
+          <label className="pt-check">
+            <input
+              type="checkbox"
+              checked={inclusions.chitFundReturns}
+              disabled={saving || !editMode.enabled}
+              data-testid="include-chit-fund-returns"
+              onChange={() => void toggle('chitFundReturns')}
+            />
+            <span>Tax dividends and surplus arising on chit funds</span>
+          </label>
+          <label className="pt-check">
+            <input
+              type="checkbox"
+              checked={inclusions.sellToCoverGains}
+              disabled={saving || !editMode.enabled}
+              data-testid="include-sell-to-cover"
+              onChange={() => void toggle('sellToCoverGains')}
+            />
+            <span>
+              Tax shares sold on vest day to cover withholding{' '}
+              <em>(sell-to-cover)</em>
+            </span>
+          </label>
+        </div>
+      )}
+
+      {inclusions?.sellToCoverGains === false && (
+        <p className="pt-muted">
+          Sell-to-cover is sold same-day at roughly the vest price, so the gain is usually a
+          rounding error. It stops being one when the vest and the sale fall either side of a
+          month end — the two Rule 115 rates then differ, and the amount left out is the whole
+          proceeds times that movement. Those disposals are listed on the Tax screen rather than
+          dropped quietly.
+        </p>
+      )}
+
+      {state !== undefined && enabled.length === 0 && (
+        <p className="pt-muted" data-testid="income-inclusions-none">
+          Nothing extra is being taxed. Tax figures cover trades, disposals and the income you
+          record yourself.
+        </p>
+      )}
+
+      {/* Not the shared EditModeHint: that one sends the reader to Settings,
+          and they are already on it — the switch is the card above this one. */}
+      {!editMode.enabled && (
+        <p className="pt-muted" data-testid="income-inclusions-locked">
+          Turn on edit mode above to change these. Switching one moves every tax figure at once.
+        </p>
+      )}
+
+      {error !== undefined && (
+        <p className="pt-error" role="alert" data-testid="income-inclusions-error">
+          {error}
+        </p>
+      )}
+    </Card>
   );
 }
 

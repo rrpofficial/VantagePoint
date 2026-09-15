@@ -10,7 +10,14 @@
  * one the Dashboard shows, so the two screens cannot disagree about net worth.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { api, type AssetBucket, type LoanRegister, type ChitRegister, type Ledger } from '../api.js';
+import {
+  api,
+  type AssetBucket,
+  type ChitRegister,
+  type HoldingsReconciliation,
+  type Ledger,
+  type LoanRegister,
+} from '../api.js';
 import { Amount, Card } from '../components/primitives.js';
 import { navigateToAsset, type AssetTab } from '../router.js';
 
@@ -24,15 +31,22 @@ interface BucketLine {
 
 export function AssetsOverview() {
   const [lines, setLines] = useState<readonly BucketLine[] | undefined>();
+  const [reconciliation, setReconciliation] = useState<HoldingsReconciliation | undefined>();
   const [error, setError] = useState<string | undefined>();
 
   const load = useCallback(async (): Promise<void> => {
-    const [ledger, loans, chits] = await Promise.all([api.ledger(), api.loans(), api.chits()]);
+    const [ledger, loans, chits, recon] = await Promise.all([
+      api.ledger(),
+      api.loans(),
+      api.chits(),
+      api.reconciliation(),
+    ]);
     if (!ledger.ok) {
       setError(ledger.error.message);
       return;
     }
     setError(undefined);
+    if (recon.ok) setReconciliation(recon.value);
     setLines(summarise(ledger.value, loans.ok ? loans.value : undefined, chits.ok ? chits.value : undefined));
   }, []);
 
@@ -62,6 +76,55 @@ export function AssetsOverview() {
 
   return (
     <div className="pt-stack">
+      {/*
+        Above the figures, not below them. Everything on this screen is derived
+        from the ledger, so when history is missing every number here is
+        internally consistent and short — the warning has to reach the reader
+        before the totals do, or it explains a discrepancy they have already
+        stopped questioning.
+      */}
+      {reconciliation !== undefined &&
+        !reconciliation.noStatementLoaded &&
+        reconciliation.discrepancies.length > 0 && (
+          <Card title="Your broker and this ledger disagree">
+            <p className="pt-callout pt-callout--warn" role="status" data-testid="reconciliation-warning">
+              <strong>
+                {reconciliation.discrepancies.length} holding
+                {reconciliation.discrepancies.length === 1 ? '' : 's'} carry more units here than
+                your statement says you hold
+              </strong>{' '}
+              — {reconciliation.unaccountedUnits} units in total. That is almost always disposals
+              that were never imported: a sale from a year whose statement you have not loaded, or
+              one made outside the plan account. Until it is resolved these holdings are overstated,
+              and so is any gain computed from them.
+            </p>
+            <div className="pt-table-scroll">
+              <table className="pt-table" data-testid="reconciliation-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Acquired</th>
+                    <th scope="col">Asset</th>
+                    <th scope="col" className="pt-align-end">Your statement</th>
+                    <th scope="col" className="pt-align-end">This ledger</th>
+                    <th scope="col" className="pt-align-end">Unaccounted</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {reconciliation.discrepancies.map((row) => (
+                    <tr key={row.lotId}>
+                      <td>{row.acquisitionDate}</td>
+                      <td>{row.symbol ?? row.assetId}</td>
+                      <td className="pt-align-end pt-numeric">{row.stated}</td>
+                      <td className="pt-align-end pt-numeric">{row.computed}</td>
+                      <td className="pt-align-end pt-numeric">{row.difference}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
+
       <Card title="What you own">
         <p className="pt-muted">
           Split by what each holding <strong>is</strong>. A fund appears under Equity or Non-Equity
