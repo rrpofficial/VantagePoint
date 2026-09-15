@@ -28,6 +28,19 @@ export function borrowerRef(rawName: string): string {
   return `brw_${createHash('sha256').update(rawName.trim().toLowerCase()).digest('hex').slice(0, 16)}`;
 }
 
+/**
+ * A property's street address, hashed at the parser boundary like a borrower's
+ * name and for the same reason: it identifies a household that never consented
+ * to being in anyone's dataset. The plain address lives only in the encrypted
+ * vault; this is what an export or an AI payload carries.
+ *
+ * Deterministic, so the same address resolves to the same reference across
+ * entries rather than fragmenting one property into several.
+ */
+export function addressRef(rawAddress: string): string {
+  return `addr_${createHash('sha256').update(rawAddress.trim().toLowerCase()).digest('hex').slice(0, 16)}`;
+}
+
 export function provenanceFor(
   sourceFile: string,
   sourceRow: number,

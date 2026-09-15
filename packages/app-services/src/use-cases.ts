@@ -1393,11 +1393,15 @@ export const PropertyUC = {
   async record(input: RecordPropertyInput): Promise<Result<RecordPropertyResult>> {
     const guard = requireUnlocked();
     if (!guard.ok) return guard;
-    // A sale changes what is held and what is taxable, so it is gated like every
-    // other figure-changing write.
-    const permitted = requireEditMode('recording an immovable property transaction');
-    if (!permitted.ok) return permitted;
 
+    /*
+     * Ungated, like every other ADDITION — `TradeUC.record` and
+     * `recordPayment` are the precedent. Edit mode exists for the risk of a
+     * figure silently CHANGING; recording a purchase or a sale that happened
+     * adds a fact and cannot understate anything. Gating it here made the only
+     * way to enter a property unreachable until the user found Settings, for a
+     * write no less safe than typing a trade.
+     */
     const built = buildPropertyEntry(input);
     if (!built.ok) return built;
     const { property, transaction, charges, advisories } = built.value;

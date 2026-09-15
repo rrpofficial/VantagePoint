@@ -54,21 +54,16 @@ function acquisitionCost(asset: LedgerAsset): number {
 }
 
 /**
- * Recording a property is a figure-changing write, so it is gated on edit mode
- * exactly as deleting one is. Disabled rather than hidden: a control that
- * vanishes leaves the user hunting for a feature they were told exists, where a
- * disabled one with a reason sends them to Settings.
+ * Not gated on edit mode, matching the trade form.
+ *
+ * Edit mode guards a figure CHANGING — an edit, a deletion, a status reversal.
+ * Recording a purchase or a sale that happened is an addition, and the ledger
+ * treats it exactly as it treats a typed-in trade. It was briefly gated, which
+ * left the only way to enter a property disabled with no visible reason.
  */
-function AddPropertyButton({ enabled, onClick }: { enabled: boolean; onClick: () => void }) {
+function AddPropertyButton({ onClick }: { onClick: () => void }) {
   return (
-    <button
-      type="button"
-      className="pt-button-inline"
-      onClick={onClick}
-      disabled={!enabled}
-      title={enabled ? undefined : 'Enable edit mode in Settings to record a property'}
-      data-testid="add-property"
-    >
+    <button type="button" className="pt-button-inline" onClick={onClick} data-testid="add-property">
       Add property or transaction
     </button>
   );
@@ -123,7 +118,6 @@ export function Immovable() {
         </p>
         <div className="pt-actions">
           <AddPropertyButton
-            enabled={editMode.enabled}
             onClick={() => {
               setAdding(true);
             }}
@@ -158,7 +152,6 @@ export function Immovable() {
           <div className="pt-actions pt-actions--inline">
             <Chip>{`${String(properties.length)} propert${properties.length === 1 ? 'y' : 'ies'}`}</Chip>
             <AddPropertyButton
-              enabled={editMode.enabled}
               onClick={() => {
                 setAdding((open) => !open);
               }}

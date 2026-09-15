@@ -313,8 +313,20 @@ describe('Scenario: Input that would corrupt the register is refused', () => {
     expect((await propertyAsset())?.lots.length).toBeGreaterThan(1);
   });
 
-  it('is gated behind edit mode, like every other figure-changing write', async () => {
+  /*
+   * NOT gated on edit mode, matching `TradeUC.record`. Edit mode guards a figure
+   * CHANGING; recording a transaction that happened is an addition and cannot
+   * understate anything. Gating it made the only way to enter a property a
+   * disabled button.
+   */
+  it('records without edit mode, because an addition is not a change', async () => {
     EditModeUC.disable();
-    expectErr(await PropertyUC.record(PURCHASE), 'EDIT_MODE_REQUIRED');
+    expectOk(await PropertyUC.record(PURCHASE));
+    expect((await propertyAsset())?.property?.propertyName).toBe('Whitefield flat');
+  });
+
+  it('still refuses when the vault is locked', async () => {
+    await VaultUC.lock();
+    expectErr(await PropertyUC.record(PURCHASE), 'VAULT_STATE');
   });
 });

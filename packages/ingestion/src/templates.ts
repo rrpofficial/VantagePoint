@@ -27,9 +27,10 @@ import {
   type AreaUnit,
   type PropertyKind,
   type PropertyTransaction,
+  type ValuationBasis,
 } from '@porttrack/core-domain';
 import { normaliseDate, parseCsv, type CsvRow, type CsvTable } from './csv.js';
-import { borrowerRef, deterministicImportedAt, provenanceFor } from './provenance.js';
+import { addressRef, borrowerRef, deterministicImportedAt, provenanceFor } from './provenance.js';
 import type { ParsedLoanPayment, ParsedTransaction, RowError } from './types.js';
 
 export interface TemplateDefinition {
@@ -105,6 +106,10 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
     columns: [
       'property_name',
       'property_type',
+      // BUY or SELL. `purchase_date` and `purchase_price` keep their names for
+      // the sake of sheets already filled in, and mean the transaction's date
+      // and price on either side.
+      'transaction_type',
       'purchase_date',
       'area',
       'area_unit',
@@ -116,9 +121,17 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
       'other_taxes',
       'brokerage',
       'stamp_duty_value',
+      'address',
       'city',
       'state',
+      'pincode',
       'registration_number',
+      'survey_number',
+      'document_ref',
+      'notes',
+      'current_value',
+      'current_value_date',
+      'current_value_basis',
       'currency',
     ],
     /*
@@ -128,6 +141,7 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
      */
     optionalColumns: [
       'property_type',
+      'transaction_type',
       'area',
       'area_unit',
       'price_per_area_unit',
@@ -135,22 +149,38 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
       'other_taxes',
       'brokerage',
       'stamp_duty_value',
+      'address',
       'city',
       'state',
+      'pincode',
       'registration_number',
+      'survey_number',
+      'document_ref',
+      'notes',
+      'current_value',
+      'current_value_date',
+      'current_value_basis',
     ],
     description: 'Land and buildings, at cost of acquisition',
     assetClass: 'REAL_ESTATE',
     guidance:
+      'One row per TRANSACTION, not per property: a purchase and a later sale of the same ' +
+      'property are two rows sharing a property_name. transaction_type is BUY or SELL and ' +
+      'defaults to BUY; purchase_date and purchase_price mean the transaction\'s date and price ' +
+      'on either side (the names are kept so older sheets still import). ' +
       'Every duty is added to the cost of acquisition, which is what Schedule AL reports. ' +
-      'Enter the purchase price, not a current valuation. property_type is one of FLAT, ' +
-      'APARTMENT, INDEPENDENT_HOUSE, VILLA, PLOT, LAND, AGRICULTURAL_LAND, COMMERCIAL, SHOP, ' +
-      'OFFICE, WAREHOUSE, INDUSTRIAL, PARKING or OTHER. area_unit is the unit the DEED uses — ' +
-      'SQ_FT, SQ_M, SQ_YARD, ACRE, HECTARE, CENT, GUNTHA, GROUND, BIGHA, KATHA, KANAL, MARLA ' +
-      'and others; it is stored as stated and converted only for display, because the regional ' +
-      'units are not the same size everywhere. stamp_duty_value is the sub-registrar\'s assessed ' +
-      'value where it exceeds the price paid — s.50C and s.56(2)(x) turn on that difference. ' +
-      'Leave any column blank if the deed does not state it.',
+      'property_type is one of FLAT, APARTMENT, INDEPENDENT_HOUSE, VILLA, PLOT, LAND, ' +
+      'AGRICULTURAL_LAND, COMMERCIAL, SHOP, OFFICE, WAREHOUSE, INDUSTRIAL, PARKING or OTHER. ' +
+      'area_unit is the unit the DEED uses — SQ_FT, SQ_M, SQ_YARD, ACRE, HECTARE, CENT, GUNTHA, ' +
+      'GROUND, BIGHA, KATHA, KANAL, MARLA and others; it is stored as stated and converted only ' +
+      'for display, because the regional units are not the same size everywhere. ' +
+      'stamp_duty_value is the sub-registrar\'s assessed value where it exceeds the price paid — ' +
+      's.50C and s.56(2)(x) turn on that difference. current_value is optional and is NEVER used ' +
+      'for net worth, which is carried at cost; give all three of current_value, ' +
+      'current_value_date and current_value_basis (CIRCLE_RATE, REGISTERED_VALUER, ' +
+      'BROKER_ESTIMATE, RECENT_COMPARABLE or OWNER_ESTIMATE) or none. The address is stored ' +
+      'encrypted in your vault and is replaced by an opaque reference in anything that leaves ' +
+      'this machine. Leave any column blank if the deed does not state it.',
   },
   {
     name: 'Custom_Cash',
@@ -548,21 +578,48 @@ function mapRow(
 
       const charges = propertyChargesOf(property);
       const kind = reader.cell('property_type');
+      const address = reader.cell('address');
       const city = reader.cell('city');
       const state = reader.cell('state');
+      const pincode = reader.cell('pincode');
       const registrationNumber = reader.cell('registration_number');
+      const surveyNumber = reader.cell('survey_number');
+      const documentRef = reader.cell('document_ref');
+      const notes = reader.cell('notes');
+
+      /*
+       * A sale, where the sheet says so. Defaulting to BUY keeps every existing
+       * file importing unchanged — and an unrecognised value is a BUY too rather
+       * than an error, because "Purchase" and "purchase" and a blank all mean the
+       * same thing and rejecting a row over its capitalisation helps nobody.
+       */
+      const side = reader.cell('transaction_type').trim().toUpperCase() === 'SELL' ? 'SELL' : 'BUY';
+
+      // All three or none: a value with no date and no basis is a bare number,
+      // which is exactly what `ValuationBasis` exists to prevent.
+      const valueAmount = optionalMoneyOrAbsent(reader, 'current_value', currency);
+      const valueDate = reader.cell('current_value_date');
+      const valueBasis = reader.cell('current_value_basis').trim().toUpperCase();
+      const currentValue =
+        valueAmount === undefined || valueDate.length === 0 || valueBasis.length === 0
+          ? undefined
+          : {
+              amount: valueAmount,
+              asOf: normaliseDate(valueDate) ?? valueDate,
+              basis: valueBasis as ValuationBasis,
+            };
 
       return {
         txn: {
           ...base,
-          kind: 'BUY',
+          kind: side,
           date,
           symbol: name,
           quantity: charges.quantity,
           pricePerUnit: charges.costPerUnit,
           fees: charges.fees,
           otherCharges: charges.otherCharges,
-          property,
+          property: documentRef.length === 0 ? property : { ...property, documentRef },
           propertyDetail: {
             // The projector owns asset identity and fills this in.
             assetId: '',
@@ -571,17 +628,26 @@ function mapRow(
             // would invent a tax characteristic, since agricultural land outside
             // the s.2(14) limits is not a capital asset at all.
             kind: kind.length === 0 ? 'OTHER' : (kind.toUpperCase() as PropertyKind),
-            ...(city.length === 0 && state.length === 0
+            ...(address.length === 0 &&
+            city.length === 0 &&
+            state.length === 0 &&
+            pincode.length === 0
               ? {}
               : {
                   location: {
-                    addressRef: '',
+                    // Hashed at the parser boundary, like a borrower's name.
+                    addressRef: address.length === 0 ? '' : addressRef(address),
+                    ...(address.length === 0 ? {} : { address }),
                     ...(city.length === 0 ? {} : { city }),
                     ...(state.length === 0 ? {} : { state }),
+                    ...(pincode.length === 0 ? {} : { pincode }),
                   },
                 }),
             ...(property.area === undefined ? {} : { area: property.area }),
+            ...(currentValue === undefined ? {} : { currentValue }),
             ...(registrationNumber.length === 0 ? {} : { registrationNumber }),
+            ...(surveyNumber.length === 0 ? {} : { surveyNumber }),
+            ...(notes.length === 0 ? {} : { notes }),
           },
         },
       };
