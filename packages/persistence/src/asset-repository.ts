@@ -24,6 +24,7 @@ import {
 } from '@porttrack/shared-kernel';
 import type {
   AcquisitionLot,
+  AdvanceTaxPayment,
   Asset,
   AssetClass,
   ChitFund,
@@ -170,6 +171,17 @@ interface InterestPaymentRow {
   readonly amount: string;
   readonly currency: string;
   readonly mode: string;
+  readonly notes: string | null;
+}
+
+interface AdvanceTaxPaymentRow {
+  readonly payment_id: string;
+  readonly financial_year: string;
+  readonly quarter: string;
+  readonly amount: string;
+  readonly currency: string;
+  readonly paid_on: string;
+  readonly challan_ref: string | null;
   readonly notes: string | null;
 }
 
@@ -905,6 +917,72 @@ export const SettingsRepository = {
     const guard = requireUnlocked();
     if (!guard.ok) return Promise.resolve(guard);
     Vault.connection().prepare('DELETE FROM settings WHERE key = ?').run(key);
+    return Promise.resolve(Ok(undefined));
+  },
+};
+
+/**
+ * Advance tax already paid (US-5.10).
+ *
+ * Read on every instalment computation: the quarters are cumulative, so Q3's
+ * demand is the year's liability at 75% LESS everything already remitted. A
+ * missing payment here does not under-report — it over-demands, asking again for
+ * tax the taxpayer has a challan for.
+ */
+export const AdvanceTaxPaymentRepository = {
+  save(payment: AdvanceTaxPayment): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return Promise.resolve(guard);
+
+    Vault.connection()
+      .prepare(
+        `INSERT INTO advance_tax_payments
+           (payment_id, financial_year, quarter, amount, currency, paid_on, challan_ref, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(payment_id) DO UPDATE SET
+           amount = excluded.amount, paid_on = excluded.paid_on,
+           challan_ref = excluded.challan_ref, notes = excluded.notes`,
+      )
+      .run(
+        payment.paymentId,
+        payment.financialYear,
+        payment.quarter,
+        payment.amount.amount,
+        payment.amount.currency,
+        payment.paidOn,
+        payment.challanRef ?? null,
+        payment.notes ?? null,
+      );
+    return Promise.resolve(Ok(undefined));
+  },
+
+  forYear(financialYear: string): Promise<readonly AdvanceTaxPayment[]> {
+    if (!Vault.isUnlocked()) return Promise.resolve([]);
+    const rows = Vault.connection()
+      .prepare(
+        'SELECT * FROM advance_tax_payments WHERE financial_year = ? ORDER BY paid_on, payment_id',
+      )
+      .all(financialYear) as AdvanceTaxPaymentRow[];
+
+    return Promise.resolve(
+      rows.map((row) => ({
+        paymentId: row.payment_id,
+        financialYear: row.financial_year,
+        quarter: row.quarter as AdvanceTaxPayment['quarter'],
+        amount: money(row.amount, row.currency),
+        paidOn: row.paid_on,
+        ...(row.challan_ref === null ? {} : { challanRef: row.challan_ref }),
+        ...(row.notes === null ? {} : { notes: row.notes }),
+      })),
+    );
+  },
+
+  delete(paymentId: string): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return Promise.resolve(guard);
+    Vault.connection()
+      .prepare('DELETE FROM advance_tax_payments WHERE payment_id = ?')
+      .run(paymentId);
     return Promise.resolve(Ok(undefined));
   },
 };

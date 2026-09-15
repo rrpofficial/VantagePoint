@@ -490,6 +490,34 @@ export interface AdvanceTaxInstallment {
   readonly tdsCredit: Money;
   readonly alreadyPaid: Money;
   readonly netPayable: Money;
+  /**
+   * Gains that could NOT be converted to rupees, and are therefore absent from
+   * the figures above. Non-empty means the instalment is understated.
+   */
+  readonly capitalGains?: {
+    readonly unconvertible: readonly {
+      readonly txnId: string;
+      readonly currency: string;
+      readonly exitDate: string;
+      readonly reason: string;
+    }[];
+    readonly excludedSellToCover: readonly {
+      readonly txnId: string;
+      readonly exitDate: string;
+      readonly gainInr?: Money;
+      readonly straddlesBasisMonths: boolean;
+    }[];
+  };
+}
+
+export interface AdvanceTaxPayment {
+  readonly paymentId: string;
+  readonly financialYear: string;
+  readonly quarter: string;
+  readonly amount: Money;
+  readonly paidOn: string;
+  readonly challanRef?: string;
+  readonly notes?: string;
 }
 
 export interface TaxComputation {
@@ -763,6 +791,26 @@ export const api = {
     request<AdvanceTaxInstallment>(
       `/tax/advance?fy=${encodeURIComponent(fy)}&quarter=${encodeURIComponent(quarter)}`,
     ),
+  advanceTaxPayments: (fy: string) =>
+    request<{ payments: readonly AdvanceTaxPayment[] }>(
+      `/tax/advance/payments?fy=${encodeURIComponent(fy)}`,
+    ),
+  recordAdvanceTaxPayment: (input: {
+    fy: string;
+    quarter: string;
+    amount: string;
+    paidOn: string;
+    challanRef?: string;
+  }) =>
+    request<AdvanceTaxPayment>('/tax/advance/payments', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  deleteAdvanceTaxPayment: (paymentId: string) =>
+    request<{ deleted?: boolean }>(`/tax/advance/payments/${encodeURIComponent(paymentId)}`, {
+      method: 'DELETE',
+    }),
+
   regimes: (fy: string) => request<RegimeComparison>(`/tax/regimes?fy=${encodeURIComponent(fy)}`),
   incomeProfile: () => request<IncomeProfileState>('/tax/income-profile'),
   saveIncomeProfile: (profile: Record<string, unknown>) =>

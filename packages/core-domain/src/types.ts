@@ -331,6 +331,25 @@ export interface TaxSubject {
   readonly equityAllocationPct?: Percentage;
 }
 
+/**
+ * One advance-tax instalment actually paid.
+ *
+ * Instalments are cumulative, so every quarter after the first is computed net
+ * of these. Recorded rather than inferred: the engine cannot know what reached
+ * the exchequer, and assuming nothing did re-demands tax the taxpayer has
+ * already remitted.
+ */
+export interface AdvanceTaxPayment {
+  readonly paymentId: string;
+  readonly financialYear: string;
+  readonly quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4';
+  readonly amount: Money;
+  readonly paidOn: IsoDate;
+  /** The challan identifier — the taxpayer's evidence the payment happened. */
+  readonly challanRef?: string;
+  readonly notes?: string;
+}
+
 export interface Liability {
   readonly liabilityId: string;
   readonly kind: 'HOME_LOAN' | 'PERSONAL_LOAN' | 'MORTGAGE' | 'OTHER';

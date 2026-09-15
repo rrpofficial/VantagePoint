@@ -32,7 +32,10 @@ import {
   applyLoanEdit,
   bucketOf,
   reconcileHoldings,
+  type AdvanceTaxPayment,
+  type AssetClass,
   type HoldingsReconciliation,
+  type TaxSubject,
   type AssetBucket,
   loanDuplicatesOf,
   type Asset,
@@ -96,6 +99,7 @@ import {
   ExitRepository,
   LiabilityRepository,
   LoanAuditRepository,
+  AdvanceTaxPaymentRepository,
   SettingsRepository,
   SnapshotRepository,
   Vault,
@@ -103,7 +107,11 @@ import {
 } from '@porttrack/persistence';
 import { currentPorts } from './context.js';
 import { requireEditMode, resetEditMode } from './edit-mode.js';
-import { loadIncomeInclusions, resetIncomeInclusions } from './income-inclusions.js';
+import {
+  incomeInclusionsOf,
+  loadIncomeInclusions,
+  resetIncomeInclusions,
+} from './income-inclusions.js';
 import { stampForeignRates } from './foreign-rates.js';
 import { useMemoryRateStore, useVaultRateStore } from './vault-rate-store.js';
 
@@ -344,30 +352,156 @@ function profileFor(fy: FinancialYear): Result<IncomeProfile> {
   });
 }
 
+/**
+ * Everything the year's instalments are computed from, read once.
+ *
+ * Disposals are filtered to the financial year here rather than in the engine:
+ * the engine narrows further to each quarter's due date, and handing it another
+ * year's sales would put them in scope for a quarter they cannot belong to.
+ *
+ * `assetClasses` is keyed by TRANSACTION, not by asset. One asset can hold lots
+ * of differing tax character — an equity-oriented and a debt-oriented tranche of
+ * the same fund — and the classifier reads the transaction key first.
+ */
+async function advanceTaxInputsFor(financialYear: FinancialYear): Promise<{
+  exits: readonly ExitTransaction[];
+  assetClasses: Record<string, AssetClass | TaxSubject>;
+  alreadyPaid: MoneyValue;
+}> {
+  const [allExits, assets, payments] = await Promise.all([
+    ExitRepository.all(),
+    AssetRepository.all(),
+    AdvanceTaxPaymentRepository.forYear(financialYear),
+  ]);
+
+  const from = FyCalendar.fyStart(financialYear);
+  const to = FyCalendar.fyEnd(financialYear);
+  const exits = allExits.filter((exit) => exit.exitDate >= from && exit.exitDate <= to);
+
+  const subjectOf = new Map<string, AssetClass | TaxSubject>(
+    assets.map((asset) => [
+      asset.assetId,
+      {
+        assetClass: asset.assetClass,
+        ...(asset.schemeCategory === undefined ? {} : { schemeCategory: asset.schemeCategory }),
+        ...(asset.equityAllocationPct === undefined
+          ? {}
+          : { equityAllocationPct: asset.equityAllocationPct }),
+      },
+    ]),
+  );
+
+  const assetClasses: Record<string, AssetClass | TaxSubject> = {};
+  for (const exit of exits) {
+    const subject = subjectOf.get(exit.assetId);
+    // A disposal whose asset is gone cannot be classified; the engine reports it
+    // by omission rather than guessing an asset class and a holding period.
+    if (subject !== undefined) assetClasses[exit.txnId] = subject;
+  }
+
+  return {
+    exits,
+    assetClasses,
+    alreadyPaid: Money.sum(
+      payments.map((payment) => payment.amount),
+      'INR',
+    ),
+  };
+}
+
 export const ComputeAdvanceTaxUC = {
-  execute(input: {
+  async execute(input: {
     financialYear: FinancialYear;
     quarter: Quarter;
   }): Promise<Result<AdvanceTaxInstallment>> {
     // Rules resolve first: a missing rule set must surface as its own error
     // rather than as a missing income profile (ADR-005).
     const rules = TaxRuleTable.rulesFor(input.financialYear);
-    if (!rules.ok) return Promise.resolve(rules);
+    if (!rules.ok) return rules;
 
     const profile = profileFor(input.financialYear);
-    if (!profile.ok) return Promise.resolve(profile);
+    if (!profile.ok) return profile;
 
-    return Promise.resolve(
-      AdvanceTaxEngine.installment({
-        financialYear: input.financialYear,
-        quarter: input.quarter,
-        income: profile.value,
-        exits: [],
-        assetClasses: {},
-        alreadyPaid: { amount: '0', currency: 'INR' },
-        rules: rules.value,
-      }),
-    );
+    const ledger = await advanceTaxInputsFor(input.financialYear);
+
+    return AdvanceTaxEngine.installment({
+      financialYear: input.financialYear,
+      quarter: input.quarter,
+      income: profile.value,
+      exits: ledger.exits,
+      assetClasses: ledger.assetClasses,
+      alreadyPaid: ledger.alreadyPaid,
+      rules: rules.value,
+      /*
+       * The taxpayer's own position on sell-to-cover, carried into the
+       * instalment so it rests on the same basis the year-end figure will. An
+       * instalment computed one way and a return filed the other is a shortfall
+       * that surfaces only at assessment.
+       */
+      includeSellToCover: incomeInclusionsOf().sellToCoverGains,
+    });
+  },
+
+  /** Advance tax already remitted for the year, newest first. */
+  payments(financialYear: FinancialYear): Promise<readonly AdvanceTaxPayment[]> {
+    return AdvanceTaxPaymentRepository.forYear(financialYear);
+  },
+
+  /**
+   * Records a payment against a quarter.
+   *
+   * An addition, so ungated like every other addition — the risk edit mode
+   * exists for is a figure silently CHANGING, and recording a challan that
+   * exists cannot understate anything.
+   */
+  async recordPayment(input: {
+    financialYear: FinancialYear;
+    quarter: Quarter;
+    amount: string;
+    paidOn: IsoDate;
+    challanRef?: string;
+    notes?: string;
+  }): Promise<Result<AdvanceTaxPayment>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    if (!ISO_DATE.test(input.paidOn)) {
+      return Err(new VaultStateError('a payment needs the date it was made, as YYYY-MM-DD'));
+    }
+    // Parsed, never trusted: `1,00,000` is a reasonable thing to type and must
+    // not reach storage unparsed (ADR-002).
+    const amount = Money.parse(input.amount, 'INR');
+    if (!amount.ok) return amount;
+    if (Money.compare(amount.value, Money.zero('INR')) <= 0) {
+      return Err(new VaultStateError('an advance tax payment must be greater than zero'));
+    }
+
+    const payment: AdvanceTaxPayment = {
+      paymentId: `atp_${input.financialYear}_${input.quarter}_${input.paidOn}_${amount.value.amount}`,
+      financialYear: input.financialYear,
+      quarter: input.quarter,
+      amount: amount.value,
+      paidOn: input.paidOn,
+      ...(input.challanRef === undefined || input.challanRef.trim().length === 0
+        ? {}
+        : { challanRef: input.challanRef.trim() }),
+      ...(input.notes === undefined || input.notes.trim().length === 0
+        ? {}
+        : { notes: input.notes.trim() }),
+    };
+
+    const saved = await AdvanceTaxPaymentRepository.save(payment);
+    return saved.ok ? Ok(payment) : saved;
+  },
+
+  async deletePayment(paymentId: string): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+    // Removing a recorded payment RAISES every later instalment, so it is a
+    // destructive change and gated like one.
+    const permitted = requireEditMode('deleting a recorded advance tax payment');
+    if (!permitted.ok) return permitted;
+    return AdvanceTaxPaymentRepository.delete(paymentId);
   },
 
   compareRegimes(financialYear: FinancialYear): Promise<Result<RegimeComparison>> {

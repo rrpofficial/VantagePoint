@@ -82,6 +82,7 @@ export {
   AssetRepository,
   ExitRepository,
   LiabilityRepository,
+  AdvanceTaxPaymentRepository,
   SettingsRepository,
 } from './asset-repository.js';
 export { LoanAuditRepository } from './loan-audit-repository.js';

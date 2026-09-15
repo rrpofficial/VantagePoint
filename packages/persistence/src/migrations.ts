@@ -468,6 +468,33 @@ export const MIGRATIONS: readonly Migration[] = [
       ALTER TABLE lots ADD COLUMN stated_remaining_quantity TEXT;
     `,
   },
+  {
+    version: 13,
+    name: 'advance-tax-payments',
+    up: `
+      -- Advance tax already paid, per instalment.
+      --
+      -- Instalments are CUMULATIVE — 15/45/75/100% of the year's liability — so
+      -- each quarter's demand is net of everything paid before it. Without this
+      -- the engine was handed a hardcoded zero and every quarter after the first
+      -- re-demanded tax that had already been paid.
+      --
+      -- The challan reference is the taxpayer's evidence that a payment happened,
+      -- so it is stored beside the amount rather than left to memory.
+      CREATE TABLE advance_tax_payments (
+        payment_id     TEXT PRIMARY KEY,
+        financial_year TEXT NOT NULL,
+        quarter        TEXT NOT NULL CHECK (quarter IN ('Q1','Q2','Q3','Q4')),
+        amount         TEXT NOT NULL,
+        currency       TEXT NOT NULL,
+        paid_on        TEXT NOT NULL,
+        challan_ref    TEXT,
+        notes          TEXT
+      );
+      CREATE INDEX idx_advance_tax_payments_fy
+        ON advance_tax_payments(financial_year, quarter);
+    `,
+  },
 ];
 
 const SCHEMA_TABLE = `

@@ -708,6 +708,45 @@ export function registerRoutes(app: FastifyInstance): void {
       : reply.code(409).send(failure(result.error.code, result.error.message));
   });
 
+  app.get('/api/tax/advance/payments', async (request, reply) => {
+    const fy = (request.query as { fy?: string }).fy ?? '2025-26';
+    return reply.send({ payments: await ComputeAdvanceTaxUC.payments(fy) });
+  });
+
+  app.post('/api/tax/advance/payments', async (request, reply) => {
+    const body = request.body as {
+      fy?: string;
+      quarter?: string;
+      amount?: string;
+      paidOn?: string;
+      challanRef?: string;
+      notes?: string;
+    };
+
+    const result = await ComputeAdvanceTaxUC.recordPayment({
+      financialYear: body.fy ?? '2025-26',
+      quarter: (body.quarter ?? 'Q1') as 'Q1' | 'Q2' | 'Q3' | 'Q4',
+      amount: body.amount ?? '0',
+      paidOn: body.paidOn ?? '',
+      ...(body.challanRef === undefined ? {} : { challanRef: body.challanRef }),
+      ...(body.notes === undefined ? {} : { notes: body.notes }),
+    });
+
+    if (result.ok) return reply.code(201).send(result.value);
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/tax/advance/payments/:id',
+    async (request, reply) => {
+      const result = await ComputeAdvanceTaxUC.deletePayment(request.params.id);
+      if (result.ok) return reply.code(204).send();
+      const { status, body: failed } = refusal(result.error, 409);
+      return reply.code(status).send(failed);
+    },
+  );
+
   app.get('/api/tax/regimes', async (request, reply) => {
     const fy = (request.query as { fy?: string }).fy ?? '2025-26';
     const result = await ComputeAdvanceTaxUC.compareRegimes(fy);

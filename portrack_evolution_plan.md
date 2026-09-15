@@ -242,6 +242,25 @@ one could be entered, would sit at cost forever.
 Ordered by objectives recovered per unit of work. Each phase is independently
 shippable and leaves the suite green.
 
+### Scoping decision — what advance tax is *for* (2026-09-15)
+
+**Only income the employer is not already withholding on.**
+
+Salary, and the RSU/ESPP perquisite inside it, are covered by the employer's own
+TDS and appear on Form 16. portTrack computes the gap: capital gains on
+disposals, and other income outside salary.
+
+This is why the vest perquisite is deliberately **not** imported, even though
+`ByStatus → Unvested` states it per vest with the Indian rate and tax withheld.
+Form 16's gross salary already includes it; importing it separately would tax the
+same money twice.
+
+Salary is still an *input* — not to charge it, but to place everything else:
+capital gains sit at their own rates, but surcharge bands turn on total income,
+and slab-taxed income stacks on top of salary. The engine then credits
+`tdsRemitted + tcsCollected + alreadyPaid`, so net payable is by construction the
+part the employer is not covering.
+
 ### Phase 1 — Connect advance tax to the ledger · objective 6
 
 **Smallest change, largest objective recovered.** The engine is already correct.
