@@ -83,10 +83,23 @@ export function viewOf(loan: BorrowedLoan, asOf: IsoDate): BorrowedView {
  * unchanged.
  */
 export function liabilityOf(loan: BorrowedLoan, asOf: IsoDate): Liability {
+  /*
+   * `progressOf` directly, NOT `viewOf`.
+   *
+   * `viewOf` builds the full contractual schedule and `progressOf` builds it
+   * again internally, so going through it generated 480 instalment rows to read
+   * one balance — on the net-worth path, for every borrowing, on every
+   * valuation. Nothing here needs the schedule.
+   */
+  const outstanding =
+    loan.status === 'CLOSED'
+      ? Money.zero(loan.principal.currency)
+      : progressOf(termsOf(loan), loan.payments, asOf).outstanding;
+
   return {
     liabilityId: loan.loanId,
     kind: loan.kind,
-    principalOutstanding: viewOf(loan, asOf).outstanding,
+    principalOutstanding: outstanding,
     interestRatePct: loan.interestRatePct,
     asOf,
   };

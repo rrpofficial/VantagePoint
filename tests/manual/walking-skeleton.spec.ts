@@ -21,7 +21,7 @@ import {
   ValuationEngine,
   taxCharacterFor,
 } from '@porttrack/core-domain';
-import { DualRateConverter, RateStore } from '@porttrack/fx-itbr';
+import { DualRateConverter } from '@porttrack/fx-itbr';
 import { CompliancePolicy, DeltaEngine, ReturnsCalculator, SnapshotFactory } from '@porttrack/snapshot';
 import { MigrationRunner, Vault } from '@porttrack/persistence';
 import { RegexRules } from '@porttrack/pii-masker';
@@ -171,7 +171,7 @@ describe('portTrack walking skeleton', () => {
     say(`           wrong passphrase rejected? ${String(!wrong.ok)}`);
     await Vault.close();
 
-    // eslint-disable-next-line no-console
+     
     console.log(`\n${log.join('\n')}\n`);
     expect(log.length).toBeGreaterThan(20);
   });

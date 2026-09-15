@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { globSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { inspect } from 'node:util';
 import { AuditUC, ImportStatementUC, VaultUC } from '@porttrack/app-services';
 import { MaskingPipeline, PiiVerifier } from '@porttrack/pii-masker';
 import { expectNoPii, SYNTHETIC } from '@porttrack/test-kit';
@@ -59,7 +60,9 @@ describe('FUNCTIONAL US-8.9 — no PII in logs (DoD D7)', () => {
       });
       if (!result.ok) {
         expectNoPii(result.error.message);
-        expectNoPii(String(result.error.cause ?? ''));
+        // `cause` is `unknown`; stringify it explicitly rather than let template
+        // coercion print "[object Object]" and pass a PII check on nothing.
+        expectNoPii(inspect(result.error.cause ?? ''));
       }
     });
   });

@@ -91,7 +91,6 @@ export { HOLDING_BUCKETS, bucketOf, type AssetBucket } from './asset-bucket.js';
 export {
   addMonths,
   emiFor,
-  interestPaidBetween,
   outstandingAsOf,
   progressOf,
   scheduleFor,

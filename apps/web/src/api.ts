@@ -611,6 +611,24 @@ export interface VarianceReport {
   readonly allocation: readonly AllocationRow[];
 }
 
+/** What the ledger contributes to income under the head "other sources". */
+export interface DerivedOtherSources {
+  readonly derived: Money;
+  readonly manual: Money;
+  readonly total: Money;
+  readonly items: readonly {
+    readonly label: string;
+    readonly ruleRef: string;
+    readonly amount: Money;
+  }[];
+  /** Recorded income NOT counted, and why — a setting, not a bug. */
+  readonly excluded: readonly {
+    readonly label: string;
+    readonly amount: Money;
+    readonly reason: string;
+  }[];
+}
+
 /** A borrowing, as the API returns it. */
 export interface BorrowedLoan {
   readonly loanId: string;
@@ -994,6 +1012,10 @@ export const api = {
    * since?" and never "how did it move between these two dates?" — which is the
    * whole of objective 2.
    */
+  /** Other-sources income for the year: derived, manual, and what was excluded. */
+  derivedIncome: (fy: string) =>
+    request<DerivedOtherSources>(`/income?fy=${encodeURIComponent(fy)}`),
+
   liabilityKinds: () => request<{ kinds: readonly string[] }>('/liabilities/kinds'),
   liabilities: (query: { status?: string; kind?: string } = {}) => {
     const params = new URLSearchParams();

@@ -31,7 +31,7 @@ import {
   type Percentage,
 } from '@porttrack/shared-kernel';
 import { Decimal } from 'decimal.js';
-import { addCalendarDays, compareIsoDates } from './daycount.js';
+import { compareIsoDates } from './daycount.js';
 
 export interface AmortisationTerms {
   readonly principal: MoneyValue;
@@ -308,25 +308,4 @@ export function outstandingAsOf(
   asOf: IsoDate,
 ): MoneyValue {
   return progressOf(terms, payments, asOf).outstanding;
-}
-
-/**
- * Interest paid between two dates — what s.24(b) allows on a housing loan.
- *
- * Computed as the difference of two walks rather than by summing the schedule,
- * for the same reason `income-derivation.ts` does it that way: the schedule is
- * the plan, and a deduction rests on what was actually paid.
- */
-export function interestPaidBetween(
-  terms: AmortisationTerms,
-  payments: readonly LoanInstalmentPaid[],
-  from: IsoDate,
-  to: IsoDate,
-): MoneyValue {
-  const opening = progressOf(terms, payments, addCalendarDays(from, -1)).interestPaid;
-  const closing = progressOf(terms, payments, to).interestPaid;
-  const difference = Money.subtract(closing, opening);
-  return Money.compare(difference, Money.zero(difference.currency)) < 0
-    ? Money.zero(difference.currency)
-    : difference;
 }
