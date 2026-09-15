@@ -128,7 +128,7 @@ export function Tax() {
           </button>
         }
       >
-        <ProvisionalBanner />
+        <ProvisionalBanner status={selectedYear?.rulesStatus} note={selectedYear?.rulesNote} />
 
         <div className="pt-controls">
           <label htmlFor="fy">Financial year</label>
@@ -281,7 +281,7 @@ export function Tax() {
 
       {regimes !== undefined && (
         <Card title="Regime comparison" action={<Chip>{regimes.recommended} regime</Chip>}>
-          <ProvisionalBanner />
+          <ProvisionalBanner status={selectedYear?.rulesStatus} note={selectedYear?.rulesNote} />
           <div className="pt-table-scroll">
             <table className="pt-table" data-testid="regime-table">
               <thead>

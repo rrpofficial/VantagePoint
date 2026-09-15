@@ -92,7 +92,12 @@ describe('Scenario: Years without a rule set are offered but flagged', () => {
    * are transcribed from Bills rather than from enacted text — so it is offered,
    * computes, and still carries PROVISIONAL.
    */
-  it('offers the first Income-tax Act 2025 year, flagged provisional', () => {
+  /*
+   * FY 2026-27 is the first year charged under the Income-tax Act 2025, and it
+   * was provisional only for as long as its source was a Bill. The Finance Act
+   * 2026 was assented on 30 March 2026, so it is now sourced from enacted text.
+   */
+  it('offers the first Income-tax Act 2025 year, sourced from the enacted Act', () => {
     on('2026-08-04');
 
     const current = ReferenceUC.periods().financialYears.find(
@@ -100,16 +105,67 @@ describe('Scenario: Years without a rule set are offered but flagged', () => {
     );
 
     expect(current?.rulesAvailable).toBe(true);
-    expect(current?.rulesStatus).toBe('PROVISIONAL');
+    expect(current?.rulesStatus).toBe('VERIFIED');
   });
 
-  it('reports the status of a year that does have rates', () => {
+  /*
+   * FY 2025-26 was verified against the Finance Bill 2026 First Schedule
+   * Part I-A, so it is the year that proves the status is real data and not a
+   * constant: every year reporting PROVISIONAL would assert nothing.
+   */
+  it('reports a verified year as verified, carrying no note', () => {
     on('2026-08-04');
     const available = ReferenceUC.periods().financialYears.find(
       (year) => year.financialYear === '2025-26',
     );
     expect(available?.rulesAvailable).toBe(true);
-    expect(available?.rulesStatus).toBe('PROVISIONAL');
+    expect(available?.rulesStatus).toBe('VERIFIED');
+    expect(available?.rulesNote).toBeUndefined();
+  });
+
+  it('still reports a year that is genuinely unverified as provisional', () => {
+    on('2026-08-04');
+    const unverified = ReferenceUC.periods().financialYears.find(
+      (year) => year.financialYear === '2024-25',
+    );
+    expect(unverified?.rulesStatus).toBe('PROVISIONAL');
+    expect(unverified?.rulesNote).toContain('FY 2025-26');
+  });
+
+  /*
+   * The banner reads this. It used to render unconditionally on every tax
+   * screen for every year, so it could not be cleared by sourcing a year's
+   * rates and carried no information about which year was unverified or why.
+   */
+  it('carries each year’s own reason, because the years differ', () => {
+    on('2026-08-04');
+    const years = ReferenceUC.periods().financialYears;
+
+    const provisional = years.filter((year) => year.rulesStatus === 'PROVISIONAL');
+    expect(provisional.length).toBeGreaterThan(0);
+    for (const year of provisional) {
+      expect(year.rulesNote).toBeDefined();
+      expect(year.rulesNote?.length ?? 0).toBeGreaterThan(0);
+    }
+
+    // FY 2024-25 is provisional because its slab table is the FOLLOWING year's,
+    // carried back — materially different from a year merely awaiting enactment,
+    // and the generic banner text said neither.
+    const carriedBack = years.find((year) => year.financialYear === '2024-25');
+    expect(carriedBack?.rulesNote).toContain('FY 2025-26');
+    expect(carriedBack?.rulesNote).toContain('Finance (No. 2) Act 2024');
+  });
+
+  /** A year with no rule set carries no status and no note to show. */
+  it('leaves status and note absent when there are no rates', () => {
+    on('2030-01-15');
+    const missing = ReferenceUC.periods().financialYears.find(
+      (year) => !year.rulesAvailable,
+    );
+
+    expect(missing).toBeDefined();
+    expect(missing?.rulesStatus).toBeUndefined();
+    expect(missing?.rulesNote).toBeUndefined();
   });
 });
 

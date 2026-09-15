@@ -108,12 +108,32 @@ export function GoToImport({ testId }: { testId?: string }) {
 /**
  * Shown wherever a tax figure appears while the FY rule set is provisional.
  * A number that cannot be filed must not look like one that can.
+ *
+ * `status` decides it, and it is REQUIRED. This rendered unconditionally for the
+ * first year of its life: every screen carrying a tax figure showed the banner
+ * for every financial year, whatever the rule set said. A warning that is always
+ * on is not a warning — it carries no information, and it cannot ever be
+ * cleared by fixing the thing it warns about, which is precisely what made it
+ * look broken once a year's rates were filled in.
+ *
+ * `undefined` renders nothing on purpose: no rule set for that year means there
+ * is no figure on screen to qualify, and the picker already says "no rates yet".
  */
-export function ProvisionalBanner() {
+export function ProvisionalBanner({
+  status,
+  note,
+}: {
+  status: 'PROVISIONAL' | 'VERIFIED' | undefined;
+  /** The rule set's own reason, which is more specific than the generic text. */
+  note?: string | undefined;
+}) {
+  if (status !== 'PROVISIONAL') return null;
+
   return (
-    <div className="pt-banner" role="status">
-      <strong>Provisional tax rates.</strong> These figures are computed from an unverified rule set
-      and cannot be used for filing until the rates are sourced from the Finance Act.
+    <div className="pt-banner" role="status" data-testid="provisional-banner">
+      <strong>Provisional tax rates.</strong>{' '}
+      {note ??
+        'These figures are computed from an unverified rule set and cannot be used for filing until the rates are sourced from the Finance Act.'}
     </div>
   );
 }

@@ -242,6 +242,8 @@ export interface FinancialYearOption {
   readonly isCurrent: boolean;
   readonly rulesAvailable: boolean;
   readonly rulesStatus?: 'PROVISIONAL' | 'VERIFIED';
+  /** That year's own reason for being provisional; they differ materially. */
+  readonly rulesNote?: string;
 }
 
 export interface CalendarYearOption {

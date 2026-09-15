@@ -15,6 +15,7 @@ import {
   FyCalendar,
   Money,
   Ok,
+  RateUnavailableError,
   VaultStateError,
   type EgressAuditEntry,
   type FinancialYear,
@@ -178,15 +179,31 @@ export const ValuePortfolioUC = {
     // returns a plain array still satisfies this.
     const [assets, liabilities] = await Promise.all([ports.assets(), ports.liabilities()]);
 
-    return Ok(
-      ValuationEngine.value({
-        assets,
-        liabilities,
-        asOf,
-        ...(ports.prices === undefined ? {} : { prices: ports.prices }),
-        ...(ports.fx === undefined ? {} : { fx: ports.fx }),
-      }),
-    );
+    /*
+     * `toInr` REFUSES to convert without a rate, and refuses by throwing — the
+     * right call, since substituting 1.0 would report a $2,594 holding as ₹2,594.
+     * But a throw is not this layer's contract: it escaped as an exception, the
+     * route turned it into a 500, and the dashboard — which drops a failed
+     * valuation silently — showed "Loading your portfolio…" forever.
+     *
+     * Caught and returned as a Result so the missing rate is reported as the
+     * missing rate, which names the currency and date and is fixable from the
+     * message. Only a rate gap is caught; any other fault is still a fault.
+     */
+    try {
+      return Ok(
+        ValuationEngine.value({
+          assets,
+          liabilities,
+          asOf,
+          ...(ports.prices === undefined ? {} : { prices: ports.prices }),
+          ...(ports.fx === undefined ? {} : { fx: ports.fx }),
+        }),
+      );
+    } catch (cause) {
+      if (cause instanceof RateUnavailableError) return Err(cause);
+      throw cause;
+    }
   },
 };
 
@@ -1879,6 +1896,15 @@ export interface FinancialYearOption {
   /** False when no rule set exists; the engine refuses rather than approximating. */
   readonly rulesAvailable: boolean;
   readonly rulesStatus?: 'PROVISIONAL' | 'VERIFIED';
+  /**
+   * Why that year's rule set is provisional, in its own words.
+   *
+   * The years differ in ways the generic warning cannot express: one is sourced
+   * from Bills awaiting enactment, another has figures never checked against the
+   * Act at all. Both cannot be filed on; only the second is a placeholder. A
+   * user deciding whether to trust a number needs to know which.
+   */
+  readonly rulesNote?: string;
 }
 
 export interface CalendarYearOption {
@@ -1939,6 +1965,9 @@ export const ReferenceUC = {
         isCurrent: fy === currentFy,
         rulesAvailable: rules.ok,
         ...(rules.ok ? { rulesStatus: rules.value.status } : {}),
+        ...(rules.ok && rules.value.provisionalNote !== undefined
+          ? { rulesNote: rules.value.provisionalNote }
+          : {}),
       });
     }
 

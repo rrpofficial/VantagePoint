@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Amount, Card, ProvisionalBanner } from '../components/primitives.js';
 import { navigate } from '../router.js';
+import { usePeriods } from '../usePeriods.js';
 import { api, type LedgerLiability, type Valuation } from '../api.js';
 
 const INR = new Intl.NumberFormat('en-IN', {
@@ -17,6 +18,7 @@ export function Dashboard({
   valuation,
   valuedAt,
   valuing,
+  valuationError,
   onRefresh,
 }: {
   valuation: Valuation | undefined;
@@ -28,6 +30,13 @@ export function Dashboard({
    */
   valuedAt?: string | undefined;
   valuing?: boolean | undefined;
+  /**
+   * Why the last valuation did not produce a figure. Distinct from `valuation`
+   * being undefined because nothing has been fetched yet: the two used to render
+   * identically, so a refusal the server had explained in full showed here as
+   * "Loading your portfolio…".
+   */
+  valuationError?: string | undefined;
   onRefresh?: (() => void) | undefined;
 }) {
   /*
@@ -37,6 +46,9 @@ export function Dashboard({
    * worth is reduced BY — which is only legible next to the number it reduces.
    */
   const [liabilities, setLiabilities] = useState<readonly LedgerLiability[]>([]);
+
+  const periods = usePeriods();
+  const currentYear = periods?.financialYears.find((option) => option.isCurrent);
 
   const loadLiabilities = useCallback(async (): Promise<void> => {
     const result = await api.ledger();
@@ -70,7 +82,30 @@ export function Dashboard({
           </button>
         }
       >
-        {valuation === undefined ? (
+        {valuation === undefined && valuationError !== undefined ? (
+          <div className="pt-banner" role="status" data-testid="valuation-error">
+            <strong>Net worth could not be computed.</strong> {valuationError}
+            {/*
+              A missing exchange rate is the common case and is fixable by the
+              user, so the fix is one click away rather than something to go
+              looking for.
+            */}
+            {valuationError.includes('/INR') && (
+              <>
+                {' '}
+                <button
+                  type="button"
+                  className="pt-link pt-link--inline"
+                  onClick={() => {
+                    navigate('Settings');
+                  }}
+                >
+                  Import the missing rates
+                </button>
+              </>
+            )}
+          </div>
+        ) : valuation === undefined ? (
           <p className="pt-muted">Loading your portfolio…</p>
         ) : (
           <>
@@ -138,7 +173,12 @@ export function Dashboard({
       </Card>
 
       <Card title="Advance tax">
-        <ProvisionalBanner />
+        {/*
+          The CURRENT year's status, since that is the year this card points at.
+          It was hard-coded on, so it warned about provisional rates on a card
+          that shows no rate and in years whose rule set might be verified.
+        */}
+        <ProvisionalBanner status={currentYear?.rulesStatus} note={currentYear?.rulesNote} />
         <p className="pt-muted">
           Quarterly instalments appear in the Tax section once your income for the year is recorded.
         </p>

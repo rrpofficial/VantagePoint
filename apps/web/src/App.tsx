@@ -70,12 +70,25 @@ function AppShell() {
   const { section, assetTab } = useRoute();
   const editMode = useEditMode();
 
+  /*
+   * A failed valuation used to fall on the floor — `if (result.ok)` and nothing
+   * else — which left `valuation` undefined and the Dashboard on "Loading your
+   * portfolio…" indefinitely. There was no loading in progress; the request had
+   * come back, refused. A missing exchange rate for a single foreign holding
+   * therefore looked exactly like a hung fetch, and the one message that would
+   * have explained it never reached the screen.
+   */
+  const [valuationError, setValuationError] = useState<string | undefined>();
+
   const refresh = useCallback(async () => {
     setValuing(true);
     const result = await api.valuation();
     if (result.ok) {
       setValuation(result.value);
+      setValuationError(undefined);
       setValuedAt(new Date().toLocaleTimeString());
+    } else {
+      setValuationError(result.error.message);
     }
     setValuing(false);
   }, []);
@@ -240,6 +253,7 @@ function AppShell() {
             valuation={valuation}
             valuedAt={valuedAt}
             valuing={valuing}
+            valuationError={valuationError}
             onRefresh={() => void refresh()}
           />
         )}

@@ -78,6 +78,7 @@ export {
 } from './foreign-rates.js';
 
 export { useVaultRateStore, useMemoryRateStore, vaultRateStore } from './vault-rate-store.js';
+export { vaultFxSource } from './fx-source.js';
 
 export {
   configure,

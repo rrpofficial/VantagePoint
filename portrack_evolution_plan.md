@@ -499,6 +499,73 @@ It becomes necessary the moment a broker is added whose history does not go back
 far enough, so it stays on the list rather than being dropped. Nothing depends on
 it, which is why it sits last.
 
+### The rebate is not modelled at all — s.156(2) / s.87A
+
+Found 2026-09-15 while sourcing FY 2026-27 from the enacted Finance Act 2026.
+`TaxRuleSet` has **no rebate field**, and nothing in `packages/tax-engine`
+mentions one: `grep -rn "rebate\|87A" packages/tax-engine/` returns nothing.
+
+Income-tax Act 2025 **s.156(2)(a)** allows a deduction of the whole tax, or
+₹60,000, whichever is less, where total income does not exceed ₹12,00,000. So a
+default-regime taxpayer under ₹12 lakh owes **nil**, and this engine computes
+slab tax for them regardless. The 1961 Act's s.87A does the same job for earlier
+years.
+
+The error direction is safe — tax is OVERSTATED, so an advance-tax instalment is
+never under-demanded — but it is wrong, and wrong by the entire liability for
+anyone below the threshold.
+
+**Two things make this more than a missing constant:**
+
+1. The rebate is **not available against income taxed at special rates**. Capital
+   gains under s.196/197/198 are outside it, so the rebate applies to the slab
+   part of the liability only. A naive `min(tax, 60000)` would wipe out capital
+   gains tax for a taxpayer whose salary is small and whose gains are large —
+   exactly this app's user.
+2. It is **year-specific and regime-specific**, so it belongs in the FY rule set
+   beside `standardDeduction`, not in the calculator.
+
+Shape: `rebate?: { limit: Money; maxAmount: Money; appliesToSpecialRates: false }`
+on `TaxRuleSet`, applied in `SlabCalculator` after slab tax and before surcharge,
+against the slab component only.
+
+### Correct the FY 2024-25 rule set — parked
+
+**Deprioritised 2026-09-15 at the user's direction: past-year advance tax is not
+a current concern.** Nothing here is pending work. It is written down because the
+year is still offered in the picker and someone will eventually compute with it —
+and because the defect below is not obvious from reading the file.
+
+The year is safe as it stands: `status: 'PROVISIONAL'` keeps `assertFilingReady`
+refusing it, and its `provisionalNote` states the specific defect, so the banner
+says what is wrong rather than warning generically.
+
+FY 2025-26 was verified on
+2026-09-15 against the Finance Bill 2026 First Schedule Part I-A (clause 2(1)
+charges AY 2026-27, which is FY 2025-26). FY 2026-27 is provisional by design,
+sourced from Bills awaiting enactment. FY 2024-25 is neither — it is wrong:
+
+- `slabs.NEW_REGIME` is byte-for-byte FY 2025-26's table. It begins at the
+  ₹4,00,000 exemption that Finance Bill 2026 clause 2(2) Table Sl. No. 4 assigns
+  to AY 2026-27, so it is that year's schedule carried back. An income of ₹12L is
+  taxed under bands that did not exist in FY 2024-25.
+- `standardDeduction.NEW_REGIME` is ₹50,000 here against ₹75,000 in FY 2025-26,
+  and the increase is understood to have taken effect in AY 2025-26 — this year.
+- Capital gains rates changed **mid-year, on 23 July 2024**. `ltcgRatePct`,
+  `stcgListedEquityRatePct` and `ltcgExemptionLimit` are single values, so one
+  half of the year is wrong whichever is stored. This one is a type problem, not
+  a data problem: `TaxRuleSet` cannot express a rate that changes on a date
+  inside the year.
+
+**To close it:** the First Schedule to the **Finance (No. 2) Act, 2024**, plus
+s.115BAC(1A), s.16(ia), s.111A and s.112A as amended by it. Then correct the
+table, settle the deduction, decide how the 23 July split is represented, and set
+`status: 'VERIFIED'`.
+
+Until then the year stays PROVISIONAL and `assertFilingReady` refuses it, which
+is correct. Its `provisionalNote` names the specific defect, so the banner tells
+the user what is wrong rather than warning generically.
+
 ### Regime-aware surcharge bands
 
 `TaxRuleSet.surchargeBands` is a single array, but the two regimes genuinely
@@ -508,7 +575,8 @@ of the First Schedule. One array cannot express both.
 
 Every year's file therefore states the default-regime bands, because that is the
 regime that applies unless the taxpayer elects otherwise — so FY 2024-25,
-FY 2025-26 and FY 2026-27 all correctly carry **three** bands (10/15/25). The
+FY 2025-26 and FY 2026-27 all correctly carry **three** bands (10/15/25),
+confirmed for FY 2025-26 against Finance Bill 2026 clause 2(4)(b) Sl. No. 10. The
 consequence is narrow and worth stating plainly: a taxpayer who **opts out** and
 has total income **above ₹5 crore** is understated by twelve percentage points of
 surcharge. Below ₹5 crore, or on the default regime, the figures are right.
