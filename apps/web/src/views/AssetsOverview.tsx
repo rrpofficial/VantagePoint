@@ -9,7 +9,7 @@
  * debt turns on tax character, not asset class), and the valuation is the same
  * one the Dashboard shows, so the two screens cannot disagree about net worth.
  */
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import {
   api,
   type AssetBucket,
@@ -32,6 +32,25 @@ interface BucketLine {
   /** Holdings left out entirely: foreign, and no exchange rate held. */
   readonly unconverted: number;
   readonly hint: string;
+  /**
+   * The asset classes inside this kind.
+   *
+   * A kind is a tax-and-treatment grouping, not a thing anyone owns — "Non-equity"
+   * spans a fixed deposit, a PPF balance, gold and a debt fund, which have
+   * nothing in common except how they are taxed. Without the split the row says
+   * how much but not what.
+   *
+   * Empty for Loans and Chits, which come from their own registers and are a
+   * single kind of thing each.
+   */
+  readonly classes: readonly ClassLine[];
+}
+
+interface ClassLine {
+  readonly assetClass: string;
+  readonly label: string;
+  readonly count: number;
+  readonly value: number;
 }
 
 export function AssetsOverview() {
@@ -178,28 +197,56 @@ export function AssetsOverview() {
             </thead>
             <tbody>
               {lines.map((line) => (
-                <tr key={line.tab}>
-                  <td>
-                    <button
-                      type="button"
-                      className="vp-link vp-link--inline"
-                      data-testid={`assets-goto-${line.tab.toLowerCase()}`}
-                      onClick={() => {
-                        navigateToAsset(line.tab);
-                      }}
+                <Fragment key={line.tab}>
+                  <tr>
+                    <td>
+                      <button
+                        type="button"
+                        className="vp-link vp-link--inline"
+                        data-testid={`assets-goto-${line.tab.toLowerCase()}`}
+                        onClick={() => {
+                          navigateToAsset(line.tab);
+                        }}
+                      >
+                        {line.label}
+                      </button>
+                      <div className="vp-tile__hint">{line.hint}</div>
+                    </td>
+                    <td className="vp-align-end vp-numeric">{line.count}</td>
+                    <td className="vp-align-end">
+                      <Amount value={{ amount: String(line.value), currency: 'INR' }} />
+                    </td>
+                    <td className="vp-align-end vp-numeric">
+                      {total === 0 ? '—' : `${((line.value / total) * 100).toFixed(1)}%`}
+                    </td>
+                  </tr>
+
+                  {/*
+                    What the kind is actually made of. "Non-equity" spans a fixed
+                    deposit, a PPF balance, gold and a debt fund — one row saying
+                    how much tells the reader nothing about what.
+                  */}
+                  {line.classes.map((entry) => (
+                    <tr
+                      key={`${line.tab}-${entry.assetClass}`}
+                      className="vp-table__detail"
+                      data-testid={`assets-class-${entry.assetClass.toLowerCase()}`}
                     >
-                      {line.label}
-                    </button>
-                    <div className="vp-tile__hint">{line.hint}</div>
-                  </td>
-                  <td className="vp-align-end vp-numeric">{line.count}</td>
-                  <td className="vp-align-end">
-                    <Amount value={{ amount: String(line.value), currency: 'INR' }} />
-                  </td>
-                  <td className="vp-align-end vp-numeric">
-                    {total === 0 ? '—' : `${((line.value / total) * 100).toFixed(1)}%`}
-                  </td>
-                </tr>
+                      <td>&nbsp;&nbsp;{entry.label}</td>
+                      <td className="vp-align-end vp-numeric">{entry.count}</td>
+                      <td className="vp-align-end">
+                        <Amount value={{ amount: String(entry.value), currency: 'INR' }} />
+                      </td>
+                      {/* Share of the KIND, not of the portfolio — the column
+                          above already answers the portfolio question. */}
+                      <td className="vp-align-end vp-numeric">
+                        {line.value === 0
+                          ? '—'
+                          : `${((entry.value / line.value) * 100).toFixed(1)}%`}
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -263,6 +310,43 @@ function carriedValue(
 const countIn = (assets: Ledger['assets'], bucket: AssetBucket) =>
   assets.filter((asset) => asset.bucket === bucket).length;
 
+/** `FIXED_DEPOSIT` → `Fixed deposit`. The server sends the class, not a label. */
+const humanise = (value: string) =>
+  value
+    .replaceAll('_', ' ')
+    .toLowerCase()
+    .replace(/^./, (c) => c.toUpperCase())
+    .replace(/\b(epf|vpf|ppf|nps|etf|sgb)\b/gi, (m) => m.toUpperCase());
+
+/**
+ * The asset classes inside one kind, largest first.
+ *
+ * Grouped by class WITHIN the bucket rather than globally, because one class can
+ * legitimately land in two kinds: `DOMESTIC_MUTUAL_FUND` splits across Equity
+ * and Non-equity on its tax character (ADR-016), and a global grouping would
+ * merge the two halves back into a single row that belongs to neither.
+ *
+ * The per-class value uses the same market-else-cost rule as the kind's total,
+ * so the rows sum to the row above them.
+ */
+function classesIn(assets: Ledger['assets'], bucket: AssetBucket): readonly ClassLine[] {
+  const byClass = new Map<string, { count: number; value: number }>();
+
+  for (const asset of assets.filter((candidate) => candidate.bucket === bucket)) {
+    const running = byClass.get(asset.assetClass) ?? { count: 0, value: 0 };
+    const value =
+      asset.marketValueInr !== undefined
+        ? Number(asset.marketValueInr.amount)
+        : Number(asset.costBasisInr?.amount ?? 0);
+
+    byClass.set(asset.assetClass, { count: running.count + 1, value: running.value + value });
+  }
+
+  return [...byClass]
+    .map(([assetClass, totals]) => ({ assetClass, label: humanise(assetClass), ...totals }))
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+}
+
 function summarise(
   ledger: Ledger,
   loans: LoanRegister | undefined,
@@ -274,6 +358,7 @@ function summarise(
       label: 'Equity',
       count: countIn(ledger.assets, 'EQUITY'),
       ...carriedValue(ledger.assets, 'EQUITY'),
+      classes: classesIn(ledger.assets, 'EQUITY'),
       hint: 'Listed and unlisted shares, equity funds and ETFs, RSUs and ESPP',
     },
     {
@@ -281,6 +366,7 @@ function summarise(
       label: 'Non-equity',
       count: countIn(ledger.assets, 'NON_EQUITY'),
       ...carriedValue(ledger.assets, 'NON_EQUITY'),
+      classes: classesIn(ledger.assets, 'NON_EQUITY'),
       hint: 'Deposits, retirement schemes, bullion, crypto, cash and debt funds',
     },
     {
@@ -288,6 +374,7 @@ function summarise(
       label: 'Immovable property',
       count: countIn(ledger.assets, 'IMMOVABLE'),
       ...carriedValue(ledger.assets, 'IMMOVABLE'),
+      classes: classesIn(ledger.assets, 'IMMOVABLE'),
       hint: 'Carried at what was paid, including stamp duty and registration',
     },
     {
@@ -299,6 +386,8 @@ function summarise(
       value: Number(loans?.totals.totalOutstanding.amount ?? 0),
       atCost: Number(loans?.totals.totalOutstanding.amount ?? 0),
       unconverted: 0,
+      // One kind of thing, from its own register — nothing to sub-divide.
+      classes: [],
       hint: 'Money lent to people, at principal outstanding',
     },
     {
@@ -310,6 +399,7 @@ function summarise(
       value: Number(chits?.totals.activeCarryingValue.amount ?? 0),
       atCost: Number(chits?.totals.activeCarryingValue.amount ?? 0),
       unconverted: 0,
+      classes: [],
       hint: 'Carried at instalments paid in, not at the pot’s face value',
     },
   ];

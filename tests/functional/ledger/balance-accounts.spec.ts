@@ -19,6 +19,7 @@ import {
   BalanceUC,
   EditModeUC,
   ImportStatementUC,
+  LedgerUC,
   IncomeUC,
   TradeUC,
   ValuePortfolioUC,
@@ -424,6 +425,82 @@ describe('Phase 5 Scenario: Every balance class the form offers also imports', (
       expect(view, `${entry.assetClass} did not import`).toBeDefined();
       expect(view?.account.kind, `${entry.assetClass} imported as the wrong kind`).toBe(entry.kind);
     }
+  });
+});
+
+/**
+ * The Assets screens read `LedgerUC.assets()`; the Dashboard reads
+ * `ValuePortfolioUC`. Both must answer the same question the same way.
+ *
+ * They did not. `LedgerUC.assets` derives its figures from `asset.lots`, and a
+ * balance entered by hand has NONE — `buildBalanceEntry` creates it with
+ * `lots: []`, because a deposit is a balance rather than a quantity at a price.
+ * So every deposit, provident fund and bank balance showed ₹0 on the Assets
+ * Overview and the Non-Equity tab while the Dashboard showed the right figure:
+ * two screens of the same application disagreeing about what the user owns.
+ */
+describe('Phase 5 Scenario: The Assets screens and the Dashboard agree on a balance', () => {
+  const opened = {
+    assetClass: 'FIXED_DEPOSIT' as const,
+    label: 'HDFC FD 7.1%',
+    openingBalance: '500000',
+    openedOn: '2025-04-01',
+    annualRatePct: '7.1',
+    compounding: 'QUARTERLY',
+  };
+
+  it('reports the accrued value on the ledger, not ₹0 and not the bare principal', async () => {
+    expectOk(await BalanceUC.record(opened));
+
+    const [entry] = await LedgerUC.assets();
+
+    expect(entry, 'the deposit is missing from the ledger entirely').toBeDefined();
+    expect(entry?.bucket).toBe('NON_EQUITY');
+    // Contributions are the cost; the accrued figure is the value.
+    expect(entry?.costBasis.amount).toBe('500000');
+    expect(Number(entry?.marketValueInr?.amount ?? 0)).toBeGreaterThan(500_000);
+  });
+
+  it('matches the Dashboard figure exactly', async () => {
+    expectOk(await BalanceUC.record(opened));
+
+    const ledgerValue = Number((await LedgerUC.assets())[0]?.marketValueInr?.amount ?? 0);
+    const dashboard = await netWorthAt(new Date().toISOString().slice(0, 10));
+
+    expect(ledgerValue).toBe(dashboard);
+  });
+
+  /*
+   * A deposit has no quoted price, so nothing may claim one. The value is real,
+   * but it is arithmetic on a contractual rate rather than an observed market
+   * figure, and a screen showing a price date would be inventing one.
+   */
+  it('claims no market price or price date for a deposit', async () => {
+    expectOk(await BalanceUC.record(opened));
+
+    const [entry] = await LedgerUC.assets();
+
+    expect(entry?.marketPricePerUnit).toBeUndefined();
+    expect(entry?.priceAsOf).toBeUndefined();
+  });
+
+  it('leaves an ordinary traded holding valued exactly as before', async () => {
+    expectOk(
+      await TradeUC.record({
+        assetClass: 'DOMESTIC_EQUITY',
+        side: 'BUY',
+        tradeDate: '2025-06-02',
+        symbol: 'INFY',
+        quantity: '100',
+        pricePerUnit: inr('1500'),
+      }),
+    );
+
+    const [entry] = await LedgerUC.assets();
+
+    expect(entry?.costBasis.amount).toBe('150000');
+    // No price feed, so no market value — the conservative default is unchanged.
+    expect(entry?.marketValueInr).toBeUndefined();
   });
 });
 
