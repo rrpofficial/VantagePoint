@@ -12,8 +12,8 @@
 
 ## 0. Executive summary
 
-Ten objectives. **Eight met** after Phases 1-4 (2026-09-15); two remain — asset
-coverage (Phase 5) and Schedule FA (Phase 6).
+Ten objectives. **All ten met** after Phases 1-7 (2026-09-15), plus the export
+and backup requirement added outside the original ten.
 
 The dominant finding was not that features were missing — it was that **three
 complete, unit-tested engines had no callers**. The advance-tax calculator, the
@@ -28,11 +28,11 @@ When something here looks broken, check first whether it is merely unreachable.
 
 | # | Objective | Verdict | Phase |
 |---|---|---|---|
-| 1 | All assets in one place, with details | 🟡 7 of 25 classes enterable | 5 |
+| 1 | All assets in one place, with details | 🟢 met (Phase 5) | 5 |
 | 2 | Snapshot, and compare across time | 🟢 met (Phase 4) | 4 |
 | 3 | Assets **and liabilities** in one place | 🟢 met (Phase 3) | 3 |
-| 4 | Add individual transactions/trades | 🟢 met (same 7-class limit) | 5 |
-| 5 | Foreign Assets + HNI filing view | 🟡 Schedule AL works, FA always fails | 6 |
+| 4 | Add individual transactions/trades | 🟢 met (Phase 5) | 5 |
+| 5 | Foreign Assets + HNI filing view | 🟢 met (Phase 6) | 6 |
 | 6 | Quarterly advance tax | 🟢 met (Phase 1) | 1 |
 | 7 | Tax on non-salary income | 🟢 met (Phase 2) | 2 |
 | 8 | Hand loans + interest accrual | 🟢 met | — |
@@ -40,9 +40,29 @@ When something here looks broken, check first whether it is merely unreachable.
 | 10 | EMI progress on loans availed | 🟢 met (Phase 3) | 3 |
 
 **Added 2026-09-15, outside the original ten:** get the data out — CSV and PDF
-exports per register, and a wired, tested vault backup. Hand loans already export
-both formats; chits, equity and property export neither, and `Backup` is built
-and unwired. See Phase 7.
+exports per register, and a wired, tested vault backup. 🟢 met (Phase 7).
+
+### What the last three phases actually changed
+
+- **Phase 5** gave the four dormant accrual functions their first non-test
+  caller. `valuation.ts`'s closed `if/else if` chain became a `Record<AssetClass,
+  Valuer>` registry (D-3), and ten asset classes became enterable through a
+  balance form distinct from the trade form. Gold and crypto went the other way —
+  into `MANUAL_TRADE_CLASSES`, because they genuinely are quantities at a price.
+- **Phase 6** turned `scheduleFaA3`'s unconditional refusal into a refusal that
+  names what is missing, backed by a real `daily_marks` series. **The refusal
+  itself survives** — a gap longer than a closed market still refuses rather than
+  carrying a mark across it. Table D stopped passing `accounts: []`.
+- **Phase 7** wired `Backup` (built and unreachable since US-8.8) and added one
+  export surface for chits, holdings, property and balances.
+
+**One defect found while wiring the backup, and it predated all of this:**
+`Backup.archive` read `vault.db` while the vault was open in WAL mode, so every
+committed transaction still in `vault.db-wal` was silently absent from the
+archive. The backup restored, unlocked, and passed `quick_check` — missing the
+most recent work. Fixed by checkpointing (`wal_checkpoint(TRUNCATE)`) before the
+read, and pinned by a round-trip test that compares net worth rather than only
+snapshot hashes, which is what let the original test pass over it.
 
 ---
 
@@ -388,7 +408,42 @@ Equity alone.
 
 ---
 
-### Phase 5 — Balance-type assets and live accruals · objectives 1, 4
+### Phase 5 — Balance-type assets and live accruals · objectives 1, 4 — ✅ DONE
+
+Delivered 2026-09-15. The valuer registry replaced the closed dispatch chain; a
+single `BalanceAccount` bag (migration v18) carries ten asset classes, keyed by
+BEHAVIOUR rather than class — EPF, VPF and PPF share one arithmetic, and NPS I/II,
+cash and a bank balance share another, which is what keeps the registry to one
+balance valuer instead of ten branches.
+
+Three decisions worth recording:
+
+- **Gold and crypto are trades, not balances.** They are quantities bought at a
+  price and sold FIFO, with a cost basis and a capital gain. They went into
+  `MANUAL_TRADE_CLASSES`; putting them in the balance form would have given them
+  a stated figure with no basis, which a gains computation cannot work from.
+- **No rate, no growth.** A balance with no recorded rate is carried flat and the
+  screen says why. Assuming "about 7%" would put a fabricated return into net
+  worth and, through the other-sources derivation, into a tax figure.
+- **A stated balance accrues nothing.** An NPS corpus moves with NAV and a bank
+  balance moves with transactions; there is no feed for either, so the figure
+  stays where the user put it until they restate it — and restating moves the
+  accrual start with it, or the new figure would re-accrue interest already
+  inside it.
+
+One arithmetic defect was found and fixed while doing this: `epfProjection`
+counts the opening month, which is correct for its own contract (1 Apr → 31 Mar
+is twelve contributions) and wrong for a valuation whose balance is stated AS AT
+the opening date. It credited a month's contribution and a month's interest on
+the day the figure was entered. The valuer now projects from the following month.
+
+Deposit interest reaches the tax figure unconditionally — it is chargeable
+whether or not it has been withdrawn, so there is no position for a setting to
+express. **Provident-fund interest is excluded with its reason stated**: exempt
+under s.10(11)/(12) except on contributions above the ₹2,50,000 threshold, and
+portTrack does not hold the contribution history that decides the split.
+
+The steps below are kept as the record of what was built.
 
 1. Implement the valuer registry (D-3) in `valuation.ts`.
 2. Register valuers that call the already-written `depositAccruedValue`,
@@ -404,11 +459,40 @@ without any trade being recorded.
 
 ---
 
-### Phase 6 — Schedule FA · objective 5
+### Phase 6 — Schedule FA · objective 5 — ✅ DONE
 
-Lowest urgency unless foreign assets are held in the current disclosure year.
+Delivered 2026-09-15 as **migration v19**, not v11 — the numbering here was
+written before Phases 1-5 consumed v9 through v18.
 
-1. **Migration v11** — `daily_marks` (§1.3), following the `fx_rates` shape:
+**The loud failure survived, which was the point.** `scheduleFaA3` used to return
+`Err` unconditionally, and that was the right answer for a build with no daily
+history. What changed is that the refusal is now a fact about the DATA and names
+what is missing — a currency with no rate series, a forty-day price gap in March,
+a holding with no entity detail — so a user can close it. A gap is still a
+refusal, and a mark is never carried across one.
+
+Three judgements:
+
+- **A weekend is not a gap.** Markets and the SBI rate desk close, and a price
+  that was never published did not move, so carrying the last mark across a break
+  of up to five days cannot hide a spike. Beyond that it is missing data, and
+  carrying a mark across it could hide a real peak — so it is reported.
+- **Country is not a function of currency.** A USD-denominated fund is routinely
+  domiciled in Ireland, and a wrong country is a defect in the disclosure. So
+  `foreign_holding_disclosures` records the country, entity, address and nature,
+  and A3 refuses for any foreign holding without a row rather than guessing.
+- **The peak balance of an account is read off statements, not derived.** Table D
+  now has real accounts (`foreign_accounts`) instead of `accounts: []`, and a
+  peak below the closing balance is refused rather than silently corrected —
+  under the Black Money Act an understated peak is the expensive direction.
+
+The daily series is folded from the rates and prices already in the vault
+(`MarksUC.sync`, run after every import and available as a button), so a
+statement imported before this existed still reaches a disclosure.
+
+The steps below are kept as the record of what was built.
+
+1. **Migration v19** — `daily_marks` (§1.3), following the `fx_rates` shape:
    asset or currency key, date, decimal-string value, source, provenance ref.
 2. Backfill from the bundled SBI archive for FX; record a daily close for foreign
    holdings going forward.
@@ -425,7 +509,39 @@ exceeds the 31-Dec closing value. With a gap, it still refuses.
 
 ---
 
-### Phase 7 — Export and backup · requested 2026-09-15
+### Phase 7 — Export and backup · requested 2026-09-15 — ✅ DONE
+
+Delivered 2026-09-15. `BackupUC` + `POST /api/vault/backup` + a restore path and
+a Settings card; `packages/exporters` owning the CSV quoting, the PDF layout and
+the money formatting, with chits, holdings, property and balances supplying
+columns and rows.
+
+**The WAL defect** — see §0. The backup had been reading a database file that was
+missing every commit still sitting in the write-ahead log.
+
+**Restore is shaped like the destructive operation it is.** Restoring into a
+directory with no vault is free — that is the disaster-recovery path on a fresh
+install, where edit mode cannot be turned on because there is no passphrase to
+verify against. Restoring OVER an existing vault needs edit mode and copies the
+vault it replaces aside under a timestamped name. The restored vault is left
+LOCKED, because it opens with the passphrase that was in force when the backup
+was taken, which is not necessarily the one in force now.
+
+**Answer to the open question on masking (§5 item 5): masked by default, with a
+visible toggle.** A masked file that turns out to need names is re-exported in a
+click; a file with names in it that has already been emailed cannot be recalled.
+The file states which way it was made, and the masked one is named differently
+(`-masked-`) so the two cannot be confused on disk. The hand-loan export keeps
+its existing behaviour, which is documented and deliberate — flipping it would
+have been a silent regression on the one export that already worked.
+
+**The filing gate applies to disposals only.** A holdings or lots export carries
+no tax figure and is unaffected. A disposals table states a taxable gain against
+an assessment year, which is what a filing artifact looks like, so it inherits
+`assertFilingReady` and a PROVISIONAL year refuses. Exporting your own holdings
+is never gated — the gate is on the artifact, not on getting your data out.
+
+The requirement below is kept as the record of what was asked for.
 
 Get the data OUT: as CSV and PDF per asset register, and as a restorable backup
 of the whole vault.
@@ -445,13 +561,16 @@ lost the original.
 
 #### 7.1 Where this already stands
 
+Updated 2026-09-15 to what now exists.
+
 | Register | CSV | PDF | Notes |
 |---|---|---|---|
-| Hand loans | ✅ | ✅ | `LoanExporter` (`core-domain/src/loan-export.ts`), routes `/api/loans/export.csv` and `.pdf`, links in `Loans.tsx:300-303`. **Filter-aware** — it exports what the screen is showing. |
-| Chits | ❌ | ❌ | Nothing. |
-| Equity / holdings | ❌ | ❌ | Nothing. |
-| Immovable property | ❌ | ❌ | Nothing. |
-| Whole-vault backup | ⚠️ | — | `Backup` exists in `packages/persistence/src/backup.ts` and correctly archives the KDF metadata alongside the database — **but no use case, route or button reaches it.** Same defect class as the `prices` and `fx` ports: built, correct, unwired. |
+| Hand loans | ✅ | ✅ | `LoanExporter` (`core-domain/src/loan-export.ts`), routes `/api/loans/export.csv` and `.pdf`. **Filter-aware.** Left on its own exporter rather than migrated — it works, it is tested, and a rewrite would risk a documented behaviour for no user-visible gain. |
+| Chits | ✅ | ✅ | `packages/exporters`, via `/api/exports/chits.{csv,pdf}`. |
+| Equity / holdings | ✅ | ✅ | Three tables: holdings, **acquisition lots**, and disposals for a selected FY. A summary without lots cannot support the capital-gains conversation the export exists for. |
+| Immovable property | ✅ | ✅ | Two tables: transactions with each duty separately, and duty totals with the current value beside its basis and date. |
+| Deposits and balances | ✅ | ✅ | Added with Phase 5. |
+| Whole-vault backup | ✅ | — | `BackupUC`, `POST /api/vault/backup`, a Settings card, and a **tested restore** — backup → empty directory → unlock → same net worth. |
 
 The hand-loan exporter is the template to follow, not a thing to generalise
 prematurely. It already solves the parts that are easy to get wrong: Indian digit
@@ -505,9 +624,9 @@ from its own tab, carrying the filters on screen; a backup taken from Settings
 restores into an empty directory and unlocks with the same passphrase to the same
 net worth; and no export of a tax figure is producible from a PROVISIONAL year.
 
-**Open question for the user:** should exports mask PII by default and offer to
-include it, or include it by default and offer to mask it? The answer differs by
-audience — a CA needs the borrower's name, a spreadsheet for analysis does not.
+~~**Open question for the user:** should exports mask PII by default and offer to
+include it, or include it by default and offer to mask it?~~ **Answered
+2026-09-15: masked by default, visible toggle.** See the Phase 7 note above.
 
 ---
 
@@ -557,6 +676,10 @@ figure flowing into a filing is the worst failure mode available in this codebas
 
 ## 5. Open questions
 
+> **Items 3, 4 and 5 are answered.** 3 — a filtered reading, as recommended
+> (Phase 4). 4 — a top-level tab, as recommended (Phase 3). 5 — masked by
+> default with a visible toggle (Phase 7). Items 1 and 2 remain open.
+
 1. **Accrual basis for hand-loan interest** (Phase 2) — taxable when it accrues,
    or when it is received? Blocks Phase 2's derivation; changes every downstream
    figure.
@@ -576,22 +699,33 @@ figure flowing into a filing is the worst failure mode available in this codebas
 
 ## 6. Definition of done
 
-All ten objectives green, and specifically:
+**All ten met as of 2026-09-15**, each pinned by a functional test rather than
+asserted. Verification: typecheck clean · lint clean · 1254 tests across 78 files
+· web build clean.
 
-- Net worth differs from gross assets when a borrowing exists.
-- An advance-tax instalment changes when a trade is recorded.
-- Hand-loan interest appears in both net worth **and** taxable income.
-- Any two snapshots can be compared, filtered to an asset class.
-- A fixed deposit grows without a trade.
-- Schedule FA either generates from a real daily series, or refuses — never approximates.
-- Every register — loans, chits, equity, property — exports to CSV and PDF from
-  its own tab, carrying the filters on screen.
-- A backup taken from Settings restores into an empty directory, unlocks with the
-  same passphrase, and reports the same net worth. **Tested, not assumed.**
+Specifically:
+
+- ✅ Net worth differs from gross assets when a borrowing exists.
+- ✅ An advance-tax instalment changes when a trade is recorded.
+- ✅ Hand-loan interest appears in both net worth **and** taxable income.
+- ✅ Any two snapshots can be compared, filtered to an asset class.
+- ✅ A fixed deposit grows without a trade — `tests/functional/ledger/balance-accounts.spec.ts`.
+- ✅ Schedule FA either generates from a real daily series, or refuses — never
+  approximates. Both halves are tested: a complete year produces a peak ABOVE the
+  31-December close, and a missing month refuses and names the month.
+- ✅ Every register — loans, chits, equity, property, balances — exports to CSV
+  and PDF from its own tab, carrying the filters on screen.
+- ✅ A backup taken from Settings restores into an empty directory, unlocks with
+  the same passphrase, and reports the same net worth. **Tested, not assumed** —
+  and that test is what caught the WAL defect.
 
 ---
 
 ## 7. Deferred — to be addressed at the end
+
+> Nothing in §7 blocks any of the ten objectives. The rebate is the one item here
+> with a live consequence for a real figure, and the direction of its error is
+> safe — see below.
 
 ### Opening-balance lots
 

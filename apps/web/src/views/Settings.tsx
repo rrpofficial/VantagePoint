@@ -166,9 +166,17 @@ function BackupCard() {
     }
     const reader = new FileReader();
     reader.onload = () => {
-      // `readAsDataURL` yields `data:<type>;base64,<payload>`; the API wants the
-      // payload alone.
-      const payload = String(reader.result).split(',')[1] ?? '';
+      /*
+       * `readAsDataURL` yields `data:<type>;base64,<payload>` as a STRING, but
+       * `FileReader.result` is typed `string | ArrayBuffer | null` because the
+       * same property serves `readAsArrayBuffer`. Stringifying it blindly would
+       * send "[object ArrayBuffer]" as the archive if that ever changed.
+       */
+      if (typeof reader.result !== 'string') {
+        setError('that file could not be read');
+        return;
+      }
+      const payload = reader.result.split(',')[1] ?? '';
       setArchive({ name: file.name, base64: payload });
     };
     reader.readAsDataURL(file);

@@ -43,7 +43,17 @@ function parseArchive(bytes: Uint8Array): Result<Archive> {
     return Err(new VaultStateError('this file is not a portTrack backup archive'));
   }
 
-  const archive = parsed as Partial<Archive>;
+  /*
+   * Typed as unknown fields, not as `Partial<Archive>`. This is arbitrary JSON
+   * off a disk — asserting the declared shape would let the compiler narrow
+   * `magic` to the literal it is supposed to be and then reason that the check
+   * below can never fail, which is exactly backwards: the check exists because
+   * the value might be anything at all.
+   */
+  const archive = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Readonly<
+    Record<string, unknown>
+  >;
+
   /*
    * Version 1 archives predate the magic string, so a missing one is accepted
    * where the shape is otherwise right. A WRONG one never is.

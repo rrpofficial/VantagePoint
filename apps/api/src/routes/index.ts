@@ -23,7 +23,6 @@ import {
   EditModeUC,
   ExportUC,
   type ExportRegister,
-  type ExportRequest,
   ForeignDisclosureUC,
   MarksUC,
   type RecordForeignAccountInput,
@@ -959,9 +958,7 @@ export function registerRoutes(app: FastifyInstance): void {
         register: register as ExportRegister,
         format,
         includePii: query.pii === 'include',
-        ...(query.fy === undefined || query.fy.length === 0
-          ? {}
-          : { financialYear: query.fy as NonNullable<ExportRequest['financialYear']> }),
+        ...(query.fy === undefined || query.fy.length === 0 ? {} : { financialYear: query.fy }),
         ...(query.filter === undefined ? {} : { filterNote: query.filter }),
       });
 
@@ -1218,7 +1215,15 @@ export function registerRoutes(app: FastifyInstance): void {
   });
 
   app.post('/api/compliance/foreign/accounts', async (request, reply) => {
-    const body = request.body as Partial<RecordForeignAccountInput>;
+    /*
+     * `calendarYear` is typed loosely on purpose. It is a NUMBER on the use
+     * case, and a browser form sends it as a string; declaring it as the use
+     * case's type would tell the compiler a conversion is redundant when it is
+     * the only thing standing between a string and a year comparison.
+     */
+    const body = request.body as Omit<Partial<RecordForeignAccountInput>, 'calendarYear'> & {
+      calendarYear?: string | number;
+    };
     const result = await ForeignDisclosureUC.recordAccount({
       countryCode: body.countryCode ?? '',
       institutionName: body.institutionName ?? '',
