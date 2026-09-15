@@ -1,4 +1,4 @@
-# portTrack template: Custom_GenericBroker
+# VantagePoint template: Custom_GenericBroker
 # Any broker without a dedicated parser
 # trade_type is buy or sell. Sells consume lots FIFO, oldest first.
 #

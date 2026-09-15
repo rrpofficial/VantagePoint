@@ -32,7 +32,7 @@
  * tranche a different identity in every file that mentions it.
  */
 import { createHash } from 'node:crypto';
-import type { IsoDate, Quantity } from '@porttrack/shared-kernel';
+import type { IsoDate, Quantity } from '@vantagepoint/shared-kernel';
 import type { EquityAward } from './types.js';
 
 const slug = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');

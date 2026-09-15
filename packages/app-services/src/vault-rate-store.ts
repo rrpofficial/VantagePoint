@@ -9,10 +9,10 @@
  * Installed once at unlock and torn down at lock, so a locked vault falls back to
  * an empty in-memory store rather than throwing from inside pure valuation code.
  */
-import { resetRateStore, useRateStore, type RateRecord, type RateStorePort } from '@porttrack/fx-itbr';
-import { RateRepository, type StoredRate } from '@porttrack/persistence';
-import type { RateSource } from '@porttrack/core-domain';
-import { VaultStateError, type Currency, type IsoDate, type Result } from '@porttrack/shared-kernel';
+import { resetRateStore, useRateStore, type RateRecord, type RateStorePort } from '@vantagepoint/fx-itbr';
+import { RateRepository, type StoredRate } from '@vantagepoint/persistence';
+import type { RateSource } from '@vantagepoint/core-domain';
+import { VaultStateError, type Currency, type IsoDate, type Result } from '@vantagepoint/shared-kernel';
 
 /*
  * The two record shapes are structurally identical and declared separately on

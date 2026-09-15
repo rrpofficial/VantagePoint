@@ -7,8 +7,8 @@
  * the engine computing the tax, and neither would look wrong on its own.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { FyCalendar } from '@porttrack/shared-kernel';
-import { ReferenceUC, configure, resetPorts } from '@porttrack/app-services';
+import { FyCalendar } from '@vantagepoint/shared-kernel';
+import { ReferenceUC, configure, resetPorts } from '@vantagepoint/app-services';
 
 /** Freezes the clock so "current year" assertions are not calendar-dependent. */
 function on(today: string): void {

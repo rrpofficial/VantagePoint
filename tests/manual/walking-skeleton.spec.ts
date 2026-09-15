@@ -12,7 +12,7 @@ import { mkdtempSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Money } from '@porttrack/shared-kernel';
+import { Money } from '@vantagepoint/shared-kernel';
 import {
   AccrualEngine,
   AssetRegistry,
@@ -20,12 +20,12 @@ import {
   LotBook,
   ValuationEngine,
   taxCharacterFor,
-} from '@porttrack/core-domain';
-import { DualRateConverter } from '@porttrack/fx-itbr';
-import { CompliancePolicy, DeltaEngine, ReturnsCalculator, SnapshotFactory } from '@porttrack/snapshot';
-import { MigrationRunner, Vault } from '@porttrack/persistence';
-import { RegexRules } from '@porttrack/pii-masker';
-import { createEgressGateway, createLogger } from '@porttrack/platform';
+} from '@vantagepoint/core-domain';
+import { DualRateConverter } from '@vantagepoint/fx-itbr';
+import { CompliancePolicy, DeltaEngine, ReturnsCalculator, SnapshotFactory } from '@vantagepoint/snapshot';
+import { MigrationRunner, Vault } from '@vantagepoint/persistence';
+import { RegexRules } from '@vantagepoint/pii-masker';
+import { createEgressGateway, createLogger } from '@vantagepoint/platform';
 import {
   aForeignAsset,
   aHandLoan,
@@ -37,15 +37,15 @@ import {
   stubFx,
   stubPrices,
   usd,
-} from '@porttrack/test-kit';
+} from '@vantagepoint/test-kit';
 
 const log: string[] = [];
 const say = (line: string) => log.push(line);
 
-describe('portTrack walking skeleton', () => {
+describe('VantagePoint walking skeleton', () => {
   it('runs the whole implemented stack end to end', async () => {
     /* 1 ─ encrypted vault on real disk ------------------------------------ */
-    const dataDir = mkdtempSync(join(tmpdir(), 'porttrack-demo-'));
+    const dataDir = mkdtempSync(join(tmpdir(), 'vantagepoint-demo-'));
     expectOk(await Vault.open({ dataDir, fileName: 'vault.db' }));
     const handle = expectOk(await Vault.unlock('correct horse battery staple'));
     const dbBytes = statSync(join(dataDir, 'vault.db')).size;

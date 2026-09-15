@@ -6,8 +6,8 @@
  * so a differing value for an existing key is an error, not an update — corrections
  * go through the amendment path (US-2.6) instead.
  */
-import { Err, Ok, RateConflictError, type Currency, type IsoDate, type Result } from '@porttrack/shared-kernel';
-import type { RateSource } from '@porttrack/core-domain';
+import { Err, Ok, RateConflictError, type Currency, type IsoDate, type Result } from '@vantagepoint/shared-kernel';
+import type { RateSource } from '@vantagepoint/core-domain';
 import type { RateRecord } from './types.js';
 
 const keyOf = (currency: Currency, date: IsoDate, source: RateSource) =>

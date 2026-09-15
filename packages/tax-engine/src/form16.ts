@@ -20,7 +20,7 @@ import {
   type Money as MoneyValue,
   type Quarter,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { createHash } from 'node:crypto';
 import type { Form16, IncomeProfile } from './types.js';
 

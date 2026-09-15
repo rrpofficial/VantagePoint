@@ -13,9 +13,9 @@
  * the archive documented in the README.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { CapitalGainsEngine, TaxRuleTable } from '@porttrack/tax-engine';
-import { RateStore, resetRateStore } from '@porttrack/fx-itbr';
-import { anExit, expectOk, usd } from '@porttrack/test-kit';
+import { CapitalGainsEngine, TaxRuleTable } from '@vantagepoint/tax-engine';
+import { RateStore, resetRateStore } from '@vantagepoint/fx-itbr';
+import { anExit, expectOk, usd } from '@vantagepoint/test-kit';
 
 const RULES = () => expectOk(TaxRuleTable.rulesFor('2025-26'));
 

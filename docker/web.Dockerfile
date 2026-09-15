@@ -1,4 +1,4 @@
-# porttrack-web (US-9.2, PRD FR-8.1/8.3)
+# vantagepoint-web (US-9.2, PRD FR-8.1/8.3)
 #
 # Builds the SPA, then serves the static bundle from Caddy. The runtime image
 # contains no Node and no source — only compiled assets and a web server.
@@ -21,24 +21,24 @@ COPY apps/ ./apps/
 COPY tsconfig.base.json tsconfig.json ./
 
 RUN pnpm install --frozen-lockfile
-RUN pnpm --filter @porttrack/app-web build
+RUN pnpm --filter @vantagepoint/app-web build
 
 # -------------------------------------------------------------- runtime stage
 FROM caddy:2-alpine@sha256:5f5c8640aae01df9654968d946d8f1a56c497f1dd5c5cda4cf95ab7c14d58648 AS runtime
 
-ARG PORTTRACK_UID=1000
-ARG PORTTRACK_GID=1000
+ARG VANTAGEPOINT_UID=1000
+ARG VANTAGEPOINT_GID=1000
 
 COPY --from=build /build/apps/web/dist /srv
 COPY docker/Caddyfile /etc/caddy/Caddyfile
 
 # Caddy needs writable config and data paths; everything else stays read-only.
-RUN addgroup -g "${PORTTRACK_GID}" -S porttrack 2>/dev/null || true \
- && adduser -u "${PORTTRACK_UID}" -G porttrack -S porttrack 2>/dev/null || true \
+RUN addgroup -g "${VANTAGEPOINT_GID}" -S vantagepoint 2>/dev/null || true \
+ && adduser -u "${VANTAGEPOINT_UID}" -G vantagepoint -S vantagepoint 2>/dev/null || true \
  && mkdir -p /config /data \
- && chown -R "${PORTTRACK_UID}:${PORTTRACK_GID}" /config /data /srv
+ && chown -R "${VANTAGEPOINT_UID}:${VANTAGEPOINT_GID}" /config /data /srv
 
-USER ${PORTTRACK_UID}:${PORTTRACK_GID}
+USER ${VANTAGEPOINT_UID}:${VANTAGEPOINT_GID}
 
 EXPOSE 80
 

@@ -25,9 +25,9 @@ import {
   ValuePortfolioUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
@@ -46,7 +46,7 @@ const HOME_LOAN = {
 const registerOf = async () => expectOk(await LiabilityUC.register({ asOf: '2026-09-15' }));
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-borrowed-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-borrowed-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

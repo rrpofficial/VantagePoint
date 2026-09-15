@@ -6,8 +6,8 @@
  * is exactly the one nobody reviews. Every string that reaches a sink, including
  * nested fields and error `cause` chains, is masked first.
  */
-import { RegexRules } from '@porttrack/pii-masker';
-import type { IsoDateTime } from '@porttrack/shared-kernel';
+import { RegexRules } from '@vantagepoint/pii-masker';
+import type { IsoDateTime } from '@vantagepoint/shared-kernel';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 

@@ -10,9 +10,9 @@
  * tell a user their US holdings "gained ₹4 lakh" in a year the stock fell and the
  * rupee weakened — technically true, and useless.
  */
-import { Money, type Money as MoneyValue, type Percentage } from '@porttrack/shared-kernel';
+import { Money, type Money as MoneyValue, type Percentage } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
-import type { PortfolioValuation } from '@porttrack/core-domain';
+import type { PortfolioValuation } from '@vantagepoint/core-domain';
 import type {
   AllocationRow,
   MovementBucket,

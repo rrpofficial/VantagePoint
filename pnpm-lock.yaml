@@ -36,7 +36,7 @@ importers:
       '@playwright/test':
         specifier: ^1.62.1
         version: 1.62.1
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:tests/test-kit
       '@types/node':
@@ -75,16 +75,16 @@ importers:
 
   apps/api:
     dependencies:
-      '@porttrack/app-services':
+      '@vantagepoint/app-services':
         specifier: workspace:*
         version: link:../../packages/app-services
-      '@porttrack/persistence':
+      '@vantagepoint/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
-      '@porttrack/pii-masker':
+      '@vantagepoint/pii-masker':
         specifier: workspace:*
         version: link:../../packages/pii-masker
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../../packages/shared-kernel
       fastify:
@@ -93,16 +93,16 @@ importers:
 
   apps/cli:
     dependencies:
-      '@porttrack/app-services':
+      '@vantagepoint/app-services':
         specifier: workspace:*
         version: link:../../packages/app-services
-      '@porttrack/persistence':
+      '@vantagepoint/persistence':
         specifier: workspace:*
         version: link:../../packages/persistence
-      '@porttrack/pii-masker':
+      '@vantagepoint/pii-masker':
         specifier: workspace:*
         version: link:../../packages/pii-masker
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../../packages/shared-kernel
 
@@ -117,122 +117,122 @@ importers:
 
   packages/adapters-fx:
     dependencies:
-      '@porttrack/fx-itbr':
+      '@vantagepoint/fx-itbr':
         specifier: workspace:*
         version: link:../fx-itbr
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   packages/app-services:
     dependencies:
-      '@porttrack/compliance':
+      '@vantagepoint/compliance':
         specifier: workspace:*
         version: link:../compliance
-      '@porttrack/core-domain':
+      '@vantagepoint/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@porttrack/exporters':
+      '@vantagepoint/exporters':
         specifier: workspace:*
         version: link:../exporters
-      '@porttrack/fx-itbr':
+      '@vantagepoint/fx-itbr':
         specifier: workspace:*
         version: link:../fx-itbr
-      '@porttrack/ingestion':
+      '@vantagepoint/ingestion':
         specifier: workspace:*
         version: link:../ingestion
-      '@porttrack/persistence':
+      '@vantagepoint/persistence':
         specifier: workspace:*
         version: link:../persistence
-      '@porttrack/platform':
+      '@vantagepoint/platform':
         specifier: workspace:*
         version: link:../platform
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
-      '@porttrack/snapshot':
+      '@vantagepoint/snapshot':
         specifier: workspace:*
         version: link:../snapshot
-      '@porttrack/tax-engine':
+      '@vantagepoint/tax-engine':
         specifier: workspace:*
         version: link:../tax-engine
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   packages/compliance:
     dependencies:
-      '@porttrack/core-domain':
+      '@vantagepoint/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
-      '@porttrack/snapshot':
+      '@vantagepoint/snapshot':
         specifier: workspace:*
         version: link:../snapshot
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   packages/core-domain:
     dependencies:
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
     devDependencies:
-      '@porttrack/fx-itbr':
+      '@vantagepoint/fx-itbr':
         specifier: workspace:*
         version: link:../fx-itbr
-      '@porttrack/pii-masker':
+      '@vantagepoint/pii-masker':
         specifier: workspace:*
         version: link:../pii-masker
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   packages/exporters:
     dependencies:
-      '@porttrack/core-domain':
+      '@vantagepoint/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   packages/fx-itbr:
     dependencies:
-      '@porttrack/core-domain':
+      '@vantagepoint/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   packages/ingestion:
     dependencies:
-      '@porttrack/core-domain':
+      '@vantagepoint/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
@@ -241,26 +241,26 @@ importers:
       '@noble/hashes':
         specifier: '*'
         version: 2.2.0
-      '@porttrack/core-domain':
+      '@vantagepoint/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
-      '@porttrack/snapshot':
+      '@vantagepoint/snapshot':
         specifier: workspace:*
         version: link:../snapshot
       better-sqlite3-multiple-ciphers:
         specifier: '*'
         version: 12.11.1
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   packages/pii-masker:
     dependencies:
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
       wink-eng-lite-web-model:
@@ -270,20 +270,20 @@ importers:
         specifier: '*'
         version: 2.4.0
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   packages/platform:
     dependencies:
-      '@porttrack/pii-masker':
+      '@vantagepoint/pii-masker':
         specifier: workspace:*
         version: link:../pii-masker
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
@@ -293,48 +293,48 @@ importers:
         specifier: '*'
         version: 10.6.0
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   packages/snapshot:
     dependencies:
-      '@porttrack/core-domain':
+      '@vantagepoint/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
     devDependencies:
-      '@porttrack/fx-itbr':
+      '@vantagepoint/fx-itbr':
         specifier: workspace:*
         version: link:../fx-itbr
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   packages/tax-engine:
     dependencies:
-      '@porttrack/core-domain':
+      '@vantagepoint/core-domain':
         specifier: workspace:*
         version: link:../core-domain
-      '@porttrack/fx-itbr':
+      '@vantagepoint/fx-itbr':
         specifier: workspace:*
         version: link:../fx-itbr
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../shared-kernel
     devDependencies:
-      '@porttrack/test-kit':
+      '@vantagepoint/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit
 
   tests/test-kit:
     dependencies:
-      '@porttrack/core-domain':
+      '@vantagepoint/core-domain':
         specifier: workspace:*
         version: link:../../packages/core-domain
-      '@porttrack/shared-kernel':
+      '@vantagepoint/shared-kernel':
         specifier: workspace:*
         version: link:../../packages/shared-kernel
 

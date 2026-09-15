@@ -3,8 +3,8 @@
  * US-1.9 — Fixed and recurring deposits (in deposits.spec.ts)
  */
 import { describe, it, expect } from 'vitest';
-import { AccrualEngine, AssetRegistry } from '@porttrack/core-domain';
-import { expectMoney, inr } from '@porttrack/test-kit';
+import { AccrualEngine, AssetRegistry } from '@vantagepoint/core-domain';
+import { expectMoney, inr } from '@vantagepoint/test-kit';
 
 describe('US-1.8 statutory schemes', () => {
   describe('Scenario: EPF balance accrues employee, employer and interest components', () => {

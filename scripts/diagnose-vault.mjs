@@ -39,19 +39,19 @@ import { basename, join } from 'node:path';
 const EXIT = { SOUND: 0, DAMAGED: 1, USAGE: 2, WRONG_KEY: 3, NO_VAULT: 4 };
 
 const sourceDir = process.argv[2];
-const passphrase = process.env.PORTTRACK_PASSPHRASE ?? '';
+const passphrase = process.env.VANTAGEPOINT_PASSPHRASE ?? '';
 
 if (sourceDir === undefined || passphrase.length === 0) {
   console.error(
     [
-      'usage: PORTTRACK_PASSPHRASE=... pnpm vault:diagnose <data-dir>',
+      'usage: VANTAGEPOINT_PASSPHRASE=... pnpm vault:diagnose <data-dir>',
       '',
       'Type the passphrase into a prompt rather than the command line, so it',
       'does not land in your shell history:',
       '',
-      "  read -rs -p 'passphrase: ' PORTTRACK_PASSPHRASE && export PORTTRACK_PASSPHRASE",
+      "  read -rs -p 'passphrase: ' VANTAGEPOINT_PASSPHRASE && export VANTAGEPOINT_PASSPHRASE",
       '  pnpm vault:diagnose ./data',
-      '  unset PORTTRACK_PASSPHRASE',
+      '  unset VANTAGEPOINT_PASSPHRASE',
     ].join('\n'),
   );
   process.exit(EXIT.USAGE);
@@ -68,7 +68,7 @@ const walPath = `${dbPath}-wal`;
  */
 if (!existsSync(metaPath)) {
   console.error(`no vault metadata at ${metaPath}`);
-  console.error('  -> this directory has never held a portTrack vault.');
+  console.error('  -> this directory has never held a VantagePoint vault.');
   process.exit(EXIT.NO_VAULT);
 }
 if (!existsSync(dbPath)) {
@@ -108,7 +108,7 @@ if (existsSync(walPath)) {
 
 // The `-shm` is deliberately NOT copied: it is a rebuildable index of the WAL,
 // and a stale one copied alongside would be a source of false failures.
-const work = mkdtempSync(join(tmpdir(), 'porttrack-diag-'));
+const work = mkdtempSync(join(tmpdir(), 'vantagepoint-diag-'));
 const copy = join(work, 'vault.db');
 let handle;
 let exitCode = EXIT.SOUND;

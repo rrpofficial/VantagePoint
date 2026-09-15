@@ -15,17 +15,17 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Money } from '@porttrack/shared-kernel';
-import { LoanUC, ValuePortfolioUC, resetPorts } from '@porttrack/app-services';
-import { AssetRepository, Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+import { Money } from '@vantagepoint/shared-kernel';
+import { LoanUC, ValuePortfolioUC, resetPorts } from '@vantagepoint/app-services';
+import { AssetRepository, Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const AS_OF = '2026-04-01';
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-money-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-money-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await Vault.unlock(PASSPHRASE));
   resetPorts();

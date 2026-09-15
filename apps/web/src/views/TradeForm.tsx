@@ -109,13 +109,13 @@ export function TradeForm({
 
   if (duplicate !== undefined) {
     return (
-      <div className="pt-callout pt-callout--warn" role="alertdialog" data-testid="duplicate-trade-warning">
-        <h3 className="pt-subhead">This trade is already on the ledger</h3>
-        <p className="pt-muted">
+      <div className="vp-callout vp-callout--warn" role="alertdialog" data-testid="duplicate-trade-warning">
+        <h3 className="vp-subhead">This trade is already on the ledger</h3>
+        <p className="vp-muted">
           {duplicate}. If this is a second fill of the same order, record it — the ledger keeps
           both. If you are entering a trade you already recorded, cancel.
         </p>
-        <div className="pt-actions">
+        <div className="vp-actions">
           <button
             type="button"
             disabled={busy}
@@ -126,7 +126,7 @@ export function TradeForm({
           </button>
           <button
             type="button"
-            className="pt-button-inline"
+            className="vp-button-inline"
             onClick={() => {
               setDuplicate(undefined);
             }}
@@ -139,7 +139,7 @@ export function TradeForm({
   }
 
   return (
-    <form className="pt-form pt-form--grid" onSubmit={onFormSubmit} data-testid="trade-form">
+    <form className="vp-form vp-form--grid" onSubmit={onFormSubmit} data-testid="trade-form">
       <div>
         <label htmlFor="trade-class">What kind of holding</label>
         <select
@@ -255,12 +255,12 @@ export function TradeForm({
         {busy ? 'Recording…' : side === 'BUY' ? 'Record purchase' : 'Record sale'}
       </button>
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}
       {result !== undefined && result.unapplied.length > 0 && (
-        <p className="pt-error" role="alert" data-testid="trade-unapplied">
+        <p className="vp-error" role="alert" data-testid="trade-unapplied">
           {result.unapplied.map((row) => row.reason).join('; ')}
         </p>
       )}

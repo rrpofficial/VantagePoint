@@ -9,8 +9,8 @@
  * means `listFor` can return entries for a loan that no longer exists, which is
  * the intended behaviour rather than an oversight.
  */
-import { Err, Ok, VaultStateError, type Result } from '@porttrack/shared-kernel';
-import type { LoanAuditAction, LoanAuditEntry } from '@porttrack/core-domain';
+import { Err, Ok, VaultStateError, type Result } from '@vantagepoint/shared-kernel';
+import type { LoanAuditAction, LoanAuditEntry } from '@vantagepoint/core-domain';
 import { Vault } from './vault.js';
 
 interface AuditRow {

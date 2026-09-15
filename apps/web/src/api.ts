@@ -61,12 +61,12 @@ async function request<T>(
     if (cause instanceof DOMException && cause.name === 'AbortError') {
       return {
         ok: false,
-        error: { code: 'TIMEOUT', message: 'the portTrack API did not respond in time' },
+        error: { code: 'TIMEOUT', message: 'the VantagePoint API did not respond in time' },
       };
     }
     // The backend is reachable only over the internal network; a failure here is
     // the API being down, never a CORS or cross-origin problem.
-    return { ok: false, error: { code: 'UNREACHABLE', message: 'the portTrack API is not responding' } };
+    return { ok: false, error: { code: 'UNREACHABLE', message: 'the VantagePoint API is not responding' } };
   } finally {
     clearTimeout(timer);
   }
@@ -967,10 +967,10 @@ async function downloadBinary(
     const named = /filename="([^"]+)"/.exec(disposition);
     return {
       ok: true,
-      value: { blob: await response.blob(), fileName: named?.[1] ?? 'portTrack-backup.ptb' },
+      value: { blob: await response.blob(), fileName: named?.[1] ?? 'VantagePoint-backup.vpb' },
     };
   } catch {
-    return { ok: false, error: { code: 'UNREACHABLE', message: 'the portTrack API is not responding' } };
+    return { ok: false, error: { code: 'UNREACHABLE', message: 'the VantagePoint API is not responding' } };
   }
 }
 

@@ -30,9 +30,9 @@ import {
   ValuePortfolioUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 
@@ -62,7 +62,7 @@ const propertyAsset = async () => {
 };
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-property-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-property-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

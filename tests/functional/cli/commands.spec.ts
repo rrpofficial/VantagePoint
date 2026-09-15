@@ -3,7 +3,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { runCli } from '../../../apps/cli/src/main.js';
-import { expectNoPii } from '@porttrack/test-kit';
+import { expectNoPii } from '@vantagepoint/test-kit';
 
 describe('US-8.6 Scenario: CLI can import, snapshot and compute tax without the UI', () => {
   it('runs `import` and exits 0', async () => {

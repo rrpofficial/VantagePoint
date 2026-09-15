@@ -259,13 +259,13 @@ The encrypted portfolio database **must be stored on the host operating system's
 not inside the container's writable layer and not in an anonymous Docker volume.
 
 - **Bind mount:** the database directory is bind-mounted from a host path (default `./data`, overridable
-  via the `PORTTRACK_DATA_DIR` environment variable) to a fixed in-container path.
+  via the `VANTAGEPOINT_DATA_DIR` environment variable) to a fixed in-container path.
 - **Survivability:** `docker compose down`, image rebuild, container recreation, and Docker Engine
   upgrade must all leave the database intact and readable.
 - **Direct host access:** the database file must be visible, backup-able and copyable directly from the
   host filesystem without entering the container.
 - **Ownership & permissions:** containers run as a non-root user whose UID/GID is configurable
-  (`PORTTRACK_UID`/`PORTTRACK_GID`) so bind-mounted files are owned by the host user, not by root.
+  (`VANTAGEPOINT_UID`/`VANTAGEPOINT_GID`) so bind-mounted files are owned by the host user, not by root.
 - **Cross-platform:** the same compose file works on Linux, macOS (Docker Desktop) and Windows (WSL2).
 
 #### FR-8.3: Container Security Posture

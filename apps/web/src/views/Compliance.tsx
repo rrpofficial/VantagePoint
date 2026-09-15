@@ -78,18 +78,18 @@ function ForeignInputs({ calendarYear }: { calendarYear: number }) {
         </Chip>
       }
     >
-      <p className="pt-muted">
+      <p className="vp-muted">
         Table A3 reports the <strong>highest</strong> value each foreign holding reached during the
         calendar year, not its closing value. That needs a price and an exchange rate for every day
-        it was held. portTrack has no market feed — the container has no route out — so the series
+        it was held. VantagePoint has no market feed — the container has no route out — so the series
         is built from the statements you import and the rates already loaded, and anything missing
         is listed below rather than filled in with a guess.
       </p>
 
-      <div className="pt-actions">
+      <div className="vp-actions">
         <button
           type="button"
-          className="pt-button-inline"
+          className="vp-button-inline"
           data-testid="sync-marks"
           onClick={() => void sync()}
         >
@@ -98,21 +98,21 @@ function ForeignInputs({ calendarYear }: { calendarYear: number }) {
       </div>
 
       {status !== undefined && (
-        <p className="pt-banner" role="status" data-testid="marks-status">
+        <p className="vp-banner" role="status" data-testid="marks-status">
           {status}
         </p>
       )}
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}
 
-      <h3 className="pt-subhead">Holdings</h3>
+      <h3 className="vp-subhead">Holdings</h3>
       {readiness !== undefined && readiness.holdings.length === 0 ? (
-        <p className="pt-muted">No foreign holdings, so Table A3 has nothing to report.</p>
+        <p className="vp-muted">No foreign holdings, so Table A3 has nothing to report.</p>
       ) : (
-        <ul className="pt-log" data-testid="fa-readiness">
+        <ul className="vp-log" data-testid="fa-readiness">
           {(readiness?.holdings ?? []).map((holding) => (
             <li key={holding.assetId}>
               <strong>{holding.label}</strong> ({holding.currency}){' '}
@@ -123,7 +123,7 @@ function ForeignInputs({ calendarYear }: { calendarYear: number }) {
                   <Chip>Incomplete</Chip>
                   <ul>
                     {holding.blockers.map((blocker, index) => (
-                      <li key={index} className="pt-muted">
+                      <li key={index} className="vp-muted">
                         {blocker}
                       </li>
                     ))}
@@ -131,7 +131,7 @@ function ForeignInputs({ calendarYear }: { calendarYear: number }) {
                   {!holding.hasEntityDetail && (
                     <button
                       type="button"
-                      className="pt-button-inline"
+                      className="vp-button-inline"
                       data-testid="add-entity-detail"
                       onClick={() => {
                         setEditing(editing === holding.assetId ? undefined : holding.assetId);
@@ -156,18 +156,18 @@ function ForeignInputs({ calendarYear }: { calendarYear: number }) {
         </ul>
       )}
 
-      <h3 className="pt-subhead">Foreign bank and custodial accounts</h3>
-      <p className="pt-muted">
+      <h3 className="vp-subhead">Foreign bank and custodial accounts</h3>
+      <p className="vp-muted">
         Table D discloses these separately from holdings. The <strong>peak balance</strong> is read
         off your own statements — it is not derived from the closing balance, for the same reason a
         peak holding value is not.
       </p>
       {accounts.length === 0 ? (
-        <p className="pt-muted" data-testid="no-foreign-accounts">
+        <p className="vp-muted" data-testid="no-foreign-accounts">
           None recorded for {calendarYear}.
         </p>
       ) : (
-        <ul className="pt-log">
+        <ul className="vp-log">
           {accounts.map((account) => (
             <li key={account.accountId}>
               {account.institutionName} · {account.countryCode} · peak{' '}
@@ -177,10 +177,10 @@ function ForeignInputs({ calendarYear }: { calendarYear: number }) {
           ))}
         </ul>
       )}
-      <div className="pt-actions">
+      <div className="vp-actions">
         <button
           type="button"
-          className="pt-button-inline"
+          className="vp-button-inline"
           data-testid="add-foreign-account"
           onClick={() => {
             setAddingAccount((open) => !open);
@@ -223,7 +223,7 @@ function EntityDetailForm({ assetId, onSaved }: { assetId: string; onSaved: () =
   }, [assetId, countryCode, entityName, entityAddress, natureOfEntity, onSaved]);
 
   return (
-    <div className="pt-form pt-form--grid" data-testid="entity-detail-form">
+    <div className="vp-form vp-form--grid" data-testid="entity-detail-form">
       <label htmlFor={`country-${assetId}`}>Country code</label>
       <input
         id={`country-${assetId}`}
@@ -257,18 +257,18 @@ function EntityDetailForm({ assetId, onSaved }: { assetId: string; onSaved: () =
           setNatureOfEntity(event.target.value);
         }}
       />
-      <div className="pt-actions pt-form__full">
+      <div className="vp-actions vp-form__full">
         <button type="button" onClick={() => void submit()} data-testid="save-entity-detail">
           Save
         </button>
       </div>
-      <p className="pt-muted pt-form__full">
+      <p className="vp-muted vp-form__full">
         A USD-denominated fund is routinely domiciled outside the United States, so the country is
         recorded rather than inferred from the currency — a wrong country is a defect in the
         disclosure.
       </p>
       {error !== undefined && (
-        <p className="pt-error pt-form__full" role="alert">
+        <p className="vp-error vp-form__full" role="alert">
           {error}
         </p>
       )}
@@ -319,7 +319,7 @@ function ForeignAccountForm({
   ]);
 
   return (
-    <div className="pt-form pt-form--grid" data-testid="foreign-account-form">
+    <div className="vp-form vp-form--grid" data-testid="foreign-account-form">
       <label htmlFor="fa-country">Country code</label>
       <input
         id="fa-country"
@@ -380,13 +380,13 @@ function ForeignAccountForm({
           setClosingBalance(event.target.value);
         }}
       />
-      <div className="pt-actions pt-form__full">
+      <div className="vp-actions vp-form__full">
         <button type="button" onClick={() => void submit()} data-testid="save-foreign-account">
           Save
         </button>
       </div>
       {error !== undefined && (
-        <p className="pt-error pt-form__full" role="alert">
+        <p className="vp-error vp-form__full" role="alert">
           {error}
         </p>
       )}
@@ -398,7 +398,7 @@ function AlSection({ section }: { section: ScheduleAlSection }) {
   if (section.items.length === 0) return null;
   return (
     <>
-      <tr className="pt-table__group">
+      <tr className="vp-table__group">
         <th scope="rowgroup" colSpan={2}>
           {section.head}
         </th>
@@ -406,14 +406,14 @@ function AlSection({ section }: { section: ScheduleAlSection }) {
       {section.items.map((item, index) => (
         <tr key={`${section.head}-${String(index)}`}>
           <td>{item.description}</td>
-          <td className="pt-align-end">
+          <td className="vp-align-end">
             <Amount value={item.costOfAcquisition} />
           </td>
         </tr>
       ))}
-      <tr className="pt-table__total">
+      <tr className="vp-table__total">
         <td>Total</td>
-        <td className="pt-align-end">
+        <td className="vp-align-end">
           <Amount value={section.total} />
         </td>
       </tr>
@@ -468,22 +468,22 @@ export function Compliance() {
   }, [financialYear]);
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <Card
         title="Schedule FA — foreign assets"
         action={
-          <button type="button" className="pt-button-inline" onClick={() => void loadFa()}>
+          <button type="button" className="vp-button-inline" onClick={() => void loadFa()}>
             Generate
           </button>
         }
       >
-        <p className="pt-muted">
+        <p className="vp-muted">
           <strong>Calendar year, not financial year.</strong> Schedule FA discloses 1 January to 31
-          December, unlike every other figure in portTrack. It is generated from the frozen
+          December, unlike every other figure in VantagePoint. It is generated from the frozen
           31-December snapshot, never from live values.
         </p>
 
-        <div className="pt-controls">
+        <div className="vp-controls">
           <label htmlFor="cy">Calendar year</label>
           <select
             id="cy"
@@ -501,7 +501,7 @@ export function Compliance() {
         </div>
 
         {selectedCalendarYear?.isComplete === false && (
-          <p className="pt-banner" role="status" data-testid="incomplete-calendar-year">
+          <p className="vp-banner" role="status" data-testid="incomplete-calendar-year">
             {selectedCalendarYear.calendarYear} is still running. Schedule FA reports the position at
             31 December, so this year has no closing value until it ends — you would normally file
             for {selectedCalendarYear.calendarYear - 1}.
@@ -509,44 +509,44 @@ export function Compliance() {
         )}
 
         {faError !== undefined && (
-          <p className="pt-error" role="alert">
+          <p className="vp-error" role="alert">
             {faError}
           </p>
         )}
 
         {fa !== undefined && (
           <div data-testid="schedule-fa">
-            <h3 className="pt-subhead">Table A3 — foreign equity and units</h3>
+            <h3 className="vp-subhead">Table A3 — foreign equity and units</h3>
             {fa.tableA3Error !== null ? (
-              <p className="pt-banner" role="status" data-testid="table-a3-refusal">
+              <p className="vp-banner" role="status" data-testid="table-a3-refusal">
                 {fa.tableA3Error.message}
               </p>
             ) : fa.tableA3 === null || fa.tableA3.length === 0 ? (
-              <p className="pt-muted">
+              <p className="vp-muted">
                 No foreign equity or units held during {fa.calendarYear}. Nothing to disclose.
               </p>
             ) : (
-              <div className="pt-table-scroll">
-                <table className="pt-table" data-testid="table-a3">
+              <div className="vp-table-scroll">
+                <table className="vp-table" data-testid="table-a3">
                   <thead>
                     <tr>
                       <th scope="col">Country</th>
                       <th scope="col">Entity</th>
                       <th scope="col">Acquired</th>
-                      <th scope="col" className="pt-align-end">
+                      <th scope="col" className="vp-align-end">
                         Initial
                       </th>
                       {/* The column the whole daily series exists for. */}
-                      <th scope="col" className="pt-align-end">
+                      <th scope="col" className="vp-align-end">
                         Peak
                       </th>
-                      <th scope="col" className="pt-align-end">
+                      <th scope="col" className="vp-align-end">
                         Closing
                       </th>
-                      <th scope="col" className="pt-align-end">
+                      <th scope="col" className="vp-align-end">
                         Dividend
                       </th>
-                      <th scope="col" className="pt-align-end">
+                      <th scope="col" className="vp-align-end">
                         Proceeds
                       </th>
                     </tr>
@@ -556,20 +556,20 @@ export function Compliance() {
                       <tr key={`${row.entityName}-${String(index)}`}>
                         <td>{row.countryCode}</td>
                         <td>{row.entityName}</td>
-                        <td className="pt-numeric">{row.acquisitionDate}</td>
-                        <td className="pt-align-end">
+                        <td className="vp-numeric">{row.acquisitionDate}</td>
+                        <td className="vp-align-end">
                           <Amount value={row.initialInvestmentInr} />
                         </td>
-                        <td className="pt-align-end">
+                        <td className="vp-align-end">
                           <Amount value={row.peakValueInr} />
                         </td>
-                        <td className="pt-align-end">
+                        <td className="vp-align-end">
                           <Amount value={row.closingValueInr} />
                         </td>
-                        <td className="pt-align-end">
+                        <td className="vp-align-end">
                           <Amount value={row.grossDividendInr} />
                         </td>
-                        <td className="pt-align-end">
+                        <td className="vp-align-end">
                           <Amount value={row.grossProceedsInr} />
                         </td>
                       </tr>
@@ -579,27 +579,27 @@ export function Compliance() {
               </div>
             )}
 
-            <h3 className="pt-subhead">Table D — foreign custodial and bank accounts</h3>
+            <h3 className="vp-subhead">Table D — foreign custodial and bank accounts</h3>
             {fa.tableDError !== null ? (
-              <p className="pt-banner" role="status">
+              <p className="vp-banner" role="status">
                 {fa.tableDError.message}
               </p>
             ) : fa.tableD === null || fa.tableD.length === 0 ? (
-              <p className="pt-muted">
+              <p className="vp-muted">
                 No foreign accounts recorded for {fa.calendarYear}. Nothing to disclose.
               </p>
             ) : (
-              <div className="pt-table-scroll">
-                <table className="pt-table">
+              <div className="vp-table-scroll">
+                <table className="vp-table">
                   <thead>
                     <tr>
                       <th scope="col">Country</th>
                       <th scope="col">Institution</th>
                       <th scope="col">Account</th>
-                      <th scope="col" className="pt-align-end">
+                      <th scope="col" className="vp-align-end">
                         Peak
                       </th>
-                      <th scope="col" className="pt-align-end">
+                      <th scope="col" className="vp-align-end">
                         Closing
                       </th>
                     </tr>
@@ -610,11 +610,11 @@ export function Compliance() {
                         <td>{row.countryCode}</td>
                         <td>{row.institutionName}</td>
                         {/* Masked reference, never the raw account number (FR-7.2). */}
-                        <td className="pt-numeric pt-hash">{row.accountRef}</td>
-                        <td className="pt-align-end">
+                        <td className="vp-numeric vp-hash">{row.accountRef}</td>
+                        <td className="vp-align-end">
                           <Amount value={row.peakBalanceInr} />
                         </td>
-                        <td className="pt-align-end">
+                        <td className="vp-align-end">
                           <Amount value={row.closingBalanceInr} />
                         </td>
                       </tr>
@@ -632,17 +632,17 @@ export function Compliance() {
       <Card
         title="Schedule AL — assets and liabilities"
         action={
-          <button type="button" className="pt-button-inline" onClick={() => void loadAl()}>
+          <button type="button" className="vp-button-inline" onClick={() => void loadAl()}>
             Generate
           </button>
         }
       >
-        <p className="pt-muted">
+        <p className="vp-muted">
           <strong>Cost of acquisition, not market value.</strong> Every other screen shows what a
           holding is worth; this one shows what was paid for it.
         </p>
 
-        <div className="pt-controls">
+        <div className="vp-controls">
           <label htmlFor="al-fy">Financial year</label>
           <select
             id="al-fy"
@@ -660,7 +660,7 @@ export function Compliance() {
         </div>
 
         {selectedFinancialYear !== undefined && (
-          <p className="pt-muted" data-testid="al-assessment-year">
+          <p className="vp-muted" data-testid="al-assessment-year">
             Filed with the return for <strong>AY {selectedFinancialYear.assessmentYear}</strong>,
             reporting the position at 31 March{' '}
             {Number(selectedFinancialYear.financialYear.slice(0, 4)) + 1}.
@@ -668,7 +668,7 @@ export function Compliance() {
         )}
 
         {alError !== undefined && (
-          <p className="pt-error" role="alert">
+          <p className="vp-error" role="alert">
             {alError}
           </p>
         )}
@@ -676,16 +676,16 @@ export function Compliance() {
         {al !== undefined && (
           <div data-testid="schedule-al">
             {!al.required ? (
-              <p className="pt-muted">{al.notRequiredReason}</p>
+              <p className="vp-muted">{al.notRequiredReason}</p>
             ) : (
               <Chip>Required for AY {al.assessmentYear}</Chip>
             )}
-            <div className="pt-table-scroll">
-              <table className="pt-table">
+            <div className="vp-table-scroll">
+              <table className="vp-table">
                 <thead>
                   <tr>
                     <th scope="col">Item</th>
-                    <th scope="col" className="pt-align-end">
+                    <th scope="col" className="vp-align-end">
                       Cost of acquisition
                     </th>
                   </tr>

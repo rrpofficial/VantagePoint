@@ -2,9 +2,9 @@
  * US-1.5 — Dividend and interest ingestion with withholding tax (PRD FR-1.2)
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { IncomeLedger, LotBook } from '@porttrack/core-domain';
-import { DualRateConverter, Rule115Resolver } from '@porttrack/fx-itbr';
-import { expectMoney, expectOk, inr, usd , seedStandardRates } from '@porttrack/test-kit';
+import { IncomeLedger, LotBook } from '@vantagepoint/core-domain';
+import { DualRateConverter, Rule115Resolver } from '@vantagepoint/fx-itbr';
+import { expectMoney, expectOk, inr, usd , seedStandardRates } from '@vantagepoint/test-kit';
 
 beforeEach(() => {
   seedStandardRates();

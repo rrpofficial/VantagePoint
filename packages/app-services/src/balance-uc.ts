@@ -18,9 +18,9 @@ import {
   type IsoDate,
   type Money as MoneyValue,
   type Result,
-} from '@porttrack/shared-kernel';
-import { balanceViewOf, type BalanceAccount, type BalanceView } from '@porttrack/core-domain';
-import { AssetRepository, Vault } from '@porttrack/persistence';
+} from '@vantagepoint/shared-kernel';
+import { balanceViewOf, type BalanceAccount, type BalanceView } from '@vantagepoint/core-domain';
+import { AssetRepository, Vault } from '@vantagepoint/persistence';
 import { currentPorts } from './context.js';
 import { requireEditMode } from './edit-mode.js';
 import {

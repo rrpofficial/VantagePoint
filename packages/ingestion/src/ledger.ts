@@ -18,7 +18,7 @@
  *     basis is indistinguishable from a real one once it is stored.
  */
 import { createHash } from 'node:crypto';
-import { Money, Ok, type Result } from '@porttrack/shared-kernel';
+import { Money, Ok, type Result } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import {
   AssetRegistry,
@@ -33,7 +33,7 @@ import {
   type EquityAwardKind,
   type ExitTransaction,
   type IncomeEvent,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 import type { ParsedTransaction, ParserName, ReconciliationNote } from './types.js';
 
 /** A row that parsed cleanly but could not be placed on the ledger. */
@@ -109,7 +109,7 @@ function assetClassFor(
   transaction: ParsedTransaction,
   parser: ParserName,
 ): AssetClass | undefined {
-  // A row that states its own class wins: a portTrack template says exactly what
+  // A row that states its own class wins: a VantagePoint template says exactly what
   // it holds, which is more authoritative than anything the file format implies.
   if (transaction.assetClass !== undefined && isAssetClass(transaction.assetClass)) {
     return transaction.assetClass;

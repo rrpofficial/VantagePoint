@@ -10,7 +10,7 @@
  * mid-year sale cannot leave the earlier, larger holding valued at the later
  * quantity.
  */
-import { Money, type IsoDate, type Money as MoneyValue, type Rate } from '@porttrack/shared-kernel';
+import { Money, type IsoDate, type Money as MoneyValue, type Rate } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import type { PeakValue } from './types.js';
 

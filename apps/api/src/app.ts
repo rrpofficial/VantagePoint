@@ -1,5 +1,5 @@
 /**
- * apps/api — the backend HTTP shell that runs inside the `porttrack-api`
+ * apps/api — the backend HTTP shell that runs inside the `vantagepoint-api`
  * container (ADR-011).
  *
  * Deliberately thin: it opens the vault, registers routes and gets out of the
@@ -7,7 +7,7 @@
  * real routing without opening a socket, keeping the suite hermetic.
  */
 import Fastify, { type FastifyInstance } from 'fastify';
-import { Vault } from '@porttrack/persistence';
+import { Vault } from '@vantagepoint/persistence';
 import { registerRoutes } from './routes/index.js';
 
 export interface InjectOptions {
@@ -45,7 +45,7 @@ export async function buildApp(config: ApiConfig): Promise<ApiApp> {
    * library and a user's amount while telling them nothing they can act on.
    *
    * Only 5xx is masked. The first version of this masked EVERYTHING, and a
-   * malformed request then came back as "portTrack could not complete that
+   * malformed request then came back as "VantagePoint could not complete that
    * request" — indistinguishable from a server defect. The Lock vault button hit
    * exactly that: the browser posted no body under a JSON content-type, Fastify
    * correctly answered 400, and the screen reported an internal error, which
@@ -92,7 +92,7 @@ export async function buildApp(config: ApiConfig): Promise<ApiApp> {
       void reply.code(status).send({
         error: {
           code: 'INTERNAL_ERROR',
-          message: 'portTrack could not complete that request. Nothing was changed.',
+          message: 'VantagePoint could not complete that request. Nothing was changed.',
         },
       });
     },

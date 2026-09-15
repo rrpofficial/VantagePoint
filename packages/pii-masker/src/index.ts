@@ -2,7 +2,7 @@
  * pii-masker — zero-trust anonymisation. Runs in the BROWSER bundle (ADR-013).
  * The API imports only {@link PiiVerifier}, never {@link MaskingPipeline}.
  */
-import type { Result } from '@porttrack/shared-kernel';
+import type { Result } from '@vantagepoint/shared-kernel';
 import { detect, mask } from './regex-rules.js';
 import { detectEntities, maskPayload, maskText } from './pipeline.js';
 import { maskPersonNames } from './ner.js';

@@ -10,7 +10,7 @@
  * Account numbers are masked to opaque references (FR-7.2) — a disclosure export
  * is exactly the kind of file that gets emailed to an accountant.
  */
-import { DomainError, Err, Ok, Money, type IsoDate, type Result } from '@porttrack/shared-kernel';
+import { DomainError, Err, Ok, Money, type IsoDate, type Result } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import { createHash } from 'node:crypto';
 import { computeFromAcquisition } from './peak-value.js';

@@ -42,9 +42,9 @@ export function ExportControl({
   };
 
   return (
-    <div className="pt-actions" data-testid={testId ?? `export-${register}`}>
+    <div className="vp-actions" data-testid={testId ?? `export-${register}`}>
       {hasPii && (
-        <label className="pt-check pt-check--inline">
+        <label className="vp-check vp-check--inline">
           <input
             type="checkbox"
             checked={includePii}
@@ -57,7 +57,7 @@ export function ExportControl({
         </label>
       )}
       <a
-        className="pt-link pt-link--inline"
+        className="vp-link vp-link--inline"
         href={api.exportUrl(register, 'csv', options)}
         data-testid={`${register}-export-csv`}
         download
@@ -65,7 +65,7 @@ export function ExportControl({
         Export CSV
       </a>
       <a
-        className="pt-link pt-link--inline"
+        className="vp-link vp-link--inline"
         href={api.exportUrl(register, 'pdf', options)}
         data-testid={`${register}-export-pdf`}
         download

@@ -64,7 +64,7 @@ function acquisitionCost(asset: LedgerAsset): number {
  */
 function AddPropertyButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" className="pt-button-inline" onClick={onClick} data-testid="add-property">
+    <button type="button" className="vp-button-inline" onClick={onClick} data-testid="add-property">
       Add property or transaction
     </button>
   );
@@ -92,7 +92,7 @@ export function Immovable() {
   if (error !== undefined) {
     return (
       <Card title="Immovable property">
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       </Card>
@@ -102,7 +102,7 @@ export function Immovable() {
   if (ledger === undefined) {
     return (
       <Card title="Immovable property">
-        <p className="pt-muted">Loading…</p>
+        <p className="vp-muted">Loading…</p>
       </Card>
     );
   }
@@ -113,11 +113,11 @@ export function Immovable() {
   if (properties.length === 0) {
     return (
       <Card title="Immovable property">
-        <p className="pt-muted" data-testid="immovable-empty">
+        <p className="vp-muted" data-testid="immovable-empty">
           No property recorded. Add one here — a purchase or a sale, with its area, rate and each
           duty — or import a filled-in <code>Custom_RealEstate</code> template.
         </p>
-        <div className="pt-actions">
+        <div className="vp-actions">
           <AddPropertyButton
             onClick={() => {
               setAdding(true);
@@ -125,7 +125,7 @@ export function Immovable() {
           />
           <button
             type="button"
-            className="pt-button-inline"
+            className="vp-button-inline"
             onClick={() => {
               navigate('Import');
             }}
@@ -146,11 +146,11 @@ export function Immovable() {
   }
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <Card
         title="Immovable property"
         action={
-          <div className="pt-actions pt-actions--inline">
+          <div className="vp-actions vp-actions--inline">
             <Chip>{`${String(properties.length)} propert${properties.length === 1 ? 'y' : 'ies'}`}</Chip>
             <AddPropertyButton
               onClick={() => {
@@ -163,12 +163,12 @@ export function Immovable() {
           </div>
         }
       >
-        <p className="pt-muted">
+        <p className="vp-muted">
           Carried at what was <strong>paid</strong> — purchase price plus stamp duty and
           registration — not at a market estimate. Schedule AL asks for cost, and a valuation
           nobody performed is not an asset figure.
         </p>
-        <dl className="pt-stats">
+        <dl className="vp-stats">
           <div>
             <dt>Total acquisition cost</dt>
             <dd data-testid="immovable-total">
@@ -187,18 +187,18 @@ export function Immovable() {
       </Card>
 
       <Card title="Properties">
-        <div className="pt-table-scroll">
-          <table className="pt-table" data-testid="immovable-table">
+        <div className="vp-table-scroll">
+          <table className="vp-table" data-testid="immovable-table">
             <thead>
               <tr>
                 <th scope="col">Property</th>
                 <th scope="col">Type</th>
                 <th scope="col">Where</th>
-                <th scope="col" className="pt-align-end">Area</th>
+                <th scope="col" className="vp-align-end">Area</th>
                 <th scope="col">Acquired</th>
-                <th scope="col" className="pt-align-end">Cost paid</th>
+                <th scope="col" className="vp-align-end">Cost paid</th>
                 {/* Shown only where one was recorded, and never summed above. */}
-                <th scope="col" className="pt-align-end">Current value</th>
+                <th scope="col" className="vp-align-end">Current value</th>
                 {editMode.enabled && <th scope="col" />}
               </tr>
             </thead>
@@ -219,7 +219,7 @@ export function Immovable() {
                     <td>
                       <button
                         type="button"
-                        className="pt-link pt-link--inline"
+                        className="vp-link vp-link--inline"
                         aria-expanded={isOpen}
                         onClick={() => {
                           setExpanded(isOpen ? undefined : asset.assetId);
@@ -230,18 +230,18 @@ export function Immovable() {
                     </td>
                     <td>{property === undefined ? '—' : humanise(property.kind)}</td>
                     <td>{where.length === 0 ? '—' : where}</td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       {property?.area === undefined
                         ? '—'
                         : `${property.area.value} ${humanise(property.area.unit)}`}
                     </td>
                     <td>{acquired}</td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       <Amount
                         value={{ amount: String(acquisitionCost(asset)), currency: asset.currency }}
                       />
                     </td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       {property?.currentValue === undefined ? (
                         '—'
                       ) : (
@@ -265,7 +265,7 @@ export function Immovable() {
                     )}
                   </tr>,
                   isOpen ? (
-                    <tr key={`${asset.assetId}-detail`} className="pt-table__detail">
+                    <tr key={`${asset.assetId}-detail`} className="vp-table__detail">
                       <td colSpan={editMode.enabled ? 8 : 7}>
                         {/*
                           The duties are the part a purchase price alone omits,
@@ -276,18 +276,18 @@ export function Immovable() {
                           "Registration & other". It now reads the deed's own
                           breakdown.
                         */}
-                        <table className="pt-table pt-table--nested">
+                        <table className="vp-table vp-table--nested">
                           <thead>
                             <tr>
                               <th scope="col">Date</th>
-                              <th scope="col" className="pt-align-end">Area</th>
-                              <th scope="col" className="pt-align-end">Rate</th>
-                              <th scope="col" className="pt-align-end">Price</th>
-                              <th scope="col" className="pt-align-end">Stamp duty</th>
-                              <th scope="col" className="pt-align-end">Registration</th>
-                              <th scope="col" className="pt-align-end">GST</th>
-                              <th scope="col" className="pt-align-end">Other tax</th>
-                              <th scope="col" className="pt-align-end">Total tax</th>
+                              <th scope="col" className="vp-align-end">Area</th>
+                              <th scope="col" className="vp-align-end">Rate</th>
+                              <th scope="col" className="vp-align-end">Price</th>
+                              <th scope="col" className="vp-align-end">Stamp duty</th>
+                              <th scope="col" className="vp-align-end">Registration</th>
+                              <th scope="col" className="vp-align-end">GST</th>
+                              <th scope="col" className="vp-align-end">Other tax</th>
+                              <th scope="col" className="vp-align-end">Total tax</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -297,19 +297,19 @@ export function Immovable() {
                               return (
                                 <tr key={lot.lotId}>
                                   <td>{lot.acquisitionDate}</td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     {detail?.area === undefined
                                       ? '—'
                                       : `${detail.area.value} ${humanise(detail.area.unit)}`}
                                   </td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     {detail?.pricePerAreaUnit === undefined ? (
                                       '—'
                                     ) : (
                                       <Amount value={detail.pricePerAreaUnit} />
                                     )}
                                   </td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     <Amount
                                       value={
                                         detail?.consideration ?? {
@@ -321,19 +321,19 @@ export function Immovable() {
                                       }
                                     />
                                   </td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     <Amount value={detail?.stampDuty ?? zero} />
                                   </td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     <Amount value={detail?.registrationFee ?? zero} />
                                   </td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     <Amount value={detail?.gst ?? zero} />
                                   </td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     <Amount value={detail?.otherTaxes ?? zero} />
                                   </td>
-                                  <td className="pt-align-end">
+                                  <td className="vp-align-end">
                                     <Amount
                                       value={{
                                         amount: String(totalTax(lot)),

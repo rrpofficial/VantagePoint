@@ -62,9 +62,9 @@ describe('FR-9.2 colour never carries financial direction alone', () => {
 
   it('never styles a delta with the brand accent (ADR-017)', () => {
     const css = readFileSync(resolve(ROOT, 'apps/web/src/theme/app.css'), 'utf8');
-    const deltaRules = css.match(/\.pt-delta--\w+\s*\{[^}]*\}/g) ?? [];
+    const deltaRules = css.match(/\.vp-delta--\w+\s*\{[^}]*\}/g) ?? [];
     expect(deltaRules.length).toBeGreaterThan(0);
-    for (const rule of deltaRules) expect(rule).not.toContain('--pt-accent');
+    for (const rule of deltaRules) expect(rule).not.toContain('--vp-accent');
   });
 });
 
@@ -84,7 +84,7 @@ describe('FR-9.3 fonts are bundled, never fetched', () => {
 describe('The SPA holds no domain logic', () => {
   it('imports no domain package', () => {
     const offenders = globSync(`${ROOT}/apps/web/src/**/*.tsx`).filter((file) =>
-      /@porttrack\/(core-domain|tax-engine|fx-itbr|snapshot|ingestion|compliance|persistence)/.test(
+      /@vantagepoint\/(core-domain|tax-engine|fx-itbr|snapshot|ingestion|compliance|persistence)/.test(
         readFileSync(file, 'utf8'),
       ),
     );

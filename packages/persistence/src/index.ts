@@ -3,9 +3,9 @@
  * page-level AES-256-CBC + HMAC-SHA512 whole-file encryption (ADR-015),
  * forward-only migrations, repositories.
  */
-import type { Result } from '@porttrack/shared-kernel';
-import type { Asset, ExitTransaction, Liability, LoanAuditEntry } from '@porttrack/core-domain';
-import type { Snapshot } from '@porttrack/snapshot';
+import type { Result } from '@vantagepoint/shared-kernel';
+import type { Asset, ExitTransaction, Liability, LoanAuditEntry } from '@vantagepoint/core-domain';
+import type { Snapshot } from '@vantagepoint/snapshot';
 import { Vault } from './vault.js';
 import { currentVersion, runMigrations } from './migrations.js';
 import { deriveKey, deriveKeyAsync, zeroise } from './crypto.js';

@@ -11,9 +11,9 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Decimal } from 'decimal.js';
-import { EtradeGainsLossesParser } from '@porttrack/ingestion';
-import type { ParsedTransaction } from '@porttrack/ingestion';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+import { EtradeGainsLossesParser } from '@vantagepoint/ingestion';
+import type { ParsedTransaction } from '@vantagepoint/ingestion';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const FIXTURE = join(
   import.meta.dirname,

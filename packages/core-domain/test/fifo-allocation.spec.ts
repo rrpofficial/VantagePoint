@@ -3,8 +3,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
-import { FifoAllocator } from '@porttrack/core-domain';
-import { aLot, expectErr, expectOk, inr } from '@porttrack/test-kit';
+import { FifoAllocator } from '@vantagepoint/core-domain';
+import { aLot, expectErr, expectOk, inr } from '@vantagepoint/test-kit';
 
 const L1 = aLot({
   lotId: 'L1',

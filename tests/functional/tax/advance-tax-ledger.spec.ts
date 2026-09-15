@@ -25,9 +25,9 @@ import {
   resetPorts,
   saveIncomeProfile,
   setIncomeProfile,
-} from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const FY = '2025-26';
@@ -39,7 +39,7 @@ const rateRow = (stamp: string, ttBuy: string) =>
   `${stamp},https://example.invalid/x.pdf,${ttBuy},96.15,95.23,96.32,95.23,96.32,94.1,96.7`;
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-advance-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-advance-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

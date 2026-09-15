@@ -7,9 +7,9 @@
  * → DeltaEngine — so the wiring cannot rot again without a failure.
  */
 import { describe, it, expect } from 'vitest';
-import { ValuationEngine } from '@porttrack/core-domain';
-import { DeltaEngine, SnapshotFactory } from '@porttrack/snapshot';
-import { aForeignAsset, anAsset, expectMoney, expectOk, inr, stubFx, stubPrices, usd } from '@porttrack/test-kit';
+import { ValuationEngine } from '@vantagepoint/core-domain';
+import { DeltaEngine, SnapshotFactory } from '@vantagepoint/snapshot';
+import { aForeignAsset, anAsset, expectMoney, expectOk, inr, stubFx, stubPrices, usd } from '@vantagepoint/test-kit';
 
 /** $200/share × 100 shares at ₹80 → ₹1,600,000. */
 const before = ValuationEngine.value({

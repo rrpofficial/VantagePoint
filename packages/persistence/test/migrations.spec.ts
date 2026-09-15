@@ -5,11 +5,11 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { MIGRATIONS, MigrationRunner, Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+import { MIGRATIONS, MigrationRunner, Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
-const dataDir = () => mkdtempSync(join(tmpdir(), 'porttrack-migrate-'));
+const dataDir = () => mkdtempSync(join(tmpdir(), 'vantagepoint-migrate-'));
 
 async function unlockedVault(dir = dataDir()) {
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));

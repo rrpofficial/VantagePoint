@@ -67,7 +67,7 @@ export function DeleteControl({
     return (
       <button
         type="button"
-        className="pt-button-inline pt-button-inline--danger"
+        className="vp-button-inline vp-button-inline--danger"
         data-testid={testId}
         onClick={() => {
           setArmed(true);
@@ -80,19 +80,19 @@ export function DeleteControl({
 
   return (
     <div
-      className="pt-callout pt-callout--warn"
+      className="vp-callout vp-callout--warn"
       role="alertdialog"
       aria-label={label}
       data-testid={`${testId}-confirm`}
     >
-      <p className="pt-subhead">Delete {describes}?</p>
-      <p className="pt-muted">
-        This removes it from the vault permanently. There is no undo inside portTrack — the only way
+      <p className="vp-subhead">Delete {describes}?</p>
+      <p className="vp-muted">
+        This removes it from the vault permanently. There is no undo inside VantagePoint — the only way
         back is a restore from your own backup of the data directory.
       </p>
 
       {withReason && (
-        <div className="pt-form">
+        <div className="vp-form">
           <label htmlFor={`${testId}-reason`}>Reason (recorded in the audit trail)</label>
           <input
             id={`${testId}-reason`}
@@ -106,10 +106,10 @@ export function DeleteControl({
         </div>
       )}
 
-      <div className="pt-actions">
+      <div className="vp-actions">
         <button
           type="button"
-          className="pt-button-inline pt-button-inline--danger"
+          className="vp-button-inline vp-button-inline--danger"
           disabled={deleting}
           data-testid={`${testId}-yes`}
           onClick={() => void confirm()}
@@ -118,7 +118,7 @@ export function DeleteControl({
         </button>
         <button
           type="button"
-          className="pt-button-inline"
+          className="vp-button-inline"
           disabled={deleting}
           data-testid={`${testId}-no`}
           onClick={() => {
@@ -131,7 +131,7 @@ export function DeleteControl({
       </div>
 
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}

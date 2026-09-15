@@ -2,9 +2,9 @@
  * US-1.11 — Hand loans with interest accrual (PRD FR-1 AC)
  */
 import { describe, it, expect } from 'vitest';
-import { AccrualEngine, ValuationEngine, type HandLoan } from '@porttrack/core-domain';
-import { MaskingPipeline } from '@porttrack/pii-masker';
-import { aHandLoan, aHandLoanAsset, expectMoney, inr, SYNTHETIC } from '@porttrack/test-kit';
+import { AccrualEngine, ValuationEngine, type HandLoan } from '@vantagepoint/core-domain';
+import { MaskingPipeline } from '@vantagepoint/pii-masker';
+import { aHandLoan, aHandLoanAsset, expectMoney, inr, SYNTHETIC } from '@vantagepoint/test-kit';
 
 const LOAN: HandLoan = aHandLoan({ assetId: 'ast_handloan_002' });
 

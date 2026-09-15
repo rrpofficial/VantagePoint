@@ -22,10 +22,10 @@ const PURE_DOMAIN = [
 ];
 
 const INFRASTRUCTURE = [
-  '@porttrack/persistence',
-  '@porttrack/adapters-fx',
-  '@porttrack/app-services',
-  '@porttrack/platform',
+  '@vantagepoint/persistence',
+  '@vantagepoint/adapters-fx',
+  '@vantagepoint/app-services',
+  '@vantagepoint/platform',
 ];
 
 export default tseslint.config(
@@ -74,7 +74,7 @@ export default tseslint.config(
   },
 
   {
-    name: 'porttrack/pure-domain-boundaries',
+    name: 'vantagepoint/pure-domain-boundaries',
     files: PURE_DOMAIN,
     rules: {
       'no-restricted-imports': [
@@ -122,7 +122,7 @@ export default tseslint.config(
   },
 
   {
-    name: 'porttrack/api-must-not-mask',
+    name: 'vantagepoint/api-must-not-mask',
     files: ['apps/api/src/**'],
     rules: {
       'no-restricted-imports': [
@@ -141,7 +141,7 @@ export default tseslint.config(
   },
 
   {
-    name: 'porttrack/tests',
+    name: 'vantagepoint/tests',
     files: ['**/test/**/*.ts', 'tests/**/*.ts'],
     rules: {
       '@typescript-eslint/no-non-null-assertion': 'off',

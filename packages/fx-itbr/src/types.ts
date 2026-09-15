@@ -1,6 +1,6 @@
 /** FX rate types. Types only — no runtime behaviour. */
-import type { Currency, IsoDate, IsoDateTime, Rate } from '@porttrack/shared-kernel';
-import type { DualRate, RateSource } from '@porttrack/core-domain';
+import type { Currency, IsoDate, IsoDateTime, Rate } from '@vantagepoint/shared-kernel';
+import type { DualRate, RateSource } from '@vantagepoint/core-domain';
 
 export type RateType = 'TTBR' | 'TTSR' | 'REFERENCE';
 

@@ -18,9 +18,9 @@ import {
   ImportStatementUC,
   VaultUC,
   hasIncomeProfile,
-} from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { MaskingPipeline } from '@porttrack/pii-masker';
+} from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { MaskingPipeline } from '@vantagepoint/pii-masker';
 
 export interface CliResult {
   readonly exitCode: number;
@@ -47,9 +47,9 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 async function ensureVault(): Promise<void> {
   if (Vault.isUnlocked()) return;
-  const dataDir = process.env.PORTTRACK_DATA_DIR ?? mkdtempSync(join(tmpdir(), 'porttrack-cli-'));
+  const dataDir = process.env.VANTAGEPOINT_DATA_DIR ?? mkdtempSync(join(tmpdir(), 'vantagepoint-cli-'));
   await Vault.open({ dataDir, fileName: 'vault.db' });
-  const passphrase = process.env.PORTTRACK_PASSPHRASE ?? 'correct horse battery staple';
+  const passphrase = process.env.VANTAGEPOINT_PASSPHRASE ?? 'correct horse battery staple';
   await VaultUC.unlock(passphrase);
 }
 

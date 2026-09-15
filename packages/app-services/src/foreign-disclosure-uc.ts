@@ -17,8 +17,8 @@ import {
   type Currency,
   type IsoDate,
   type Result,
-} from '@porttrack/shared-kernel';
-import { firstAcquisitionOf, type Asset } from '@porttrack/core-domain';
+} from '@vantagepoint/shared-kernel';
+import { firstAcquisitionOf, type Asset } from '@vantagepoint/core-domain';
 import {
   AssetRepository,
   ForeignDisclosureRepository,
@@ -27,7 +27,7 @@ import {
   type ForeignAccount,
   type ForeignHoldingDetail,
   type MarkCoverage,
-} from '@porttrack/persistence';
+} from '@vantagepoint/persistence';
 import { createHash } from 'node:crypto';
 import { currentPorts } from './context.js';
 import { requireEditMode } from './edit-mode.js';

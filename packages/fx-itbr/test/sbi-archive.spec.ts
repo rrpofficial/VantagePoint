@@ -7,8 +7,8 @@
  * a neighbouring date without anyone knowing a gap was crossed.
  */
 import { describe, it, expect } from 'vitest';
-import { SbiArchiveParser } from '@porttrack/fx-itbr';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+import { SbiArchiveParser } from '@vantagepoint/fx-itbr';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const OPTIONS = {
   currency: 'USD' as const,

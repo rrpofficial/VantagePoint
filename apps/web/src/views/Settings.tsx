@@ -32,31 +32,31 @@ export function Settings({ onLocked }: { onLocked: () => void }) {
   }, [onLocked]);
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <EditModeCard />
       <IncomeInclusionsCard />
 
       <Card
         title="Vault"
         action={
-          <button type="button" className="pt-button-inline" onClick={() => void lock()}>
+          <button type="button" className="vp-button-inline" onClick={() => void lock()}>
             Lock vault
           </button>
         }
       >
-        <p className="pt-muted">
+        <p className="vp-muted">
           Your database is encrypted at rest with page-level AES-256-CBC and HMAC-SHA512, on a disk
           you control. The passphrase is never written anywhere — not to a file, not to a log, not
           to an image layer.
         </p>
-        <p className="pt-banner" role="status">
+        <p className="vp-banner" role="status">
           <strong>Back up the whole data directory, not just vault.db.</strong> The key derivation
           salt lives in <code>vault.db.meta.json</code> beside it. A backup of the database alone
           restores to a vault nobody can open, and you would find out at the worst moment. The
           archive below carries both.
         </p>
         {error !== undefined && (
-          <p className="pt-error" role="alert">
+          <p className="vp-error" role="alert">
             {error}
           </p>
         )}
@@ -76,19 +76,19 @@ export function Settings({ onLocked }: { onLocked: () => void }) {
           </Chip>
         }
       >
-        <p className="pt-muted">
-          portTrack makes no outbound request by default. The API container sits on a network with
+        <p className="vp-muted">
+          VantagePoint makes no outbound request by default. The API container sits on a network with
           no gateway, so this is not the application policing itself — there is no route out.
         </p>
         {egressEntries !== undefined && egressEntries.length === 0 ? (
-          <p className="pt-muted" data-testid="egress-log-empty">
+          <p className="vp-muted" data-testid="egress-log-empty">
             No outbound call has been made. For a default install this is the expected state, not a
             missing log.
           </p>
         ) : (
-          <ul className="pt-log" data-testid="egress-log">
+          <ul className="vp-log" data-testid="egress-log">
             {(egressEntries ?? []).map((entry, index) => (
-              <li key={index} className="pt-numeric">
+              <li key={index} className="vp-numeric">
                 {JSON.stringify(entry)}
               </li>
             ))}
@@ -97,14 +97,14 @@ export function Settings({ onLocked }: { onLocked: () => void }) {
       </Card>
 
       <Card title="Application log">
-        <p className="pt-muted">
+        <p className="vp-muted">
           Structured and PII-free by construction — a functional test asserts that no PAN, folio or
           account number can reach a log line.
         </p>
         {logLines === undefined || logLines.length === 0 ? (
-          <p className="pt-muted">Nothing logged this session.</p>
+          <p className="vp-muted">Nothing logged this session.</p>
         ) : (
-          <ul className="pt-log" data-testid="application-log">
+          <ul className="vp-log" data-testid="application-log">
             {logLines.slice(-50).map((line, index) => (
               <li key={index}>{line}</li>
             ))}
@@ -203,16 +203,16 @@ function BackupCard() {
 
   return (
     <Card title="Backup and restore" action={<Chip>{busy === undefined ? 'Ready' : 'Working'}</Chip>}>
-      <p className="pt-muted">
+      <p className="vp-muted">
         One file, carrying the encrypted database and the key-derivation salt together. It stays
         encrypted — it opens only with the vault passphrase that was in force when it was taken —
         and it is written by your browser to a folder you choose. Nothing is uploaded anywhere.
       </p>
 
-      <div className="pt-actions">
+      <div className="vp-actions">
         <button
           type="button"
-          className="pt-button-inline"
+          className="vp-button-inline"
           data-testid="download-backup"
           disabled={busy !== undefined}
           onClick={() => void download()}
@@ -221,25 +221,25 @@ function BackupCard() {
         </button>
       </div>
 
-      <p className="pt-callout pt-callout--warn" role="status">
+      <p className="vp-callout vp-callout--warn" role="status">
         <strong>Restoring replaces everything in this vault.</strong> Every holding, loan, chit,
         snapshot and rate in it is replaced by whatever the archive holds. The vault being replaced
         is copied aside first, under a timestamped name, so a restore from the wrong file can be
         undone.
       </p>
 
-      <div className="pt-form">
+      <div className="vp-form">
         <label htmlFor="restore-archive">Backup archive</label>
         <input
           id="restore-archive"
           type="file"
-          accept=".ptb,application/octet-stream,application/json"
+          accept=".vpb,application/octet-stream,application/json"
           data-testid="restore-archive"
           disabled={busy !== undefined}
           onChange={choose}
         />
         {archive !== undefined && (
-          <p className="pt-muted" data-testid="restore-selected">
+          <p className="vp-muted" data-testid="restore-selected">
             Ready to restore <strong>{archive.name}</strong>.
           </p>
         )}
@@ -254,19 +254,19 @@ function BackupCard() {
       </div>
 
       {!editMode.enabled && (
-        <p className="pt-muted" data-testid="restore-needs-edit-mode">
+        <p className="vp-muted" data-testid="restore-needs-edit-mode">
           Restoring over a vault that already holds data needs edit mode, above. Restoring into an
           empty data directory — a fresh install recovering from a disk failure — does not.
         </p>
       )}
 
       {status !== undefined && (
-        <p className="pt-banner" role="status" data-testid="backup-status">
+        <p className="vp-banner" role="status" data-testid="backup-status">
           {status}
         </p>
       )}
       {error !== undefined && (
-        <p className="pt-error" role="alert" data-testid="backup-error">
+        <p className="vp-error" role="alert" data-testid="backup-error">
           {error}
         </p>
       )}
@@ -331,20 +331,20 @@ function IncomeInclusionsCard() {
         </Chip>
       }
     >
-      <p className="pt-muted">
+      <p className="vp-muted">
         Hand-loan interest and chit-fund returns are <strong>excluded</strong> from tax
         calculations unless you turn them on here. Both are positions that depend on facts this
         application does not have — whether you are taxed on receipt or on accrual, and whether a
         chit surplus is income at all — so it declines to decide either for you.
       </p>
-      <p className="pt-muted">
+      <p className="vp-muted">
         They are counted in net worth either way. This setting changes what is taxed, not what you
         are shown to own.
       </p>
 
       {inclusions !== undefined && (
-        <div className="pt-form">
-          <label className="pt-check">
+        <div className="vp-form">
+          <label className="vp-check">
             <input
               type="checkbox"
               checked={inclusions.handLoanInterest}
@@ -356,7 +356,7 @@ function IncomeInclusionsCard() {
               Tax interest accrued on hand loans given out
             </span>
           </label>
-          <label className="pt-check">
+          <label className="vp-check">
             <input
               type="checkbox"
               checked={inclusions.chitFundReturns}
@@ -366,7 +366,7 @@ function IncomeInclusionsCard() {
             />
             <span>Tax dividends and surplus arising on chit funds</span>
           </label>
-          <label className="pt-check">
+          <label className="vp-check">
             <input
               type="checkbox"
               checked={inclusions.sellToCoverGains}
@@ -383,7 +383,7 @@ function IncomeInclusionsCard() {
       )}
 
       {inclusions?.sellToCoverGains === false && (
-        <p className="pt-muted">
+        <p className="vp-muted">
           Sell-to-cover is sold same-day at roughly the vest price, so the gain is usually a
           rounding error. It stops being one when the vest and the sale fall either side of a
           month end — the two Rule 115 rates then differ, and the amount left out is the whole
@@ -393,7 +393,7 @@ function IncomeInclusionsCard() {
       )}
 
       {state !== undefined && enabled.length === 0 && (
-        <p className="pt-muted" data-testid="income-inclusions-none">
+        <p className="vp-muted" data-testid="income-inclusions-none">
           Nothing extra is being taxed. Tax figures cover trades, disposals and the income you
           record yourself.
         </p>
@@ -402,13 +402,13 @@ function IncomeInclusionsCard() {
       {/* Not the shared EditModeHint: that one sends the reader to Settings,
           and they are already on it — the switch is the card above this one. */}
       {!editMode.enabled && (
-        <p className="pt-muted" data-testid="income-inclusions-locked">
+        <p className="vp-muted" data-testid="income-inclusions-locked">
           Turn on edit mode above to change these. Switching one moves every tax figure at once.
         </p>
       )}
 
       {error !== undefined && (
-        <p className="pt-error" role="alert" data-testid="income-inclusions-error">
+        <p className="vp-error" role="alert" data-testid="income-inclusions-error">
           {error}
         </p>
       )}
@@ -470,7 +470,7 @@ function EditModeCard() {
         </Chip>
       }
     >
-      <p className="pt-muted">
+      <p className="vp-muted">
         Adding records is always available. Changing or deleting one is not: everything here is a
         record of money that has already moved, and a mistaken delete leaves nothing behind to
         notice it by. Edit mode turns those operations on across every tab.
@@ -478,15 +478,15 @@ function EditModeCard() {
 
       {editMode.enabled ? (
         <>
-          <p className="pt-callout pt-callout--warn" role="status" data-testid="edit-mode-on">
+          <p className="vp-callout vp-callout--warn" role="status" data-testid="edit-mode-on">
             <strong>Edit mode is on.</strong> Edit and delete controls are visible on the Equity,
             Non-Equity, Immovable, Loans and Chits tabs. It turns itself off when the vault is locked or the API restarts
             — it is never remembered between sessions.
           </p>
-          <div className="pt-actions">
+          <div className="vp-actions">
             <button
               type="button"
-              className="pt-button-inline"
+              className="vp-button-inline"
               data-testid="disable-edit-mode"
               onClick={() => void editMode.disable()}
             >
@@ -495,7 +495,7 @@ function EditModeCard() {
           </div>
         </>
       ) : (
-        <form onSubmit={onSubmit} className="pt-form" data-testid="enable-edit-mode-form">
+        <form onSubmit={onSubmit} className="vp-form" data-testid="enable-edit-mode-form">
           <label htmlFor="edit-mode-passphrase">Vault passphrase</label>
           <input
             id="edit-mode-passphrase"
@@ -512,12 +512,12 @@ function EditModeCard() {
           </button>
           {enabling && (
             // Says WHY it is slow, for the same reason the unlock screen does.
-            <p className="pt-muted" role="status" data-testid="edit-mode-progress">
+            <p className="vp-muted" role="status" data-testid="edit-mode-progress">
               Checking your passphrase against the vault key. This takes a moment by design.
             </p>
           )}
           {error !== undefined && (
-            <p className="pt-error" role="alert" data-testid="edit-mode-error">
+            <p className="vp-error" role="alert" data-testid="edit-mode-error">
               {error}
             </p>
           )}

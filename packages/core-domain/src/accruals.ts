@@ -3,7 +3,7 @@
  *
  * All day counts use 30/360 — see daycount.ts for why that basis and not ACT/365.
  */
-import { Money, type IsoDate, type Money as MoneyValue, type Percentage } from '@porttrack/shared-kernel';
+import { Money, type IsoDate, type Money as MoneyValue, type Percentage } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import { compareIsoDates, monthsBetween, yearFraction } from './daycount.js';
 import type {

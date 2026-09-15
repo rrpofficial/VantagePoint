@@ -22,7 +22,7 @@ const PARSERS: readonly { readonly value: ParserName; readonly label: string }[]
   { value: 'ETRADE', label: 'E*TRADE transaction history' },
   { value: 'ETRADE_GL', label: 'E*TRADE Gains & Losses (Expanded)' },
   { value: 'ETRADE_HOLDINGS', label: 'E*TRADE stock plan holdings (By Status → Sellable)' },
-  { value: 'TEMPLATE', label: 'portTrack CSV template' },
+  { value: 'TEMPLATE', label: 'VantagePoint CSV template' },
 ];
 
 /** Base64 without loading the whole file into a string first. */
@@ -91,14 +91,14 @@ export function Import({ onImported }: { onImported: () => void }) {
   }
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <Card title="Import a statement">
-        <p className="pt-muted">
+        <p className="vp-muted">
           Parsed entirely on this machine. Nothing is uploaded anywhere — the container that reads
           your file has no route to the internet.
         </p>
 
-        <form onSubmit={onSubmit} className="pt-form">
+        <form onSubmit={onSubmit} className="vp-form">
           <label htmlFor="parser">Statement type</label>
           <select
             id="parser"
@@ -118,7 +118,7 @@ export function Import({ onImported }: { onImported: () => void }) {
             <>
               {/*
                 Which template, not just "a template". Naming it turns a generic
-                "this matches no portTrack template" into a diff of the exact
+                "this matches no VantagePoint template" into a diff of the exact
                 columns at fault, and catches a Hand Loans file uploaded under
                 Cash — which would otherwise import cleanly as the wrong asset
                 class. Left on "detect" it still works; the header decides.
@@ -140,7 +140,7 @@ export function Import({ onImported }: { onImported: () => void }) {
               </select>
 
               {selectedTemplate !== undefined && (
-                <p className="pt-muted" data-testid="template-hint">
+                <p className="vp-muted" data-testid="template-hint">
                   Records <strong>{selectedTemplate.assetClass.replaceAll('_', ' ').toLowerCase()}</strong>.{' '}
                   {selectedTemplate.guidance}{' '}
                   <a href={api.templateUrl(selectedTemplate.name)} download>
@@ -157,7 +157,7 @@ export function Import({ onImported }: { onImported: () => void }) {
             choosing rather than failing afterwards on a header mismatch.
           */}
           {parser === 'ETRADE_GL' && (
-            <p className="pt-muted" data-testid="etrade-gl-hint">
+            <p className="vp-muted" data-testid="etrade-gl-hint">
               The <strong>Gains &amp; Losses (Expanded)</strong> export, where each row is a
               completed sale with its cost basis — not the plain transaction history. Cost is taken
               from <strong>Adjusted Cost Basis</strong>, which already includes the vest or purchase
@@ -168,7 +168,7 @@ export function Import({ onImported }: { onImported: () => void }) {
           )}
 
           {parser === 'ETRADE_GL' && (
-            <p className="pt-callout" data-testid="etrade-gl-fifo-note">
+            <p className="vp-callout" data-testid="etrade-gl-fifo-note">
               <strong>Gains here will not match the ones printed on the statement.</strong> E*TRADE
               matches each sale to the specific lot it came from; Indian law matches FIFO, oldest
               lot first. Where you hold more than one lot of a symbol the two disagree row by row,
@@ -178,7 +178,7 @@ export function Import({ onImported }: { onImported: () => void }) {
           )}
 
           {parser === 'ETRADE_HOLDINGS' && (
-            <p className="pt-muted" data-testid="etrade-holdings-hint">
+            <p className="vp-muted" data-testid="etrade-holdings-hint">
               The <strong>Sellable</strong> tab of the By Status export — the tranches you still
               hold. It pairs with the Gains &amp; Losses file, which covers the ones you have
               already sold; each tranche appears in one or the other, matched on grant and vest
@@ -209,23 +209,23 @@ export function Import({ onImported }: { onImported: () => void }) {
             {busy ? 'Importing…' : 'Import'}
           </button>
           {error !== undefined && (
-            <p className="pt-error" role="alert">
+            <p className="vp-error" role="alert">
               {error}
             </p>
           )}
         </form>
       </Card>
 
-      <Card title="Manual entry — portTrack CSV templates">
-        <p className="pt-muted">
+      <Card title="Manual entry — VantagePoint CSV templates">
+        <p className="vp-muted">
           For everything with no broker export: hand loans, property, cash, chit funds, unlisted
           shares. Download a template, fill it in a spreadsheet, and import it with{' '}
-          <strong>portTrack CSV template</strong> selected above. The template is recognised from
+          <strong>VantagePoint CSV template</strong> selected above. The template is recognised from
           its header row, so leave the header exactly as it is.
         </p>
 
-        <div className="pt-table-scroll">
-          <table className="pt-table" data-testid="template-list">
+        <div className="vp-table-scroll">
+          <table className="vp-table" data-testid="template-list">
             <thead>
               <tr>
                 <th scope="col">Template</th>
@@ -237,7 +237,7 @@ export function Import({ onImported }: { onImported: () => void }) {
             <tbody>
               {templates.length === 0 && (
                 <tr>
-                  <td colSpan={4} className="pt-muted">
+                  <td colSpan={4} className="vp-muted">
                     Loading templates…
                   </td>
                 </tr>
@@ -246,13 +246,13 @@ export function Import({ onImported }: { onImported: () => void }) {
                 <tr key={template.name}>
                   <td>
                     <strong>{template.name}</strong>
-                    <div className="pt-muted">{template.description}</div>
+                    <div className="vp-muted">{template.description}</div>
                   </td>
                   <td>{template.assetClass.replaceAll('_', ' ').toLowerCase()}</td>
-                  <td className="pt-hash">{template.columns.join(', ')}</td>
-                  <td className="pt-align-end">
+                  <td className="vp-hash">{template.columns.join(', ')}</td>
+                  <td className="vp-align-end">
                     <a
-                      className="pt-link pt-link--inline"
+                      className="vp-link vp-link--inline"
                       href={api.templateUrl(template.name)}
                       download={`${template.name}.csv`}
                     >
@@ -271,26 +271,26 @@ export function Import({ onImported }: { onImported: () => void }) {
           title="Import result"
           action={<Chip>{report.committed ? 'Committed' : 'Nothing committed'}</Chip>}
         >
-          <dl className="pt-stats" data-testid="import-summary">
+          <dl className="vp-stats" data-testid="import-summary">
             <div>
               <dt>Created</dt>
-              <dd className="pt-numeric">{report.created}</dd>
+              <dd className="vp-numeric">{report.created}</dd>
             </div>
             <div>
               <dt>Duplicates skipped</dt>
-              <dd className="pt-numeric">{report.duplicates}</dd>
+              <dd className="vp-numeric">{report.duplicates}</dd>
             </div>
             <div>
               <dt>Rejected</dt>
-              <dd className="pt-numeric">{report.rejected}</dd>
+              <dd className="vp-numeric">{report.rejected}</dd>
             </div>
           </dl>
 
           {report.errors.length > 0 && (
             <>
-              <h3 className="pt-subhead">Rejected rows</h3>
-              <div className="pt-table-scroll">
-                <table className="pt-table" data-testid="import-errors">
+              <h3 className="vp-subhead">Rejected rows</h3>
+              <div className="vp-table-scroll">
+                <table className="vp-table" data-testid="import-errors">
                   <thead>
                     <tr>
                       <th scope="col">Row</th>
@@ -302,13 +302,13 @@ export function Import({ onImported }: { onImported: () => void }) {
                   <tbody>
                     {report.errors.map((rowError) => (
                       <tr key={`${String(rowError.row)}-${rowError.column}`}>
-                        <td className="pt-numeric">{rowError.row}</td>
+                        <td className="vp-numeric">{rowError.row}</td>
                         <td>{rowError.column}</td>
                         <td>{rowError.value}</td>
                         <td>
                           {rowError.reason}
                           {rowError.expectedFormat !== undefined && (
-                            <span className="pt-muted"> — expected {rowError.expectedFormat}</span>
+                            <span className="vp-muted"> — expected {rowError.expectedFormat}</span>
                           )}
                         </td>
                       </tr>
@@ -321,13 +321,13 @@ export function Import({ onImported }: { onImported: () => void }) {
 
           {report.unapplied !== undefined && report.unapplied.length > 0 && (
             <>
-              <h3 className="pt-subhead">Parsed but not applied</h3>
-              <p className="pt-muted">
+              <h3 className="vp-subhead">Parsed but not applied</h3>
+              <p className="vp-muted">
                 These rows were read correctly but could not be placed on the ledger. They are shown
                 rather than discarded.
               </p>
-              <div className="pt-table-scroll">
-                <table className="pt-table" data-testid="import-unapplied">
+              <div className="vp-table-scroll">
+                <table className="vp-table" data-testid="import-unapplied">
                   <thead>
                     <tr>
                       <th scope="col">Row</th>
@@ -339,7 +339,7 @@ export function Import({ onImported }: { onImported: () => void }) {
                   <tbody>
                     {report.unapplied.map((row) => (
                       <tr key={`${String(row.sourceRow)}-${row.kind}`}>
-                        <td className="pt-numeric">{row.sourceRow}</td>
+                        <td className="vp-numeric">{row.sourceRow}</td>
                         <td>{row.kind}</td>
                         <td>{row.date}</td>
                         <td>{row.reason}</td>

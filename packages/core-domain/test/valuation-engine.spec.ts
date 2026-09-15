@@ -5,7 +5,7 @@
  * US-1.10 — Alternative and private assets
  */
 import { describe, it, expect } from 'vitest';
-import { ValuationEngine, AssetRegistry } from '@porttrack/core-domain';
+import { ValuationEngine, AssetRegistry } from '@vantagepoint/core-domain';
 import {
   aLiability,
   anAsset,
@@ -17,7 +17,7 @@ import {
   stubFx,
   stubPrices,
   usd,
-} from '@porttrack/test-kit';
+} from '@vantagepoint/test-kit';
 
 const CLOCK = fixedClock('2026-03-31T23:59:59.999+05:30');
 

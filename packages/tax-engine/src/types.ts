@@ -7,8 +7,8 @@ import type {
   Money,
   Percentage,
   Quarter,
-} from '@porttrack/shared-kernel';
-import type { AssetClass, ExitTransaction, MfTaxCharacter, TaxSubject } from '@porttrack/core-domain';
+} from '@vantagepoint/shared-kernel';
+import type { AssetClass, ExitTransaction, MfTaxCharacter, TaxSubject } from '@vantagepoint/core-domain';
 
 export type TaxRegime = 'OLD_REGIME' | 'NEW_REGIME';
 export type GainKind = 'STCG' | 'LTCG' | 'VDA_GAIN' | 'SLAB';

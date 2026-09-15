@@ -18,7 +18,7 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 export default defineConfig({
   resolve: {
     alias: {
-      '@porttrack/test-kit': path.resolve(root, 'tests/test-kit/index.ts'),
+      '@vantagepoint/test-kit': path.resolve(root, 'tests/test-kit/index.ts'),
     },
   },
   test: {

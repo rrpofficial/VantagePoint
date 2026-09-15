@@ -67,10 +67,10 @@ function Tile({
   testId: string;
 }) {
   return (
-    <div className="pt-tile" data-testid={testId}>
-      <span className="pt-tile__label">{label}</span>
-      <strong className="pt-tile__value pt-numeric">{value}</strong>
-      {hint !== undefined && <span className="pt-tile__hint">{hint}</span>}
+    <div className="vp-tile" data-testid={testId}>
+      <span className="vp-tile__label">{label}</span>
+      <strong className="vp-tile__value vp-numeric">{value}</strong>
+      {hint !== undefined && <span className="vp-tile__hint">{hint}</span>}
     </div>
   );
 }
@@ -117,14 +117,14 @@ export function Chits() {
   const totals = register?.totals;
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <Card
         title="Chit funds"
         action={
-          <div className="pt-actions pt-actions--inline">
+          <div className="vp-actions vp-actions--inline">
             <button
               type="button"
-              className="pt-button-inline"
+              className="vp-button-inline"
               onClick={() => {
                 setShowNew((open) => !open);
               }}
@@ -138,7 +138,7 @@ export function Chits() {
           </div>
         }
       >
-        <div className="pt-tiles" data-testid="chit-tiles">
+        <div className="vp-tiles" data-testid="chit-tiles">
           <Tile
             testId="chit-carrying"
             label="Counted in net worth"
@@ -165,7 +165,7 @@ export function Chits() {
           />
         </div>
 
-        <p className="pt-muted">
+        <p className="vp-muted">
           A chit is carried at what has been <strong>paid into it</strong>, not at the amount it is
           named after. Once you draw the pot the money is in your bank account and counted there, so
           the chit stops contributing to net worth — while the instalments carry on.
@@ -187,7 +187,7 @@ export function Chits() {
         action={
           <button
             type="button"
-            className="pt-button-inline"
+            className="vp-button-inline"
             onClick={() => {
               setShowSchedules((open) => !open);
             }}
@@ -196,7 +196,7 @@ export function Chits() {
           </button>
         }
       >
-        <p className="pt-muted">
+        <p className="vp-muted">
           What the chit company pays out for a draw in a given month, agreed up front for a
           fixed-instalment chit. Set one up once and every chit of that shape can point at it.
         </p>
@@ -209,10 +209,10 @@ export function Chits() {
       </Card>
 
       <Card title="Register" action={<Chip>{`${String(totals?.chitCount ?? 0)} chits`}</Chip>}>
-        <div className="pt-controls">
-          <span className="pt-controls__label">Status</span>
+        <div className="vp-controls">
+          <span className="vp-controls__label">Status</span>
           {STATUSES.map((status) => (
-            <label key={status.value} className="pt-check">
+            <label key={status.value} className="vp-check">
               <input
                 type="checkbox"
                 checked={statuses.includes(status.value)}
@@ -256,7 +256,7 @@ export function Chits() {
           </select>
           <button
             type="button"
-            className="pt-button-inline"
+            className="vp-button-inline"
             onClick={() => {
               setDirection((current) => (current === 'ASC' ? 'DESC' : 'ASC'));
             }}
@@ -266,18 +266,18 @@ export function Chits() {
         </div>
 
         {error !== undefined && (
-          <p className="pt-error" role="alert">
+          <p className="vp-error" role="alert">
             {error}
           </p>
         )}
 
         {register !== undefined && register.chits.length === 0 ? (
-          <p className="pt-muted" data-testid="chit-empty">
+          <p className="vp-muted" data-testid="chit-empty">
             No chits match. Record one above, or clear the filters.
           </p>
         ) : (
-          <div className="pt-table-scroll">
-            <table className="pt-table" data-testid="chit-table">
+          <div className="vp-table-scroll">
+            <table className="vp-table" data-testid="chit-table">
               <thead>
                 <tr>
                   <th scope="col">Chit</th>
@@ -285,9 +285,9 @@ export function Chits() {
                   <th scope="col">Started</th>
                   <th scope="col">Term</th>
                   <th scope="col">Status</th>
-                  <th scope="col" className="pt-align-end">Chit amount</th>
-                  <th scope="col" className="pt-align-end">Paid in</th>
-                  <th scope="col" className="pt-align-end">Counted as asset</th>
+                  <th scope="col" className="vp-align-end">Chit amount</th>
+                  <th scope="col" className="vp-align-end">Paid in</th>
+                  <th scope="col" className="vp-align-end">Counted as asset</th>
                 </tr>
               </thead>
               <tbody>
@@ -331,7 +331,7 @@ function ChitRow({
         <td>
           <button
             type="button"
-            className="pt-link pt-link--inline"
+            className="vp-link vp-link--inline"
             aria-expanded={expanded}
             onClick={onToggle}
           >
@@ -340,27 +340,27 @@ function ChitRow({
         </td>
         <td>{chit.org}</td>
         <td>{chit.startDate}</td>
-        <td className="pt-numeric">
+        <td className="vp-numeric">
           {chit.monthsElapsed} / {chit.durationMonths}
         </td>
         <td>
-          <span className={`pt-status pt-status--${chit.status.toLowerCase()}`}>
+          <span className={`vp-status vp-status--${chit.status.toLowerCase()}`}>
             {STATUS_LABEL[chit.status]}
           </span>
         </td>
-        <td className="pt-align-end">
+        <td className="vp-align-end">
           <Amount value={chit.targetAmount} />
         </td>
-        <td className="pt-align-end">
+        <td className="vp-align-end">
           <Amount value={chit.paidToDate} />
         </td>
-        <td className="pt-align-end">
+        <td className="vp-align-end">
           {/* Zero for a drawn chit, and that is the headline of this row. */}
           <Amount value={chit.carryingValue} />
         </td>
       </tr>
       {expanded && (
-        <tr className="pt-table__detail">
+        <tr className="vp-table__detail">
           <td colSpan={8}>
             <ChitDetail chit={chit} schedules={schedules} onChanged={onChanged} />
           </td>
@@ -383,8 +383,8 @@ function ChitDetail({
   const [editing, setEditing] = useState(false);
 
   return (
-    <div className="pt-stack" data-testid={`chit-detail-${chit.assetId}`}>
-      <dl className="pt-stats">
+    <div className="vp-stack" data-testid={`chit-detail-${chit.assetId}`}>
+      <dl className="vp-stats">
         <div>
           <dt>Still to pay</dt>
           <dd>
@@ -393,11 +393,11 @@ function ChitDetail({
         </div>
         <div>
           <dt>Months remaining</dt>
-          <dd className="pt-numeric">{chit.monthsRemaining}</dd>
+          <dd className="vp-numeric">{chit.monthsRemaining}</dd>
         </div>
         <div>
           <dt>Instalments recorded</dt>
-          <dd className="pt-numeric">{chit.emiCount}</dd>
+          <dd className="vp-numeric">{chit.emiCount}</dd>
         </div>
         <div>
           <dt>Instalment type</dt>
@@ -422,7 +422,7 @@ function ChitDetail({
       </dl>
 
       {chit.comments !== undefined && chit.comments.length > 0 && (
-        <p className="pt-muted">{chit.comments}</p>
+        <p className="vp-muted">{chit.comments}</p>
       )}
 
       {/*
@@ -431,10 +431,10 @@ function ChitDetail({
         the user leaves permanently on — which is the opposite of the intent.
       */}
       {editMode.enabled ? (
-        <div className="pt-actions">
+        <div className="vp-actions">
           <button
             type="button"
-            className="pt-button-inline"
+            className="vp-button-inline"
             data-testid={`chit-edit-toggle-${chit.assetId}`}
             onClick={() => {
               setEditing((open) => !open);
@@ -465,13 +465,13 @@ function ChitDetail({
         />
       )}
 
-      <h4 className="pt-subhead">Instalments paid</h4>
-      <div className="pt-table-scroll">
-        <table className="pt-table" data-testid={`chit-emis-${chit.assetId}`}>
+      <h4 className="vp-subhead">Instalments paid</h4>
+      <div className="vp-table-scroll">
+        <table className="vp-table" data-testid={`chit-emis-${chit.assetId}`}>
           <thead>
             <tr>
               <th scope="col">Date</th>
-              <th scope="col" className="pt-align-end">Amount</th>
+              <th scope="col" className="vp-align-end">Amount</th>
               <th scope="col">Mode</th>
               <th scope="col">Paid to</th>
               <th scope="col">Comments</th>
@@ -480,7 +480,7 @@ function ChitDetail({
           <tbody>
             {chit.emis.length === 0 && (
               <tr>
-                <td colSpan={5} className="pt-muted">
+                <td colSpan={5} className="vp-muted">
                   No instalments recorded yet.
                 </td>
               </tr>
@@ -488,7 +488,7 @@ function ChitDetail({
             {chit.emis.map((instalment) => (
               <tr key={instalment.emiId}>
                 <td>{instalment.date}</td>
-                <td className="pt-align-end">
+                <td className="vp-align-end">
                   <Amount value={instalment.amount} />
                 </td>
                 <td>{instalment.mode.replaceAll('_', ' ').toLowerCase()}</td>
@@ -500,7 +500,7 @@ function ChitDetail({
         </table>
       </div>
 
-      <div className="pt-grid">
+      <div className="vp-grid">
         <EmiForm chit={chit} onDone={onChanged} />
         <StatusForm chit={chit} onDone={onChanged} />
       </div>
@@ -544,13 +544,13 @@ function EmiForm({ chit, onDone }: { chit: ChitView; onDone: () => void }) {
 
   return (
     <form
-      className="pt-form"
+      className="vp-form"
       onSubmit={onSubmit}
       data-testid={`chit-emi-form-${chit.assetId}`}
     >
-      <h4 className="pt-subhead">Record an instalment</h4>
+      <h4 className="vp-subhead">Record an instalment</h4>
       {chit.status === 'WITHDRAWN' && (
-        <p className="pt-muted">
+        <p className="vp-muted">
           This chit has been drawn. Instalments continue to the end of the term, so they are still
           recorded here — they just no longer add to net worth.
         </p>
@@ -610,7 +610,7 @@ function EmiForm({ chit, onDone }: { chit: ChitView; onDone: () => void }) {
         {busy ? 'Recording…' : 'Record instalment'}
       </button>
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}
@@ -646,8 +646,8 @@ function StatusForm({ chit, onDone }: { chit: ChitView; onDone: () => void }) {
   );
 
   return (
-    <div className="pt-form" data-testid={`chit-status-form-${chit.assetId}`}>
-      <h4 className="pt-subhead">Status</h4>
+    <div className="vp-form" data-testid={`chit-status-form-${chit.assetId}`}>
+      <h4 className="vp-subhead">Status</h4>
       {/*
         Gated with the edits, not with the instalments. A draw moves the chit off
         the asset side entirely — net worth changes the moment it is recorded —
@@ -657,7 +657,7 @@ function StatusForm({ chit, onDone }: { chit: ChitView; onDone: () => void }) {
         <EditModeHint action="change this chit’s status" />
       ) : chit.status === 'ACTIVE' ? (
         <>
-          <p className="pt-muted">
+          <p className="vp-muted">
             Marking this drawn removes it from net worth: the pot becomes cash you hold elsewhere,
             and counting both would be counting the same money twice.
           </p>
@@ -691,7 +691,7 @@ function StatusForm({ chit, onDone }: { chit: ChitView; onDone: () => void }) {
         </>
       ) : (
         <>
-          <p className="pt-muted">
+          <p className="vp-muted">
             Drawn on {chit.withdrawnDate}. Putting it back to active returns the instalments paid to
             net worth — use this if the draw was recorded in error.
           </p>
@@ -706,7 +706,7 @@ function StatusForm({ chit, onDone }: { chit: ChitView; onDone: () => void }) {
         </>
       )}
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}
@@ -849,7 +849,7 @@ function ChitFields({
           </select>
         </div>
       )}
-      <div className="pt-form__wide">
+      <div className="vp-form__wide">
         <label htmlFor={`${idPrefix}-comments`}>Comments</label>
         <input
           id={`${idPrefix}-comments`}
@@ -912,7 +912,7 @@ function NewChitForm({
   }
 
   return (
-    <form className="pt-form pt-form--grid" onSubmit={onSubmit} data-testid="new-chit-form">
+    <form className="vp-form vp-form--grid" onSubmit={onSubmit} data-testid="new-chit-form">
       <ChitFields
         org={org}
         setOrg={setOrg}
@@ -937,7 +937,7 @@ function NewChitForm({
         {busy ? 'Saving…' : 'Save chit'}
       </button>
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}
@@ -993,7 +993,7 @@ function EditChitForm({
 
   return (
     <form
-      className="pt-form pt-form--grid"
+      className="vp-form vp-form--grid"
       onSubmit={onSubmit}
       data-testid={`edit-chit-form-${chit.assetId}`}
     >
@@ -1021,7 +1021,7 @@ function EditChitForm({
         {busy ? 'Saving…' : 'Save changes'}
       </button>
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}
@@ -1084,10 +1084,10 @@ function ScheduleEditor({
   }
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       {schedules.length > 0 && (
-        <div className="pt-table-scroll">
-          <table className="pt-table" data-testid="chit-schedule-table">
+        <div className="vp-table-scroll">
+          <table className="vp-table" data-testid="chit-schedule-table">
             <thead>
               <tr>
                 <th scope="col">Schedule</th>
@@ -1102,8 +1102,8 @@ function ScheduleEditor({
                   <td>
                     <strong>{schedule.label}</strong>
                   </td>
-                  <td className="pt-numeric">{schedule.rows.length}</td>
-                  <td className="pt-hash">
+                  <td className="vp-numeric">{schedule.rows.length}</td>
+                  <td className="vp-hash">
                     {schedule.rows
                       .map((row) => `m${String(row.month)}: ${row.amount.amount}`)
                       .join(' · ')}
@@ -1124,7 +1124,7 @@ function ScheduleEditor({
         </div>
       )}
 
-      <form className="pt-form" onSubmit={onSubmit} data-testid="chit-schedule-form">
+      <form className="vp-form" onSubmit={onSubmit} data-testid="chit-schedule-form">
         <label htmlFor="schedule-label">Schedule label</label>
         <input
           id="schedule-label"
@@ -1156,14 +1156,14 @@ function ScheduleEditor({
           than a 403 the user has to interpret.
         */}
         {overwrites && (
-          <p className="pt-muted" data-testid="schedule-overwrite-warning">
+          <p className="vp-muted" data-testid="schedule-overwrite-warning">
             <strong>&quot;{label.trim()}&quot; already exists.</strong> Saving replaces its rows for
             every chit that uses it
             {editMode.enabled ? '.' : ', which needs edit mode — turn it on under Settings.'}
           </p>
         )}
         {error !== undefined && (
-          <p className="pt-error" role="alert">
+          <p className="vp-error" role="alert">
             {error}
           </p>
         )}

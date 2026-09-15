@@ -59,14 +59,14 @@ import {
   TemplateHeaderMismatchError,
   type Money as MoneyValue,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import {
   grantRefOf,
   isSellToCover,
   type EquityAward,
   type EquityAwardKind,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 import { parseCsv, columnIndex } from './csv.js';
 import { deterministicImportedAt, provenanceFor } from './provenance.js';
 import type { ParsedTransaction, RowError } from './types.js';

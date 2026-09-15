@@ -29,7 +29,7 @@
  * Deriving rather than storing the totals is deliberate: a `totalTax` column
  * that can disagree with its parts will eventually disagree with its parts.
  */
-import { Money, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import type { Area, AreaUnit, PropertyKind, PropertyTransaction } from './types.js';
 

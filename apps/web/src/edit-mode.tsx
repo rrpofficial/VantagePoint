@@ -92,7 +92,7 @@ export const useEditMode = (): EditModeContextValue => useContext(EditModeContex
  */
 export function EditModeHint({ action }: { action: string }) {
   return (
-    <p className="pt-muted" data-testid="edit-mode-hint">
+    <p className="vp-muted" data-testid="edit-mode-hint">
       Turn on edit mode under Settings to {action}.
     </p>
   );

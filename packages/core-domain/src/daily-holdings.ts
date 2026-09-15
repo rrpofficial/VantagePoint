@@ -12,7 +12,7 @@
  * closing quantity, which is exactly the understatement A3 must not make.
  */
 import { Decimal } from 'decimal.js';
-import type { IsoDate } from '@porttrack/shared-kernel';
+import type { IsoDate } from '@vantagepoint/shared-kernel';
 import { compareIsoDates } from './daycount.js';
 import type { Asset, ExitTransaction } from './types.js';
 

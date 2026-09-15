@@ -18,8 +18,8 @@ import {
   type IsoDate,
   type IsoDateTime,
   type Result,
-} from '@porttrack/shared-kernel';
-import type { PortfolioValuation } from '@porttrack/core-domain';
+} from '@vantagepoint/shared-kernel';
+import type { PortfolioValuation } from '@vantagepoint/core-domain';
 import { sha256 } from './canonical.js';
 import type { Snapshot, SnapshotPosition, SnapshotSpec } from './types.js';
 

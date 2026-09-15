@@ -7,7 +7,7 @@ import type {
   Percentage,
   Quantity,
   Rate,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 // Type-only in both directions (chit-book imports PaymentMode from here), so the
 // cycle is erased at compile time and never exists at runtime.
 import type { ChitFund } from './chit-book.js';

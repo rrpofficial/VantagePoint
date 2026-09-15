@@ -7,7 +7,7 @@
  * Anything I cannot derive by hand is not something a lender can check either.
  */
 import { describe, it, expect } from 'vitest';
-import { HandLoanLedger, loanRegister, type HandLoan } from '@porttrack/core-domain';
+import { HandLoanLedger, loanRegister, type HandLoan } from '@vantagepoint/core-domain';
 
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
 

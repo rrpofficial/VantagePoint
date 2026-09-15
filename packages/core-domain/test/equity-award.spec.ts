@@ -18,7 +18,7 @@ import {
   grantRefOf,
   isSellToCover,
   type EquityAward,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 
 const rsu = (overrides: Partial<EquityAward> = {}): EquityAward => ({
   kind: 'RSU',

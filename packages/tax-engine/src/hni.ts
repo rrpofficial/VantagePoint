@@ -6,7 +6,7 @@
  * large portfolio but modest income is an HNI for our purposes without owing that
  * disclosure, and conflating the two would demand a filing that is not required.
  */
-import { Money } from '@porttrack/shared-kernel';
+import { Money } from '@vantagepoint/shared-kernel';
 import type { HniClassification, HniInput } from './types.js';
 
 export function classify(input: HniInput): HniClassification {

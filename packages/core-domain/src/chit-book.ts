@@ -22,7 +22,7 @@
  * deliberate understatement rather than a guess: it is the one figure the holder
  * can verify from a passbook.
  */
-import { Money, type IsoDate, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, type IsoDate, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import { compareIsoDates, monthsBetween } from './daycount.js';
 import type { PaymentMode } from './types.js';
 

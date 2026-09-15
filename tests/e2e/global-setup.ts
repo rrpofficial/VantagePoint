@@ -13,7 +13,7 @@
  */
 import type { FullConfig } from '@playwright/test';
 
-const PASSPHRASE = process.env.PORTTRACK_TEST_PASSPHRASE ?? 'correct horse battery staple';
+const PASSPHRASE = process.env.VANTAGEPOINT_TEST_PASSPHRASE ?? 'correct horse battery staple';
 
 export default async function globalSetup(config: FullConfig): Promise<void> {
   const baseURL = config.projects[0]?.use.baseURL ?? 'http://localhost:5173';
@@ -41,9 +41,9 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
         `The vault at ${baseURL} did not unlock with the test passphrase.`,
         '',
         'That usually means this is NOT the testing instance — check the port, and',
-        'that .env.test points PORTTRACK_DATA_DIR somewhere of its own.',
+        'that .env.test points VANTAGEPOINT_DATA_DIR somewhere of its own.',
         '',
-        'If you meant to point the suite elsewhere, set PORTTRACK_BASE_URL.',
+        'If you meant to point the suite elsewhere, set VANTAGEPOINT_BASE_URL.',
       ].join('\n'),
     );
   }

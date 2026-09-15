@@ -20,10 +20,10 @@ import {
   LedgerUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { TemplateRegistry } from '@porttrack/ingestion';
-import { Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { TemplateRegistry } from '@vantagepoint/ingestion';
+import { Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 
@@ -89,7 +89,7 @@ const PURCHASE = row({
 });
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-prop-tmpl-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-prop-tmpl-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

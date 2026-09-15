@@ -1,5 +1,5 @@
 {
-  "name": "@porttrack/test-kit",
+  "name": "@vantagepoint/test-kit",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,7 +7,7 @@
   "types": "./index.ts",
   "exports": { ".": "./index.ts" },
   "dependencies": {
-    "@porttrack/core-domain": "workspace:*",
-    "@porttrack/shared-kernel": "workspace:*"
+    "@vantagepoint/core-domain": "workspace:*",
+    "@vantagepoint/shared-kernel": "workspace:*"
   }
 }

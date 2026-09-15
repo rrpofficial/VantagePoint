@@ -6,7 +6,7 @@
  * entirely on the taxpayer's deductions — there is no universally cheaper answer,
  * and presenting only one would silently cost the user money.
  */
-import { Money, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import type { IncomeProfile, RegimeComparison, TaxComputation, TaxRegime, TaxRuleSet, TraceLine } from './types.js';
 

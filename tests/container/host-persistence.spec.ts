@@ -27,16 +27,16 @@ const COMPOSE_TIMEOUT = 300_000;
  * rebuilt the image tag that instance was serving from. Pinning them here means
  * the suite can only ever affect itself.
  */
-const PROJECT = 'porttrack-container-test';
+const PROJECT = 'vantagepoint-container-test';
 const IMAGE_TAG = 'container-test';
 /** Deliberately not 5173: a production or testing stack may already hold it. */
 const WEB_PORT = '5399';
 
 const API = `${PROJECT}-api`;
 const WEB = `${PROJECT}-web`;
-const API_IMAGE = `porttrack-api:${IMAGE_TAG}`;
+const API_IMAGE = `vantagepoint-api:${IMAGE_TAG}`;
 
-/** Throwaway host directory standing in for the user's PORTTRACK_DATA_DIR. */
+/** Throwaway host directory standing in for the user's VANTAGEPOINT_DATA_DIR. */
 let hostDataDir: string;
 
 const sh = (cmd: string, args: string[], env: Record<string, string> = {}) =>
@@ -49,15 +49,15 @@ const sh = (cmd: string, args: string[], env: Record<string, string> = {}) =>
     // that resolved to a different project would exec into the wrong stack.
     env: {
       ...process.env,
-      PORTTRACK_PROJECT: PROJECT,
-      PORTTRACK_IMAGE_TAG: IMAGE_TAG,
-      PORTTRACK_WEB_PORT: WEB_PORT,
+      VANTAGEPOINT_PROJECT: PROJECT,
+      VANTAGEPOINT_IMAGE_TAG: IMAGE_TAG,
+      VANTAGEPOINT_WEB_PORT: WEB_PORT,
       ...env,
     },
   });
 
 const compose = (args: string[], env: Record<string, string> = {}) =>
-  sh('docker', ['compose', ...args], { PORTTRACK_DATA_DIR: hostDataDir, ...env });
+  sh('docker', ['compose', ...args], { VANTAGEPOINT_DATA_DIR: hostDataDir, ...env });
 
 const uid = String(process.getuid?.() ?? 1000);
 const gid = String(process.getgid?.() ?? 1000);
@@ -86,8 +86,8 @@ function unlockVault(): void {
 }
 
 beforeAll(() => {
-  hostDataDir = mkdtempSync(join(tmpdir(), 'porttrack-data-'));
-  compose(['up', '--build', '-d', '--wait'], { PORTTRACK_UID: uid, PORTTRACK_GID: gid });
+  hostDataDir = mkdtempSync(join(tmpdir(), 'vantagepoint-data-'));
+  compose(['up', '--build', '-d', '--wait'], { VANTAGEPOINT_UID: uid, VANTAGEPOINT_GID: gid });
   unlockVault();
 }, COMPOSE_TIMEOUT);
 
@@ -171,7 +171,7 @@ describe('@container US-9.4 — host-native bind-mount persistence (FR-8.2, ADR-
       const type = sh('docker', [
         'inspect',
         '-f',
-        '{{range .Mounts}}{{if eq .Destination "/var/lib/porttrack"}}{{.Type}}{{end}}{{end}}',
+        '{{range .Mounts}}{{if eq .Destination "/var/lib/vantagepoint"}}{{.Type}}{{end}}{{end}}',
         API,
       ]).trim();
       expect(type).toBe('bind');
@@ -181,7 +181,7 @@ describe('@container US-9.4 — host-native bind-mount persistence (FR-8.2, ADR-
       const source = sh('docker', [
         'inspect',
         '-f',
-        '{{range .Mounts}}{{if eq .Destination "/var/lib/porttrack"}}{{.Source}}{{end}}{{end}}',
+        '{{range .Mounts}}{{if eq .Destination "/var/lib/vantagepoint"}}{{.Source}}{{end}}{{end}}',
         API,
       ]).trim();
       expect(source).toBe(hostDataDir);
@@ -205,7 +205,7 @@ describe('@container US-9.4 — host-native bind-mount persistence (FR-8.2, ADR-
     });
 
     it('brings the same data back up after a restart', () => {
-      compose(['up', '-d', '--wait'], { PORTTRACK_UID: uid, PORTTRACK_GID: gid });
+      compose(['up', '-d', '--wait'], { VANTAGEPOINT_UID: uid, VANTAGEPOINT_GID: gid });
       const body = sh('docker', [
         'compose',
         'exec',
@@ -214,7 +214,7 @@ describe('@container US-9.4 — host-native bind-mount persistence (FR-8.2, ADR-
         'node',
         '--input-type=module',
         '-e',
-        "import {existsSync} from 'node:fs'; process.stdout.write(existsSync('/var/lib/porttrack/vault.db')?'yes':'no')",
+        "import {existsSync} from 'node:fs'; process.stdout.write(existsSync('/var/lib/vantagepoint/vault.db')?'yes':'no')",
       ]);
       expect(body).toBe('yes');
     });
@@ -230,7 +230,7 @@ describe('@container US-9.4 — host-native bind-mount persistence (FR-8.2, ADR-
     it('leaves pre-existing data intact after `build --no-cache` and restart', () => {
       const before = statSync(join(hostDataDir, 'vault.db')).size;
       compose(['build', '--no-cache', 'api']);
-      compose(['up', '-d', '--wait'], { PORTTRACK_UID: uid, PORTTRACK_GID: gid });
+      compose(['up', '-d', '--wait'], { VANTAGEPOINT_UID: uid, VANTAGEPOINT_GID: gid });
       expect(statSync(join(hostDataDir, 'vault.db')).size).toBeGreaterThanOrEqual(before);
     });
   });
@@ -275,7 +275,7 @@ describe('@container US-9.5 — host UID/GID ownership (FR-8.3)', () => {
         output = ((error as { stderr?: string }).stderr ?? '') +
           ((error as { stdout?: string }).stdout ?? '');
       }
-      expect(output).toContain('/var/lib/porttrack');
+      expect(output).toContain('/var/lib/vantagepoint');
       expect(output).toMatch(/chown/);
     });
   });
@@ -298,7 +298,7 @@ describe('@container US-9.1 / US-9.2 — container security posture (FR-8.3)', (
 
     it('allows a write to the bind-mounted data directory', () => {
       expect(() =>
-        sh('docker', ['compose', 'exec', '-T', 'api', 'touch', '/var/lib/porttrack/.probe']),
+        sh('docker', ['compose', 'exec', '-T', 'api', 'touch', '/var/lib/vantagepoint/.probe']),
       ).not.toThrow();
     });
 
@@ -339,7 +339,7 @@ describe('@container US-9.6 — secret handling and image hygiene (FR-8.3)', () 
 
     it('has no passphrase in the image history', () => {
       const history = sh('docker', ['history', '--no-trunc', API_IMAGE]);
-      expect(history).not.toMatch(/passphrase|PORTTRACK_PASSPHRASE=/i);
+      expect(history).not.toMatch(/passphrase|VANTAGEPOINT_PASSPHRASE=/i);
     });
   });
 
@@ -397,7 +397,7 @@ describe('@container US-9.8 — cross-platform compose definition', () => {
   describe('Scenario: The same compose file works on Linux, macOS and Windows/WSL2', () => {
     it('uses forward slashes and a relative default for the data directory', () => {
       const yaml = sh('cat', [join(ROOT, 'compose.yaml')]);
-      expect(yaml).toContain('${PORTTRACK_DATA_DIR:-./data}');
+      expect(yaml).toContain('${VANTAGEPOINT_DATA_DIR:-./data}');
       expect(yaml).not.toMatch(/[A-Z]:\\/);
     });
 

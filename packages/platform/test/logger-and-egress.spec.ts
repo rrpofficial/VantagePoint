@@ -8,9 +8,9 @@ import {
   createLogger,
   type LogRecord,
   type LogSink,
-} from '@porttrack/platform';
-import type { EgressRequest } from '@porttrack/shared-kernel';
-import { expectNoPii, SYNTHETIC } from '@porttrack/test-kit';
+} from '@vantagepoint/platform';
+import type { EgressRequest } from '@vantagepoint/shared-kernel';
+import { expectNoPii, SYNTHETIC } from '@vantagepoint/test-kit';
 
 const NOW = () => '2026-08-02T12:00:00.000+05:30';
 

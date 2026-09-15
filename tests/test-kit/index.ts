@@ -11,14 +11,14 @@ import type {
   IsoDateTime,
   Money,
   Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import type {
   AcquisitionLot,
   Asset,
   DualRate,
   ExitTransaction,
   Liability,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 
 /* ------------------------------------------------------------------- money */
 
@@ -212,7 +212,7 @@ export function expectErr<T>(result: Result<T>, code: string): void {
 
 /* ------------------------------------------------------------------- ports */
 
-import type { FxSource, HandLoan, PriceQuote, PriceSource } from '@porttrack/core-domain';
+import type { FxSource, HandLoan, PriceQuote, PriceSource } from '@vantagepoint/core-domain';
 
 /** Deterministic price source. Keyed by assetId, ISIN or symbol, first match wins. */
 export function stubPrices(
@@ -262,8 +262,8 @@ export function aHandLoanAsset(loan: HandLoan = aHandLoan()) {
 
 /* --------------------------------------------------------------- fx seeding */
 
-import { RateStore } from '@porttrack/fx-itbr';
-import type { RateRecord } from '@porttrack/fx-itbr';
+import { RateStore } from '@vantagepoint/fx-itbr';
+import type { RateRecord } from '@vantagepoint/fx-itbr';
 
 const rate = (
   date: string,

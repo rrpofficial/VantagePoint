@@ -18,7 +18,7 @@
  * with a fixed +05:30 offset sort lexicographically in time order, so this needs no
  * timezone library and cannot drift with the host's locale.
  */
-import { FyCalendar, type IsoDateTime } from '@porttrack/shared-kernel';
+import { FyCalendar, type IsoDateTime } from '@vantagepoint/shared-kernel';
 import type { SnapshotSpec } from './types.js';
 
 const DEFAULT_WINDOW_MS = 24 * 60 * 60 * 1000;

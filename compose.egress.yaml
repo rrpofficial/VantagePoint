@@ -17,4 +17,4 @@ services:
       - internal
       - edge
     environment:
-      PORTTRACK_EGRESS: allow
+      VANTAGEPOINT_EGRESS: allow

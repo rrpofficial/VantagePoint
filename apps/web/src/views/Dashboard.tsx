@@ -60,7 +60,7 @@ export function Dashboard({
   }, [loadLiabilities]);
 
   return (
-    <div className="pt-grid">
+    <div className="vp-grid">
       <Card
         title="Net worth"
         action={
@@ -73,7 +73,7 @@ export function Dashboard({
            */
           <button
             type="button"
-            className="pt-link pt-link--inline"
+            className="vp-link vp-link--inline"
             onClick={onRefresh}
             disabled={valuing === true}
             data-testid="revalue"
@@ -83,7 +83,7 @@ export function Dashboard({
         }
       >
         {valuation === undefined && valuationError !== undefined ? (
-          <div className="pt-banner" role="status" data-testid="valuation-error">
+          <div className="vp-banner" role="status" data-testid="valuation-error">
             <strong>Net worth could not be computed.</strong> {valuationError}
             {/*
               A missing exchange rate is the common case and is fixable by the
@@ -95,7 +95,7 @@ export function Dashboard({
                 {' '}
                 <button
                   type="button"
-                  className="pt-link pt-link--inline"
+                  className="vp-link vp-link--inline"
                   onClick={() => {
                     navigate('Settings');
                   }}
@@ -106,13 +106,13 @@ export function Dashboard({
             )}
           </div>
         ) : valuation === undefined ? (
-          <p className="pt-muted">Loading your portfolio…</p>
+          <p className="vp-muted">Loading your portfolio…</p>
         ) : (
           <>
-            <p className="pt-display pt-numeric" data-testid="net-worth">
+            <p className="vp-display vp-numeric" data-testid="net-worth">
               {INR.format(Number(valuation.netWorth.amount))}
             </p>
-            <dl className="pt-stats">
+            <dl className="vp-stats">
               <div>
                 <dt>Gross assets</dt>
                 <dd>
@@ -127,7 +127,7 @@ export function Dashboard({
               </div>
               <div>
                 <dt>Holdings</dt>
-                <dd className="pt-numeric">{valuation.positions.length}</dd>
+                <dd className="vp-numeric">{valuation.positions.length}</dd>
               </div>
             </dl>
           </>
@@ -137,11 +137,11 @@ export function Dashboard({
       <Card title="Asset allocation">
         <div data-testid="allocation-breakdown">
           {valuation === undefined || Object.keys(valuation.byAssetClass).length === 0 ? (
-            <p className="pt-muted">
+            <p className="vp-muted">
               No holdings recorded yet. Import a statement to populate your ledger.
             </p>
           ) : (
-            <ul className="pt-allocation">
+            <ul className="vp-allocation">
               {Object.entries(valuation.byAssetClass).map(([assetClass, value]) => (
                 <li key={assetClass}>
                   <span>{assetClass.replaceAll('_', ' ').toLowerCase()}</span>
@@ -158,7 +158,7 @@ export function Dashboard({
         action={
           <button
             type="button"
-            className="pt-link"
+            className="vp-link"
             onClick={() => {
               navigate('Snapshots');
             }}
@@ -167,7 +167,7 @@ export function Dashboard({
           </button>
         }
       >
-        <p className="pt-muted">
+        <p className="vp-muted">
           Compliance snapshots freeze on 31 March (domestic) and 31 December (foreign).
         </p>
       </Card>
@@ -179,25 +179,25 @@ export function Dashboard({
           that shows no rate and in years whose rule set might be verified.
         */}
         <ProvisionalBanner status={currentYear?.rulesStatus} note={currentYear?.rulesNote} />
-        <p className="pt-muted">
+        <p className="vp-muted">
           Quarterly instalments appear in the Tax section once your income for the year is recorded.
         </p>
       </Card>
 
       {liabilities.length > 0 && (
         <Card title="Liabilities">
-          <p className="pt-muted">
+          <p className="vp-muted">
             Already deducted from the net worth above. Shown here so the figure it is subtracted
             from is on the same screen.
           </p>
-          <div className="pt-table-scroll">
-            <table className="pt-table" data-testid="liabilities-table">
+          <div className="vp-table-scroll">
+            <table className="vp-table" data-testid="liabilities-table">
               <thead>
                 <tr>
                   <th scope="col">Kind</th>
                   <th scope="col">As of</th>
-                  <th scope="col" className="pt-align-end">Rate</th>
-                  <th scope="col" className="pt-align-end">Outstanding</th>
+                  <th scope="col" className="vp-align-end">Rate</th>
+                  <th scope="col" className="vp-align-end">Outstanding</th>
                 </tr>
               </thead>
               <tbody>
@@ -205,8 +205,8 @@ export function Dashboard({
                   <tr key={liability.liabilityId}>
                     <td>{liability.kind.replaceAll('_', ' ').toLowerCase()}</td>
                     <td>{liability.asOf}</td>
-                    <td className="pt-align-end pt-numeric">{liability.interestRatePct}%</td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end vp-numeric">{liability.interestRatePct}%</td>
+                    <td className="vp-align-end">
                       <Amount value={liability.principalOutstanding} />
                     </td>
                   </tr>

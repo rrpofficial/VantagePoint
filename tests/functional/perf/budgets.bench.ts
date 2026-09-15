@@ -5,9 +5,9 @@
  * fails if valuation of 1,000 lots exceeds 1.5 s or a snapshot delta exceeds 2.0 s.
  */
 import { bench, describe } from 'vitest';
-import { ValuationEngine } from '@porttrack/core-domain';
-import { DeltaEngine, type Snapshot } from '@porttrack/snapshot';
-import { anAsset, fixedClock, inr, manyLots } from '@porttrack/test-kit';
+import { ValuationEngine } from '@vantagepoint/core-domain';
+import { DeltaEngine, type Snapshot } from '@vantagepoint/snapshot';
+import { anAsset, fixedClock, inr, manyLots } from '@vantagepoint/test-kit';
 
 const CLOCK = fixedClock('2026-03-31T23:59:59.999+05:30');
 

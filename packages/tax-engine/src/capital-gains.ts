@@ -19,7 +19,7 @@ import {
   type IsoDate,
   type Money as MoneyValue,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import {
   days30360,
@@ -27,8 +27,8 @@ import {
   type AssetClass,
   type ExitTransaction,
   type TaxSubject,
-} from '@porttrack/core-domain';
-import { DualRateConverter, Rule115Resolver } from '@porttrack/fx-itbr';
+} from '@vantagepoint/core-domain';
+import { DualRateConverter, Rule115Resolver } from '@vantagepoint/fx-itbr';
 import type {
   CapitalGainsOptions,
   CapitalGainsResult,

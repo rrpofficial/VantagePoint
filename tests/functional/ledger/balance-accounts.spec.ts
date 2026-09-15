@@ -24,10 +24,10 @@ import {
   ValuePortfolioUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { saveIncomeProfile } from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { saveIncomeProfile } from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
@@ -38,7 +38,7 @@ const netWorthAt = async (date: string): Promise<number> =>
 
 beforeEach(async () => {
   resetPorts();
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-balances-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-balances-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
 });

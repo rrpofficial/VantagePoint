@@ -207,7 +207,7 @@ function contentStreamFor(
   let y = PAGE_HEIGHT - MARGIN;
 
   parts.push(
-    `BT /F2 13 Tf ${String(MARGIN)} ${String(y)} Td (portTrack — Hand Loan Register) Tj ET`,
+    `BT /F2 13 Tf ${String(MARGIN)} ${String(y)} Td (VantagePoint — Hand Loan Register) Tj ET`,
   );
   y -= LINE + 2;
   parts.push(

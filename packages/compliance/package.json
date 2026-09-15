@@ -1,5 +1,5 @@
 {
-  "name": "@porttrack/compliance",
+  "name": "@vantagepoint/compliance",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,11 +9,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@porttrack/core-domain": "workspace:*",
-    "@porttrack/shared-kernel": "workspace:*",
-    "@porttrack/snapshot": "workspace:*"
+    "@vantagepoint/core-domain": "workspace:*",
+    "@vantagepoint/shared-kernel": "workspace:*",
+    "@vantagepoint/snapshot": "workspace:*"
   },
   "devDependencies": {
-    "@porttrack/test-kit": "workspace:*"
+    "@vantagepoint/test-kit": "workspace:*"
   }
 }

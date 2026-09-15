@@ -9,7 +9,7 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   server: {
-    port: Number(process.env.PORTTRACK_WEB_PORT ?? 5173),
+    port: Number(process.env.VANTAGEPOINT_WEB_PORT ?? 5173),
     proxy: { '/api': { target: 'http://localhost:8080', changeOrigin: true } },
   },
   build: { outDir: 'dist', sourcemap: true },

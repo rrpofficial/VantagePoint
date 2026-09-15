@@ -21,7 +21,7 @@ import {
   type Currency,
   type Money as MoneyValue,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import type {
   AcquisitionLot,
   AdvanceTaxPayment,
@@ -47,7 +47,7 @@ import type {
   PropertyTransaction,
   RateSource,
   ValuationBasis,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 import { Vault } from './vault.js';
 
 interface AssetRow {

@@ -9,14 +9,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AssetRepository, LiabilityRepository, Vault } from '@porttrack/persistence';
-import type { Asset, Liability } from '@porttrack/core-domain';
-import { expectOk } from '@porttrack/test-kit';
+import { AssetRepository, LiabilityRepository, Vault } from '@vantagepoint/persistence';
+import type { Asset, Liability } from '@vantagepoint/core-domain';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-repo-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-repo-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await Vault.unlock(PASSPHRASE));
 });

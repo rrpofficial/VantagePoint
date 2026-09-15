@@ -41,7 +41,7 @@
  *
  * The opt-out ("old") regime DOES reach 37% under Paragraph F, and one
  * `surchargeBands` array cannot hold both. This models the default regime,
- * because it is the default. See §7 of `portrack_evolution_plan.md`.
+ * because it is the default. See §7 of `vantagepoint_evolution_plan.md`.
  *
  * ## NOT sourced from [FB2026] — carried, and still to be checked
  *

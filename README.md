@@ -1,4 +1,4 @@
-# portTrack
+# VantagePoint
 
 Global multi-asset portfolio tracking and Indian tax compliance for Indian tax residents —
 local-first, privacy-first, containerized.
@@ -6,8 +6,8 @@ local-first, privacy-first, containerized.
 | Document | Purpose |
 |---|---|
 | [`Global_Portfolio_Tracker_PRD.md`](./Global_Portfolio_Tracker_PRD.md) | Product requirements (source of truth) |
-| [`implementation_plan_portrack.md`](./implementation_plan_portrack.md) | ADRs, 80 user stories, acceptance criteria, DoD, milestone tracker |
-| [`ARCHITECTURE_portrack.md`](./ARCHITECTURE_portrack.md) | C4 component views + 7 data-flow sequence diagrams |
+| [`implementation_plan_vantagepoint.md`](./implementation_plan_vantagepoint.md) | ADRs, 80 user stories, acceptance criteria, DoD, milestone tracker |
+| [`ARCHITECTURE_vantagepoint.md`](./ARCHITECTURE_vantagepoint.md) | C4 component views + 7 data-flow sequence diagrams |
 
 ## Current status — all milestones complete
 
@@ -43,7 +43,7 @@ PII masking, API/UI/CLI, containers, and the Schedule FA/AL exports.
 ## Running it
 
 ```bash
-cp .env.example .env     # set PORTTRACK_DATA_DIR and your UID/GID
+cp .env.example .env     # set VANTAGEPOINT_DATA_DIR and your UID/GID
 docker compose up
 ```
 
@@ -51,23 +51,23 @@ Then open <http://localhost:5173>. Nothing else is required — no Node, no pnpm
 
 ### Two instances: one you use, one you break
 
-Keep using portTrack while testing changes against it. `.env` describes the **production**
+Keep using VantagePoint while testing changes against it. `.env` describes the **production**
 instance; `.env.test` describes the **testing** one, and the two share nothing:
 
 |  | Production | Testing |
 |---|---|---|
 | Start | `pnpm docker:up` | `pnpm docker:test:up` |
 | Stop | `pnpm docker:down` | `pnpm docker:test:down` |
-| `PORTTRACK_PROJECT` | `porttrack` | `porttrack-test` |
-| Containers | `porttrack-api` / `-web` | `porttrack-test-api` / `-web` |
-| Image tag | `porttrack-*:prod` | `porttrack-*:test` |
+| `VANTAGEPOINT_PROJECT` | `vantagepoint` | `vantagepoint-test` |
+| Containers | `vantagepoint-api` / `-web` | `vantagepoint-test-api` / `-web` |
+| Image tag | `vantagepoint-*:prod` | `vantagepoint-*:test` |
 | Vault | `./data` | `./data-test` |
 | URL | <http://localhost:5273> | <http://localhost:5274> |
 
 Everything Docker can namespace is namespaced — project, containers, networks, images — so
 rebuilding the testing stack cannot replace the image production is serving from, and
 `docker compose down` on one leaves the other running. **The published port is the exception:**
-Docker cannot namespace a host port, so the two `PORTTRACK_WEB_PORT` values must differ or the
+Docker cannot namespace a host port, so the two `VANTAGEPOINT_WEB_PORT` values must differ or the
 second stack simply refuses to start.
 
 The vaults are separate files with separate passphrases. Nothing in the testing instance can read,
@@ -80,7 +80,7 @@ pnpm test:e2e:fresh        # ...after recreating its vault from empty
 ```
 
 `pnpm test:e2e` reads `.env.test` in preference to `.env`, so a test run has to be pointed at
-production deliberately (`PORTTRACK_BASE_URL=...`) rather than landing there by accident.
+production deliberately (`VANTAGEPOINT_BASE_URL=...`) rather than landing there by accident.
 
 **The suite needs a vault it has not seen before.** It asserts that figures *changed* — net worth
 after recording a loan, a chit carrying exactly the instalments just paid — which is false the
@@ -92,14 +92,14 @@ project, tag and port, and leaves both instances untouched.
 To promote a tested build to production, rebuild production's tag and restart it:
 
 ```bash
-pnpm docker:up             # rebuilds porttrack-*:prod and recreates the stack
+pnpm docker:up             # rebuilds vantagepoint-*:prod and recreates the stack
 ```
 
 ### Manual entry — CSV templates
 
 Not everything has a broker export. For hand loans, property, cash, chit funds and unlisted shares,
 download a template from **Import → Manual entry**, fill it in a spreadsheet, and import it with
-*portTrack CSV template* selected.
+*VantagePoint CSV template* selected.
 
 | Template | Records | Key columns |
 |---|---|---|
@@ -114,7 +114,7 @@ The same files are committed at [`templates/`](./templates), generated from the 
 definitions by `npx tsx scripts/emit-templates.mts` — so the header you fill in and the header the
 importer matches against can never drift apart.
 
-Choosing **portTrack CSV template** as the statement type reveals a second dropdown listing the six
+Choosing **VantagePoint CSV template** as the statement type reveals a second dropdown listing the six
 templates. Leave it on *Detect from the file's header* and the header decides, as before. Naming one
 buys a better failure: a mismatch then reports the exact columns at fault —
 
@@ -122,7 +122,7 @@ buys a better failure: a mismatch then reports the exact columns at fault —
 Custom_Cash template header mismatch — missing column(s): balance
 ```
 
-— rather than `this header matches no portTrack template: …`. It also catches a Hand Loans file
+— rather than `this header matches no VantagePoint template: …`. It also catches a Hand Loans file
 uploaded under Cash, which would otherwise import cleanly as the wrong asset class, and therefore
 under the wrong tax treatment.
 
@@ -200,7 +200,7 @@ lakh. A comma is always a digit separator, never a decimal point.
 
 ### Edit mode — changing and deleting is off until you say so
 
-Everything portTrack holds is a record of money that has already **moved**. Adding to that is
+Everything VantagePoint holds is a record of money that has already **moved**. Adding to that is
 routine: a wrong entry is visible on the screen, and correcting it leaves a trail. Changing or
 deleting one is neither — a mistaken delete looks exactly like a record that was never made, and
 there is nothing left to notice it by.
@@ -268,7 +268,7 @@ https://github.com/sahilgupta/sbi-fx-ratekeeper/blob/main/csv_files/SBI_REFERENC
 
 It is a daily scrape of SBI's own published PDF rate cards, and **every row links to the PDF it was
 read from** — so a rate is traceable to SBI's document rather than to the scraper. That link is what
-portTrack stores as the rate's provenance, not the archive's name.
+VantagePoint stores as the rate's provenance, not the archive's name.
 
 It is still a third party's transcription, so the parser is built around not trusting it:
 
@@ -301,7 +301,7 @@ ADR-003 stores **two** rates per foreign transaction, and risk R4 records why:
 - **Rule 115 rate** — the last day of the preceding month, which is what the rule names for capital
   gains.
 
-They differ, and which applies is genuinely contested. portTrack computes and stores both, records
+They differ, and which applies is genuinely contested. VantagePoint computes and stores both, records
 which was applied to each figure, and **does not decide for you** — confirm the basis with your CA.
 
 > SBI does not publish on Sundays or holidays, so a month-end frequently has no card. The resolver
@@ -310,7 +310,7 @@ which was applied to each figure, and **does not decide for you** — confirm th
 
 ### Where your data lives
 
-`${PORTTRACK_DATA_DIR:-./data}/vault.db` **on your own disk**, bind-mounted into the container
+`${VANTAGEPOINT_DATA_DIR:-./data}/vault.db` **on your own disk**, bind-mounted into the container
 (ADR-012). Deliberately not a Docker named volume: those live under `/var/lib/docker`, are owned by
 root, are invisible to your backup tooling and vanish to `docker volume prune`.
 
@@ -341,9 +341,9 @@ response must not reveal whether a vault holds data (ADR-014). That is correct f
 at all to you, so the distinction is available offline instead:
 
 ```bash
-read -rs -p 'passphrase: ' PORTTRACK_PASSPHRASE && export PORTTRACK_PASSPHRASE
+read -rs -p 'passphrase: ' VANTAGEPOINT_PASSPHRASE && export VANTAGEPOINT_PASSPHRASE
 pnpm vault:diagnose ./data
-unset PORTTRACK_PASSPHRASE
+unset VANTAGEPOINT_PASSPHRASE
 ```
 
 Type it into the prompt rather than the command line, so it stays out of your shell history. The
@@ -373,8 +373,8 @@ instead of cheerfully accepting a passphrase you have never used.
 | Task | Command |
 |---|---|
 | First run | `cp .env.example .env && docker compose up` |
-| Match file ownership to you | set `PORTTRACK_UID=$(id -u)` and `PORTTRACK_GID=$(id -g)` in `.env` |
-| Change where data lives | set `PORTTRACK_DATA_DIR=/path/on/your/disk` |
+| Match file ownership to you | set `VANTAGEPOINT_UID=$(id -u)` and `VANTAGEPOINT_GID=$(id -g)` in `.env` |
+| Change where data lives | set `VANTAGEPOINT_DATA_DIR=/path/on/your/disk` |
 | Back up | copy the whole data directory while the stack is stopped |
 | Restore | copy it back, then `docker compose up` |
 | Diagnose a vault that will not unlock | `pnpm vault:diagnose ./data` — see above |
@@ -391,7 +391,7 @@ inside the API cannot exfiltrate a vault even if it tries.
 
 ```bash
 pnpm install
-pnpm --filter @porttrack/app-web dev   # SPA on :5173, proxying /api
+pnpm --filter @vantagepoint/app-web dev   # SPA on :5173, proxying /api
 node apps/api/build.mjs && node apps/api/dist/server.mjs
 ```
 
@@ -411,7 +411,7 @@ pnpm test:e2e          # Playwright against the containerized stack
 ```bash
 npx playwright install chromium         # once; downloads ~115 MB
 docker compose up -d
-PORTTRACK_WEB_PORT=5273 pnpm test:e2e   # match the port in your .env
+VANTAGEPOINT_WEB_PORT=5273 pnpm test:e2e   # match the port in your .env
 ```
 
 It asserts what each section **renders**, not that its link exists — the distinction that let a
@@ -420,11 +420,11 @@ completely dead navigation bar pass as DONE once already.
 ## Running the stack (from M9)
 
 ```bash
-cp .env.example .env          # set PORTTRACK_DATA_DIR, PORTTRACK_UID/GID
+cp .env.example .env          # set VANTAGEPOINT_DATA_DIR, VANTAGEPOINT_UID/GID
 docker compose up
 ```
 
-Your encrypted database lives on **your own disk** at `${PORTTRACK_DATA_DIR:-./data}/vault.db` via a
+Your encrypted database lives on **your own disk** at `${VANTAGEPOINT_DATA_DIR:-./data}/vault.db` via a
 bind mount — not in a Docker-managed volume. It survives `docker compose down`, image rebuilds and
 Docker upgrades, and you can back it up with ordinary host tools (ADR-012).
 

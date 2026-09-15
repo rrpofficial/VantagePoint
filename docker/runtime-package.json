@@ -1,5 +1,5 @@
 {
-  "name": "porttrack-api-runtime",
+  "name": "vantagepoint-api-runtime",
   "private": true,
   "type": "module",
   "description": "Exactly the packages the bundled API needs at runtime. Everything else — our own code — is inlined by esbuild, and everything dev-only is absent by construction rather than pruned after the fact.",

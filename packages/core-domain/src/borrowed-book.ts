@@ -7,7 +7,7 @@
  * of net worth and in different Schedule AL sections, and the cost of a sign
  * error between them is net worth moving by twice the loan.
  */
-import { Money, type IsoDate, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, type IsoDate, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import { progressOf, scheduleFor, type AmortisationTerms, type LoanProgress, type ScheduledInstalment } from './amortisation.js';
 import type { BorrowedLoan, BorrowedLoanStatus, Liability } from './types.js';

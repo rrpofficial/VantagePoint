@@ -6,7 +6,7 @@
  * so a sale after the action is still long-term. A bonus issue is the exception —
  * those shares are genuinely acquired on the record date at zero cost.
  */
-import { Money } from '@porttrack/shared-kernel';
+import { Money } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import type { AcquisitionLot, CorporateAction } from './types.js';
 

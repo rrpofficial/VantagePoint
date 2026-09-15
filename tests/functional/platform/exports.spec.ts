@@ -25,9 +25,9 @@ import {
   TradeUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
@@ -35,7 +35,7 @@ const text = (bytes: Uint8Array): string => Buffer.from(bytes).toString('utf8');
 
 beforeEach(async () => {
   resetPorts();
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-exports-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-exports-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
 });
@@ -110,8 +110,8 @@ describe('Phase 7 Scenario: Every register exports to CSV and PDF', () => {
       const file = expectOk(await ExportUC.execute({ register, format: 'csv' }));
 
       expect(file.contentType).toContain('text/csv');
-      expect(file.fileName).toMatch(new RegExp(`^portTrack-${register}-masked-\\d{4}-\\d{2}-\\d{2}\\.csv$`));
-      expect(text(file.bytes)).toContain('# portTrack');
+      expect(file.fileName).toMatch(new RegExp(`^VantagePoint-${register}-masked-\\d{4}-\\d{2}-\\d{2}\\.csv$`));
+      expect(text(file.bytes)).toContain('# VantagePoint');
     },
   );
 
@@ -244,9 +244,9 @@ describe('Phase 7 Scenario: A holdings export supports a capital-gains conversat
 
     const csv = text(expectOk(await ExportUC.execute({ register: 'holdings', format: 'csv' })).bytes);
 
-    expect(csv).toContain('portTrack — Holdings');
+    expect(csv).toContain('VantagePoint — Holdings');
     // A summary alone cannot support the conversation the export exists for.
-    expect(csv).toContain('portTrack — Acquisition lots');
+    expect(csv).toContain('VantagePoint — Acquisition lots');
     expect(csv).toContain('2025-06-02');
     expect(csv).toContain('2025-09-04');
   });
@@ -282,7 +282,7 @@ describe('Phase 7 Scenario: A holdings export supports a capital-gains conversat
       ).bytes,
     );
 
-    expect(csv).toContain('portTrack — Disposals');
+    expect(csv).toContain('VantagePoint — Disposals');
     expect(csv).toContain('2025-11-10');
     expect(csv).toContain('assessment year 2026-27');
   });

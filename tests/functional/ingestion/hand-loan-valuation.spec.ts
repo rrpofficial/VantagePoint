@@ -20,10 +20,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ImportStatementUC, LedgerUC, ValuePortfolioUC, resetPorts } from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { TemplateRegistry } from '@porttrack/ingestion';
-import { expectOk } from '@porttrack/test-kit';
+import { ImportStatementUC, LedgerUC, ValuePortfolioUC, resetPorts } from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { TemplateRegistry } from '@vantagepoint/ingestion';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const AS_OF = '2026-08-08T23:59:59.999+05:30';
@@ -38,7 +38,7 @@ const loanRow = (name: string, amount: string, rate: string, date: string) =>
   `${name},,${date},,${amount},${rate},INR${','.repeat(18)}`;
 
 async function unlocked(): Promise<void> {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-loans-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-loans-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await Vault.unlock(PASSPHRASE));
   resetPorts();

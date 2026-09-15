@@ -1,7 +1,7 @@
 /**
  * US-8.5 — Application shell UI  ·  US-9.7 — E2E against the containerized stack
  *
- * Playwright, against the compose stack (http://localhost:${PORTTRACK_WEB_PORT}),
+ * Playwright, against the compose stack (http://localhost:${VANTAGEPOINT_WEB_PORT}),
  * so this exercises the real containers rather than a dev server.
  *
  * **Every navigation assertion checks what the section RENDERS, not that a link
@@ -16,7 +16,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
-const PASSPHRASE = process.env.PORTTRACK_TEST_PASSPHRASE ?? 'correct horse battery staple';
+const PASSPHRASE = process.env.VANTAGEPOINT_TEST_PASSPHRASE ?? 'correct horse battery staple';
 
 /** Top-level sections. The five asset kinds are a second level under Assets. */
 const SECTIONS = [
@@ -425,7 +425,7 @@ test.describe('US-4.6 Scenario: CSV templates are obtainable from the app', () =
     expect(contents).toContain('# Lines beginning with # are ignored on import');
   });
 
-  test('offers a template dropdown once portTrack CSV template is chosen', async ({ page }) => {
+  test('offers a template dropdown once VantagePoint CSV template is chosen', async ({ page }) => {
     await unlock(page);
     await goToSection(page, 'Import');
 

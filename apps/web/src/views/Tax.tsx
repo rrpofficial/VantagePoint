@@ -120,18 +120,18 @@ export function Tax() {
   }
 
   return (
-    <div className="pt-stack">
+    <div className="vp-stack">
       <Card
         title="Advance tax"
         action={
-          <button type="button" className="pt-button-inline" onClick={() => void compute()}>
+          <button type="button" className="vp-button-inline" onClick={() => void compute()}>
             Compute advance tax
           </button>
         }
       >
         <ProvisionalBanner status={selectedYear?.rulesStatus} note={selectedYear?.rulesNote} />
 
-        <div className="pt-controls">
+        <div className="vp-controls">
           <label htmlFor="fy">Financial year</label>
           <select
             id="fy"
@@ -164,7 +164,7 @@ export function Tax() {
         </div>
 
         {selectedYear !== undefined && periods !== undefined && (
-          <p className="pt-muted" data-testid="selected-period">
+          <p className="vp-muted" data-testid="selected-period">
             FY {selectedYear.financialYear} is assessed in{' '}
             <strong>AY {selectedYear.assessmentYear}</strong>
             {selectedYear.isCurrent ? ' — the current financial year.' : '.'}
@@ -187,7 +187,7 @@ export function Tax() {
         )}
 
         {error !== undefined && (
-          <p className="pt-error" role="alert">
+          <p className="vp-error" role="alert">
             {error}
           </p>
         )}
@@ -195,26 +195,26 @@ export function Tax() {
         {installment !== undefined && (
           <>
             {!hasProfile && (
-              <p className="pt-muted" data-testid="no-income-profile">
+              <p className="vp-muted" data-testid="no-income-profile">
                 No income has been recorded for {financialYear}, so this is computed from zero
                 income. Enter your income below for a figure that means something.
               </p>
             )}
-            <p className="pt-display pt-numeric" data-testid="advance-tax-payable">
+            <p className="vp-display vp-numeric" data-testid="advance-tax-payable">
               {new Intl.NumberFormat('en-IN', {
                 style: 'currency',
                 currency: 'INR',
                 maximumFractionDigits: 0,
               }).format(Number(installment.netPayable.amount))}
             </p>
-            <dl className="pt-stats">
+            <dl className="vp-stats">
               <div>
                 <dt>Due by</dt>
                 <dd>{installment.dueDate}</dd>
               </div>
               <div>
                 <dt>Cumulative</dt>
-                <dd className="pt-numeric">{installment.cumulativePercentage}%</dd>
+                <dd className="vp-numeric">{installment.cumulativePercentage}%</dd>
               </div>
               <div>
                 <dt>Total liability</dt>
@@ -243,7 +243,7 @@ export function Tax() {
               from a correct one, and the shortfall surfaces at assessment.
             */}
             {(installment.capitalGains?.unconvertible.length ?? 0) > 0 && (
-              <p className="pt-error" role="alert" data-testid="unconvertible-gains">
+              <p className="vp-error" role="alert" data-testid="unconvertible-gains">
                 <strong>This figure is incomplete.</strong>{' '}
                 {installment.capitalGains?.unconvertible.length} disposal
                 {installment.capitalGains?.unconvertible.length === 1 ? '' : 's'} could not be
@@ -256,7 +256,7 @@ export function Tax() {
             )}
 
             {(installment.capitalGains?.excludedSellToCover.length ?? 0) > 0 && (
-              <p className="pt-callout" role="status" data-testid="excluded-sell-to-cover">
+              <p className="vp-callout" role="status" data-testid="excluded-sell-to-cover">
                 Excludes {installment.capitalGains?.excludedSellToCover.length} sell-to-cover
                 disposal
                 {installment.capitalGains?.excludedSellToCover.length === 1 ? '' : 's'}, by your
@@ -291,24 +291,24 @@ export function Tax() {
       {regimes !== undefined && (
         <Card title="Regime comparison" action={<Chip>{regimes.recommended} regime</Chip>}>
           <ProvisionalBanner status={selectedYear?.rulesStatus} note={selectedYear?.rulesNote} />
-          <div className="pt-table-scroll">
-            <table className="pt-table" data-testid="regime-table">
+          <div className="vp-table-scroll">
+            <table className="vp-table" data-testid="regime-table">
               <thead>
                 <tr>
                   <th scope="col">Regime</th>
-                  <th scope="col" className="pt-align-end">
+                  <th scope="col" className="vp-align-end">
                     Total income
                   </th>
-                  <th scope="col" className="pt-align-end">
+                  <th scope="col" className="vp-align-end">
                     Base tax
                   </th>
-                  <th scope="col" className="pt-align-end">
+                  <th scope="col" className="vp-align-end">
                     Surcharge
                   </th>
-                  <th scope="col" className="pt-align-end">
+                  <th scope="col" className="vp-align-end">
                     Cess
                   </th>
-                  <th scope="col" className="pt-align-end">
+                  <th scope="col" className="vp-align-end">
                     Liability
                   </th>
                 </tr>
@@ -317,19 +317,19 @@ export function Tax() {
                 {[regimes.old, regimes.new].map((computation) => (
                   <tr key={computation.regime}>
                     <td>{computation.regime.toLowerCase()}</td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       <Amount value={computation.totalIncome} />
                     </td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       <Amount value={computation.baseTax} />
                     </td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       <Amount value={computation.surcharge} />
                     </td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       <Amount value={computation.cess} />
                     </td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       <Amount value={computation.totalLiability} />
                     </td>
                   </tr>
@@ -338,7 +338,7 @@ export function Tax() {
             </table>
           </div>
           {regimes.deductionsForgone.length > 0 && (
-            <p className="pt-muted">
+            <p className="vp-muted">
               Forgone under the new regime: {regimes.deductionsForgone.join(', ')}.
             </p>
           )}
@@ -346,11 +346,11 @@ export function Tax() {
       )}
 
       <Card title="Income for the year" action={hasProfile ? <Chip>Recorded</Chip> : undefined}>
-        <p className="pt-muted">
+        <p className="vp-muted">
           Stored in your encrypted vault, never sent anywhere. Salary is as sensitive as holdings,
           and it is cleared from memory when the vault locks.
         </p>
-        <form onSubmit={onSubmitIncome} className="pt-form pt-form--grid">
+        <form onSubmit={onSubmitIncome} className="vp-form vp-form--grid">
           {INCOME_FIELDS.map(([key, fieldLabel]) => (
             <div key={key}>
               <label htmlFor={key}>{fieldLabel}</label>
@@ -379,7 +379,7 @@ export function Tax() {
             <EditModeHint action="replace the income already recorded for this year" />
           )}
           {saved && (
-            <p className="pt-muted" role="status">
+            <p className="vp-muted" role="status">
               Saved.
             </p>
           )}
@@ -456,21 +456,21 @@ function AdvanceTaxPayments({
       title="Advance tax paid"
       action={<Chip>{`₹${total.toLocaleString('en-IN')}`}</Chip>}
     >
-      <p className="pt-muted">
+      <p className="vp-muted">
         Each quarter&rsquo;s demand is the year&rsquo;s liability at 15, 45, 75 or 100 per cent,
         less TDS and less everything already paid. Record each challan here or every quarter after
         the first will ask again for tax you have already remitted.
       </p>
 
       {payments.length > 0 && (
-        <div className="pt-table-scroll">
-          <table className="pt-table" data-testid="advance-tax-payments">
+        <div className="vp-table-scroll">
+          <table className="vp-table" data-testid="advance-tax-payments">
             <thead>
               <tr>
                 <th scope="col">Quarter</th>
                 <th scope="col">Paid on</th>
                 <th scope="col">Challan</th>
-                <th scope="col" className="pt-align-end">Amount</th>
+                <th scope="col" className="vp-align-end">Amount</th>
                 {editMode.enabled && <th scope="col" />}
               </tr>
             </thead>
@@ -480,7 +480,7 @@ function AdvanceTaxPayments({
                   <td>{payment.quarter}</td>
                   <td>{payment.paidOn}</td>
                   <td>{payment.challanRef ?? '—'}</td>
-                  <td className="pt-align-end">
+                  <td className="vp-align-end">
                     <Amount value={payment.amount} />
                   </td>
                   {editMode.enabled && (
@@ -505,7 +505,7 @@ function AdvanceTaxPayments({
       )}
 
       <form
-        className="pt-form"
+        className="vp-form"
         data-testid="record-advance-tax-payment"
         onSubmit={(event: SyntheticEvent) => {
           event.preventDefault();
@@ -562,7 +562,7 @@ function AdvanceTaxPayments({
         </button>
 
         {error !== undefined && (
-          <p className="pt-error" role="alert" data-testid="payment-error">
+          <p className="vp-error" role="alert" data-testid="payment-error">
             {error}
           </p>
         )}
@@ -601,7 +601,7 @@ function OtherSourcesPanel({ financialYear }: { financialYear: string }) {
 
   return (
     <Card title="Income from other sources" action={<Chip>{`FY ${financialYear}`}</Chip>}>
-      <dl className="pt-stats">
+      <dl className="vp-stats">
         <div>
           <dt>From the ledger</dt>
           <dd data-testid="other-sources-derived">
@@ -623,19 +623,19 @@ function OtherSourcesPanel({ financialYear }: { financialYear: string }) {
       </dl>
 
       {income.items.length > 0 && (
-        <div className="pt-table-scroll">
-          <table className="pt-table" data-testid="other-sources-table">
+        <div className="vp-table-scroll">
+          <table className="vp-table" data-testid="other-sources-table">
             <thead>
               <tr>
                 <th scope="col">Source</th>
-                <th scope="col" className="pt-align-end">Amount</th>
+                <th scope="col" className="vp-align-end">Amount</th>
               </tr>
             </thead>
             <tbody>
               {income.items.map((item, index) => (
                 <tr key={`${item.label}-${String(index)}`}>
                   <td>{item.label}</td>
-                  <td className="pt-align-end">
+                  <td className="vp-align-end">
                     <Amount value={item.amount} />
                   </td>
                 </tr>
@@ -646,7 +646,7 @@ function OtherSourcesPanel({ financialYear }: { financialYear: string }) {
       )}
 
       {income.items.length > 1 && (
-        <p className="pt-muted">
+        <p className="vp-muted">
           Each line is counted once. If something here is <strong>also</strong> in the
           &ldquo;other sources&rdquo; box of your income profile, it is being counted twice —
           remove it from one of the two.
@@ -656,12 +656,12 @@ function OtherSourcesPanel({ financialYear }: { financialYear: string }) {
       {income.excluded.length > 0 && (
         <>
           <h4>Recorded, but not counted</h4>
-          <div className="pt-table-scroll">
-            <table className="pt-table" data-testid="other-sources-excluded">
+          <div className="vp-table-scroll">
+            <table className="vp-table" data-testid="other-sources-excluded">
               <thead>
                 <tr>
                   <th scope="col">Source</th>
-                  <th scope="col" className="pt-align-end">Amount</th>
+                  <th scope="col" className="vp-align-end">Amount</th>
                   <th scope="col">Why</th>
                 </tr>
               </thead>
@@ -669,10 +669,10 @@ function OtherSourcesPanel({ financialYear }: { financialYear: string }) {
                 {income.excluded.map((row, index) => (
                   <tr key={`${row.label}-${String(index)}`}>
                     <td>{row.label}</td>
-                    <td className="pt-align-end">
+                    <td className="vp-align-end">
                       <Amount value={row.amount} />
                     </td>
-                    <td className="pt-muted">{row.reason}</td>
+                    <td className="vp-muted">{row.reason}</td>
                   </tr>
                 ))}
               </tbody>

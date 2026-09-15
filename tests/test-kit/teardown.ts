@@ -23,7 +23,7 @@ import { join } from 'node:path';
  * Only directories this suite creates. Matched on the prefixes the tests pass to
  * `mkdtempSync`, so nothing outside the suite is ever a candidate for deletion.
  */
-const PREFIXES = ['porttrack-', 'porttrack_'];
+const PREFIXES = ['vantagepoint-', 'vantagepoint_'];
 
 export default function teardown(): void {
   const root = tmpdir();

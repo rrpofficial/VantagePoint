@@ -16,7 +16,7 @@
  * is not recognised is REFUSED, not guessed at. A mis-parsed CAS silently
  * misstates units and NAV, which flows straight into a capital gains figure.
  */
-import { Err, Ok, PdfDecryptionError, UnknownCasLayoutError, Money, type Result } from '@porttrack/shared-kernel';
+import { Err, Ok, PdfDecryptionError, UnknownCasLayoutError, Money, type Result } from '@vantagepoint/shared-kernel';
 import { normaliseDate } from './csv.js';
 import { decryptStream, extractText, readEncryptInfo, readStreams } from './pdf/reader.js';
 import { verifyUserPassword } from './pdf/standard-security.js';

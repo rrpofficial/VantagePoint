@@ -12,7 +12,7 @@
  *     band. Applying the headline rate to the whole tax overcharges anyone with
  *     both a high salary and realised gains.
  */
-import { Money, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import type { SurchargeInput, SurchargeResult, TaxRuleSet, TraceLine } from './types.js';
 

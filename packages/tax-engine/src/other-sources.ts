@@ -5,8 +5,8 @@
  * component keeps its source so the advance tax figure can be explained rather
  * than merely asserted.
  */
-import { Money, type Money as MoneyValue } from '@porttrack/shared-kernel';
-import type { IncomeEvent } from '@porttrack/core-domain';
+import { Money, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
+import type { IncomeEvent } from '@vantagepoint/core-domain';
 import type { TraceLine } from './types.js';
 
 const INR = 'INR' as const;

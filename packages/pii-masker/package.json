@@ -1,5 +1,5 @@
 {
-  "name": "@porttrack/pii-masker",
+  "name": "@vantagepoint/pii-masker",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,11 +9,11 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@porttrack/shared-kernel": "workspace:*",
+    "@vantagepoint/shared-kernel": "workspace:*",
     "wink-eng-lite-web-model": "*",
     "wink-nlp": "*"
   },
   "devDependencies": {
-    "@porttrack/test-kit": "workspace:*"
+    "@vantagepoint/test-kit": "workspace:*"
   }
 }

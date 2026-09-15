@@ -9,7 +9,7 @@ import { readFileSync, globSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { buildApp } from '../../../apps/api/src/app.js';
-import { expectNoPii } from '@porttrack/test-kit';
+import { expectNoPii } from '@vantagepoint/test-kit';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
 
@@ -22,7 +22,7 @@ const ROOT = resolve(import.meta.dirname, '../../..');
  * survive — created with a different passphrase — so unlock failed for reasons
  * that had nothing to do with the code under test.
  */
-const DATA_DIR = mkdtempSync(join(tmpdir(), 'porttrack-api-'));
+const DATA_DIR = mkdtempSync(join(tmpdir(), 'vantagepoint-api-'));
 const app = () => buildApp({ dataDir: DATA_DIR });
 
 describe('US-8.11 Scenario: API exposes the use cases the SPA needs', () => {
@@ -140,7 +140,7 @@ describe('US-8.11 Scenario: The API is a thin shell with no business logic', () 
     for (const file of routeFiles) {
       const source = readFileSync(file, 'utf8');
       if (
-        /@porttrack\/(core-domain|tax-engine|fx-itbr|snapshot|ingestion|compliance|persistence)/.test(
+        /@vantagepoint\/(core-domain|tax-engine|fx-itbr|snapshot|ingestion|compliance|persistence)/.test(
           source,
         )
       ) {
@@ -192,7 +192,7 @@ describe('Scenario: Edit mode is enforced by the API, not only by the SPA', () =
 
   /** A fresh vault per scenario, so an enabled mode cannot leak between them. */
   const unlocked = async () => {
-    const dir = mkdtempSync(join(tmpdir(), 'porttrack-edit-mode-api-'));
+    const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-edit-mode-api-'));
     const instance = await buildApp({ dataDir: dir });
     await instance.inject({
       method: 'POST',

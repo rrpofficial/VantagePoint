@@ -9,9 +9,9 @@
  * Including a December gain in the 15-December instalment would demand tax on
  * income the taxpayer had not yet earned at the due date.
  */
-import { FyCalendar, Money, Ok, type Money as MoneyValue, type Result } from '@porttrack/shared-kernel';
+import { FyCalendar, Money, Ok, type Money as MoneyValue, type Result } from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
-import type { ExitTransaction } from '@porttrack/core-domain';
+import type { ExitTransaction } from '@vantagepoint/core-domain';
 import { compute as computeCapitalGains } from './capital-gains.js';
 import { compute as computeSlabTax } from './slabs.js';
 import { apply as applySurcharge } from './surcharge.js';

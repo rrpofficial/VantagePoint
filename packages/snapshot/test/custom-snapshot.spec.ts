@@ -7,9 +7,9 @@
  * stay red until M8; nothing here depends on that layer existing.
  */
 import { describe, it, expect } from 'vitest';
-import { DeltaEngine, SnapshotFactory, type Snapshot } from '@porttrack/snapshot';
-import type { PortfolioValuation } from '@porttrack/core-domain';
-import { expectErr, expectMoney, expectOk, inr } from '@porttrack/test-kit';
+import { DeltaEngine, SnapshotFactory, type Snapshot } from '@vantagepoint/snapshot';
+import type { PortfolioValuation } from '@vantagepoint/core-domain';
+import { expectErr, expectMoney, expectOk, inr } from '@vantagepoint/test-kit';
 
 const TODAY = '2026-08-02';
 

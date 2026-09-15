@@ -6,7 +6,7 @@
  * wrong layer, and the API's "thin shell" test exists to keep it that way.
  */
 import { Decimal } from 'decimal.js';
-import { DualRateConverter } from '@porttrack/fx-itbr';
+import { DualRateConverter } from '@vantagepoint/fx-itbr';
 import {
   DuplicateLoanError,
   DuplicateTradeError,
@@ -25,7 +25,7 @@ import {
   type Money as MoneyValue,
   type Quarter,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { createHash } from 'node:crypto';
 import {
   AREA_UNITS,
@@ -76,8 +76,8 @@ import {
   type PaymentMode,
   type PortfolioValuation,
   type SortDirection,
-} from '@porttrack/core-domain';
-import { borrowerRef } from '@porttrack/ingestion';
+} from '@vantagepoint/core-domain';
+import { borrowerRef } from '@vantagepoint/ingestion';
 import {
   ScheduleAlGenerator,
   ScheduleFaGenerator,
@@ -86,7 +86,7 @@ import {
   type ScheduleAl,
   type ScheduleFaA3Row,
   type ScheduleFaDRow,
-} from '@porttrack/compliance';
+} from '@vantagepoint/compliance';
 import {
   CompliancePolicy,
   DeltaEngine,
@@ -94,7 +94,7 @@ import {
   type Snapshot,
   type SnapshotSpec,
   type VarianceReport,
-} from '@porttrack/snapshot';
+} from '@vantagepoint/snapshot';
 import {
   AdvanceTaxEngine,
   CapitalGainsEngine,
@@ -106,7 +106,7 @@ import {
   type IncomeProfile,
   type RegimeComparison,
   type TaxRuleSet,
-} from '@porttrack/tax-engine';
+} from '@vantagepoint/tax-engine';
 import {
   LedgerProjector,
   ledgerNaturalKeys,
@@ -116,7 +116,7 @@ import {
   type ImportReport,
   type ParsedTransaction,
   type ParserName,
-} from '@porttrack/ingestion';
+} from '@vantagepoint/ingestion';
 import {
   BorrowedLoanRepository,
   AssetRepository,
@@ -133,7 +133,7 @@ import {
   SnapshotRepository,
   Vault,
   type SnapshotSummary,
-} from '@porttrack/persistence';
+} from '@vantagepoint/persistence';
 import { currentPorts } from './context.js';
 import { requireEditMode, resetEditMode } from './edit-mode.js';
 import {

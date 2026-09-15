@@ -20,13 +20,13 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { CryptoEnvelope, Vault } from '@porttrack/persistence';
-import { expectOk } from '@porttrack/test-kit';
+import { CryptoEnvelope, Vault } from '@vantagepoint/persistence';
+import { expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-unlock-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-unlock-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
 });
 

@@ -24,8 +24,8 @@
  * Turning one on is a deliberate, edit-mode-gated act, for the same reason
  * replacing an income profile is: it moves every advance-tax figure at once.
  */
-import type { Result } from '@porttrack/shared-kernel';
-import { SettingsRepository } from '@porttrack/persistence';
+import type { Result } from '@vantagepoint/shared-kernel';
+import { SettingsRepository } from '@vantagepoint/persistence';
 import { currentPorts } from './context.js';
 import { requireEditMode } from './edit-mode.js';
 

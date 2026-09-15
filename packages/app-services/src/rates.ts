@@ -13,7 +13,7 @@ import {
   type Currency,
   type IsoDate,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import {
   FallbackChain,
   Rule115Resolver,
@@ -22,8 +22,8 @@ import {
   type IntradayPolicy,
   type IntradayRevision,
   type SkippedDay,
-} from '@porttrack/fx-itbr';
-import { RateRepository, Vault } from '@porttrack/persistence';
+} from '@vantagepoint/fx-itbr';
+import { RateRepository, Vault } from '@vantagepoint/persistence';
 import { currentPorts } from './context.js';
 import { requireEditMode } from './edit-mode.js';
 

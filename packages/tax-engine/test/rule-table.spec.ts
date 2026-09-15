@@ -5,8 +5,8 @@
  * green independently of the FY rate data, which needs Finance Act verification.
  */
 import { describe, it, expect } from 'vitest';
-import { TaxRuleTable } from '@porttrack/tax-engine';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+import { TaxRuleTable } from '@vantagepoint/tax-engine';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 describe('US-5.2 versioned tax rule table (ADR-005)', () => {
   describe('Scenario: Rules are resolved by financial year', () => {

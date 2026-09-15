@@ -21,7 +21,7 @@ import {
   type IsoDate,
   type Money as MoneyValue,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import {
   considerationMismatch,
   propertyChargesOf,
@@ -31,7 +31,7 @@ import {
   type PropertyKind,
   type PropertyTransaction,
   type ValuationBasis,
-} from '@porttrack/core-domain';
+} from '@vantagepoint/core-domain';
 import { createHash } from 'node:crypto';
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;

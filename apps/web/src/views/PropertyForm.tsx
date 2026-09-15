@@ -187,7 +187,7 @@ export function PropertyForm({
   }
 
   return (
-    <form className="pt-form pt-form--grid" onSubmit={onSubmit} data-testid="property-form">
+    <form className="vp-form vp-form--grid" onSubmit={onSubmit} data-testid="property-form">
       <label htmlFor="prop-side">Transaction</label>
       <select
         id="prop-side"
@@ -238,7 +238,7 @@ export function PropertyForm({
       </select>
 
       <label htmlFor="prop-area">Area</label>
-      <div className="pt-field-row">
+      <div className="vp-field-row">
         <input
           id="prop-area"
           value={areaValue}
@@ -460,8 +460,8 @@ export function PropertyForm({
         rows={2}
       />
 
-      <div className="pt-form__wide">
-        <p className="pt-muted">
+      <div className="vp-form__wide">
+        <p className="vp-muted">
           The property is carried at what was <strong>paid</strong> — price plus stamp duty,
           registration and other duties. A current value, if you record one, is shown beside that
           cost and is never added to net worth: Schedule AL asks for cost.
@@ -473,13 +473,13 @@ export function PropertyForm({
       </button>
 
       {duplicate !== undefined && (
-        <div className="pt-form__wide">
-          <p className="pt-error" role="alert" data-testid="property-duplicate">
+        <div className="vp-form__wide">
+          <p className="vp-error" role="alert" data-testid="property-duplicate">
             {duplicate}
           </p>
           <button
             type="button"
-            className="pt-button-inline"
+            className="vp-button-inline"
             disabled={busy}
             onClick={() => {
               void submit(true);
@@ -491,15 +491,15 @@ export function PropertyForm({
       )}
 
       {advisories.length > 0 && (
-        <div className="pt-form__wide">
+        <div className="vp-form__wide">
           {advisories.map((advisory) => (
-            <p key={advisory.code} className="pt-banner" role="status">
+            <p key={advisory.code} className="vp-banner" role="status">
               {advisory.message}
             </p>
           ))}
           <button
             type="button"
-            className="pt-button-inline"
+            className="vp-button-inline"
             onClick={onClose}
           >
             Done
@@ -508,7 +508,7 @@ export function PropertyForm({
       )}
 
       {error !== undefined && (
-        <p className="pt-error" role="alert">
+        <p className="vp-error" role="alert">
           {error}
         </p>
       )}

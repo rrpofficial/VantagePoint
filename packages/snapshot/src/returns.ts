@@ -14,7 +14,7 @@ import {
   type Money as MoneyValue,
   type Percentage,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import { Decimal } from 'decimal.js';
 import type { CashFlow } from './types.js';
 

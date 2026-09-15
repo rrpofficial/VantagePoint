@@ -7,7 +7,7 @@
  * as non-creditable rather than silently dropped, because the taxpayer may be
  * able to reclaim it in the source country.
  */
-import { Money, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import { Money, type Money as MoneyValue } from '@vantagepoint/shared-kernel';
 
 export function compute(input: {
   foreignTaxPaid: MoneyValue;

@@ -22,9 +22,9 @@ import {
   TradeUC,
   VaultUC,
   resetPorts,
-} from '@porttrack/app-services';
-import { Vault } from '@porttrack/persistence';
-import { expectErr, expectOk } from '@porttrack/test-kit';
+} from '@vantagepoint/app-services';
+import { Vault } from '@vantagepoint/persistence';
+import { expectErr, expectOk } from '@vantagepoint/test-kit';
 
 const PASSPHRASE = 'correct horse battery staple';
 const inr = (amount: string) => ({ amount, currency: 'INR' as const });
@@ -47,7 +47,7 @@ const snapshotAt = async (asOf: string): Promise<string> => {
 };
 
 beforeEach(async () => {
-  const dir = mkdtempSync(join(tmpdir(), 'porttrack-compare-'));
+  const dir = mkdtempSync(join(tmpdir(), 'vantagepoint-compare-'));
   expectOk(await Vault.open({ dataDir: dir, fileName: 'vault.db' }));
   expectOk(await VaultUC.unlock(PASSPHRASE));
   resetPorts();

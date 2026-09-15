@@ -24,7 +24,7 @@ import {
   VaultStateError,
   VaultUnlockError,
   type Result,
-} from '@porttrack/shared-kernel';
+} from '@vantagepoint/shared-kernel';
 import {
   KDF_PARAMS,
   deriveKeyAsync,

@@ -1,5 +1,5 @@
 #Handloan Tracking Requirements
-1. Add a new tab to Porttrack App for tracking the Handloans. Give it an appropriate name.
+1. Add a new tab to VantagePoint App for tracking the Handloans. Give it an appropriate name.
 2. As of now, a spreadsheet is used to track the handloans given out to friends and family. The tracking sheet has the following columns to track the handloans. 
 "Borrower Name","Notes & Comments", "Loan Date","Closed Date",Loan Amount","Status","Interest Rate","Total Interest Months","Interest Balance Months","Interest / Month","Total Overall Interest","Interest Balance","Interest Payment 1","Date1","Interest Payment2","Date2","Interest Payment3","Date3","Interest Payment4","Date4"
 3. Below are some typical use cases around it:

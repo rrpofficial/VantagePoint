@@ -5,7 +5,7 @@
  * and would otherwise stop this M1 file from going cleanly green.
  */
 import { describe, it, expect } from 'vitest';
-import { FyCalendar } from '@porttrack/shared-kernel';
+import { FyCalendar } from '@vantagepoint/shared-kernel';
 
 describe('US-5.1 FY / AY calendar', () => {
   describe('Scenario: Financial year derivation', () => {

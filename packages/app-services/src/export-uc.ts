@@ -29,9 +29,9 @@ import {
   VaultStateError,
   type FinancialYear,
   type Result,
-} from '@porttrack/shared-kernel';
-import { ChitLedger, balanceViewOf, type Asset, type BalanceView } from '@porttrack/core-domain';
-import { TaxRuleTable } from '@porttrack/tax-engine';
+} from '@vantagepoint/shared-kernel';
+import { ChitLedger, balanceViewOf, type Asset, type BalanceView } from '@vantagepoint/core-domain';
+import { TaxRuleTable } from '@vantagepoint/tax-engine';
 import {
   balanceTable,
   chitTable,
@@ -42,13 +42,13 @@ import {
   toPdf,
   type ExportOptions,
   type ExportTable,
-} from '@porttrack/exporters';
+} from '@vantagepoint/exporters';
 import {
   AssetRepository,
   ChitScheduleRepository,
   ExitRepository,
   Vault,
-} from '@porttrack/persistence';
+} from '@vantagepoint/persistence';
 import { currentPorts } from './context.js';
 
 export type ExportRegister = 'chits' | 'holdings' | 'property' | 'balances';
@@ -169,7 +169,7 @@ export const ExportUC = {
 
     const stamp = generatedOn.slice(0, 10);
     const suffix = options.includePii ? '' : '-masked';
-    const fileName = `portTrack-${request.register}${suffix}-${stamp}.${request.format}`;
+    const fileName = `VantagePoint-${request.register}${suffix}-${stamp}.${request.format}`;
 
     const bytes =
       request.format === 'csv'
