@@ -89,6 +89,33 @@ export interface ReconciliationNote {
   readonly computed: string;
 }
 
+/**
+ * A balance-shaped holding stated by a template row (Phase 5).
+ *
+ * Shaped like `ParsedHandLoan`: terms that belong to the ASSET rather than to a
+ * lot, arriving with the row that opens it. An absent `annualRatePct` stays
+ * absent — it means "carry this flat and say why", which is a different fact
+ * from a rate of zero.
+ */
+export interface ParsedBalanceAccount {
+  readonly kind: 'TERM_DEPOSIT' | 'RECURRING_DEPOSIT' | 'PROVIDENT_FUND' | 'STATED_BALANCE' | 'GRATUITY';
+  readonly label: string;
+  readonly institutionName?: string;
+  /** Already digested by the parser; the raw number never enters the pipeline. */
+  readonly accountRef?: string;
+  readonly openingBalance: Money;
+  readonly openedOn: IsoDate;
+  readonly annualRatePct?: string;
+  readonly compounding?: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+  readonly monthlyContribution?: Money;
+  readonly employerContribution?: Money;
+  readonly maturityDate?: IsoDate;
+  readonly maturityValue?: Money;
+  readonly lastDrawnMonthly?: Money;
+  readonly closedOn?: IsoDate;
+  readonly notes?: string;
+}
+
 export interface ParsedTransaction {
   readonly kind: 'BUY' | 'SELL' | 'DIVIDEND' | 'FEE' | 'RSU_VEST' | 'ESPP_PURCHASE' | 'REINVESTMENT';
   readonly date: IsoDate;
@@ -108,6 +135,8 @@ export interface ParsedTransaction {
   readonly fees?: Money;
   readonly otherCharges?: Money;
   readonly handLoan?: ParsedHandLoan;
+  /** Deposit, retirement scheme or cash terms, where the template states them. */
+  readonly balanceAccount?: ParsedBalanceAccount;
   /**
    * Grant, tranche and order detail, where the source states them.
    *

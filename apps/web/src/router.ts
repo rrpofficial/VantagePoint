@@ -50,6 +50,10 @@ export const ASSET_TABS = [
   'Overview',
   'Equity',
   'Non-Equity',
+  // Balances, not positions: a deposit has a rate and a maturity where a holding
+  // has a quantity and a price, and the columns that make each legible have no
+  // meaning on the other (Phase 5).
+  'Deposits',
   'Immovable',
   'Loans',
   'Chits',

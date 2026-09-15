@@ -33,6 +33,20 @@ describe('US-8.11 Scenario: API exposes the use cases the SPA needs', () => {
     ['GET', '/api/snapshots/DOM_31MAR2026/compare'],
     ['POST', '/api/imports'],
     ['GET', '/api/tax/advance'],
+    // Phases 5-7. A route that exists in the SPA and not in the API fails as a
+    // silent no-op in the browser, which is the failure this list exists to catch.
+    ['GET', '/api/balances'],
+    ['GET', '/api/balances/classes'],
+    ['POST', '/api/balances'],
+    ['GET', '/api/compliance/foreign/readiness'],
+    ['GET', '/api/compliance/foreign/accounts'],
+    ['POST', '/api/compliance/marks/sync'],
+    ['POST', '/api/vault/backup'],
+    ['POST', '/api/vault/restore'],
+    ['GET', '/api/exports/chits.csv'],
+    ['GET', '/api/exports/holdings.pdf'],
+    ['GET', '/api/exports/property.csv'],
+    ['GET', '/api/exports/balances.csv'],
   ])('routes %s %s', async (method, url) => {
     const response = await (await app()).inject({ method: method as 'GET' | 'POST', url });
     expect(response.statusCode).not.toBe(404);

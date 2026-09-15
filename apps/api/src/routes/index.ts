@@ -13,11 +13,20 @@
 import type { FastifyInstance } from 'fastify';
 import {
   AuditUC,
+  BackupUC,
+  BalanceUC,
+  type RecordBalanceInput,
   ChitUC,
   type ChitQuery,
   CompareSnapshotsUC,
   ComputeAdvanceTaxUC,
   EditModeUC,
+  ExportUC,
+  type ExportRegister,
+  ForeignDisclosureUC,
+  MarksUC,
+  type RecordForeignAccountInput,
+  type RecordForeignDetailInput,
   GenerateComplianceUC,
   GenerateSnapshotUC,
   ImportStatementUC,
@@ -100,6 +109,33 @@ export function registerRoutes(app: FastifyInstance): void {
   app.post('/api/vault/lock', async (_request, reply) => {
     await VaultUC.lock();
     return reply.send({ unlocked: false });
+  });
+
+  /*
+   * POST, not GET, although it reads: taking a backup writes an audit line and
+   * produces a file containing the entire vault, and a GET is the verb a browser
+   * prefetches, a proxy caches and a crawler follows.
+   */
+  app.post('/api/vault/backup', async (_request, reply) => {
+    const result = await BackupUC.create();
+    return result.ok
+      ? reply
+          .header('content-type', 'application/octet-stream')
+          .header('content-disposition', `attachment; filename="${result.value.fileName}"`)
+          .send(Buffer.from(result.value.bytes))
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post('/api/vault/restore', async (request, reply) => {
+    const body = request.body as { archive?: string } | undefined;
+    if (body?.archive === undefined || body.archive.length === 0) {
+      return reply.code(422).send(failure('NO_ARCHIVE', 'no backup archive was supplied'));
+    }
+
+    const result = await BackupUC.restore(new Uint8Array(Buffer.from(body.archive, 'base64')));
+    if (result.ok) return reply.send(result.value);
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
   });
 
   /* ---------------------------------------------------------- edit mode */
@@ -421,6 +457,73 @@ export function registerRoutes(app: FastifyInstance): void {
       });
     }
     return reply.code(422).send(failure(result.error.code, result.error.message));
+  });
+
+  /* ------------------------------------------- balance accounts (Ph. 5) */
+
+  app.get('/api/balances/classes', async (_request, reply) => {
+    const result = await BalanceUC.classes();
+    return result.ok
+      ? reply.send({ classes: result.value })
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.get('/api/balances', async (request, reply) => {
+    const raw = request.query as { asOf?: string };
+    const result = await BalanceUC.register(raw.asOf);
+    return result.ok
+      ? reply.send(result.value)
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post('/api/balances', async (request, reply) => {
+    const body = request.body as Partial<RecordBalanceInput>;
+
+    const result = await BalanceUC.record({
+      assetClass: body.assetClass ?? '',
+      label: body.label ?? '',
+      openingBalance: body.openingBalance ?? '0',
+      openedOn: body.openedOn ?? '',
+      ...(body.currency === undefined ? {} : { currency: body.currency }),
+      ...(body.institutionName === undefined ? {} : { institutionName: body.institutionName }),
+      ...(body.accountNumber === undefined ? {} : { accountNumber: body.accountNumber }),
+      ...(body.annualRatePct === undefined ? {} : { annualRatePct: body.annualRatePct }),
+      ...(body.compounding === undefined ? {} : { compounding: body.compounding }),
+      ...(body.monthlyContribution === undefined
+        ? {}
+        : { monthlyContribution: body.monthlyContribution }),
+      ...(body.employerContribution === undefined
+        ? {}
+        : { employerContribution: body.employerContribution }),
+      ...(body.maturityDate === undefined ? {} : { maturityDate: body.maturityDate }),
+      ...(body.maturityValue === undefined ? {} : { maturityValue: body.maturityValue }),
+      ...(body.lastDrawnMonthly === undefined ? {} : { lastDrawnMonthly: body.lastDrawnMonthly }),
+      ...(body.closedOn === undefined ? {} : { closedOn: body.closedOn }),
+      ...(body.notes === undefined ? {} : { notes: body.notes }),
+    });
+    if (result.ok) return reply.code(201).send(result.value);
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.post<{ Params: { id: string } }>('/api/balances/:id/restate', async (request, reply) => {
+    const body = request.body as { openingBalance?: string; asOf?: string };
+    const result = await BalanceUC.restate({
+      assetId: request.params.id,
+      openingBalance: body.openingBalance ?? '',
+      asOf: body.asOf ?? '',
+    });
+    if (result.ok) return reply.send(result.value);
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.post<{ Params: { id: string } }>('/api/balances/:id/close', async (request, reply) => {
+    const body = request.body as { closedOn?: string };
+    const result = await BalanceUC.close(request.params.id, body.closedOn ?? '');
+    if (result.ok) return reply.send(result.value);
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
   });
 
   /* -------------------------------------------------------- borrowings */
@@ -828,6 +931,46 @@ export function registerRoutes(app: FastifyInstance): void {
       : reply.code(409).send(failure(result.error.code, result.error.message));
   });
 
+  /*
+   * One export endpoint for every register (Phase 7).
+   *
+   * GET, and a direct href the browser downloads, exactly as the loan exports
+   * already are — so the link carries the filters on screen and there is no JSON
+   * round trip. `pii=include` is a query parameter rather than a default: the
+   * file is one the user will email, and masking must be an explicit choice.
+   */
+  app.get<{ Params: { register: string; format: string } }>(
+    '/api/exports/:register.:format',
+    async (request, reply) => {
+      const query = request.query as { pii?: string; fy?: string; filter?: string };
+      const { register, format } = request.params;
+
+      if (format !== 'csv' && format !== 'pdf') {
+        return reply.code(404).send(failure('UNKNOWN_FORMAT', 'exports are csv or pdf'));
+      }
+      if (!['chits', 'holdings', 'property', 'balances'].includes(register)) {
+        return reply
+          .code(404)
+          .send(failure('UNKNOWN_REGISTER', `there is no ${register} export`));
+      }
+
+      const result = await ExportUC.execute({
+        register: register as ExportRegister,
+        format,
+        includePii: query.pii === 'include',
+        ...(query.fy === undefined || query.fy.length === 0 ? {} : { financialYear: query.fy }),
+        ...(query.filter === undefined ? {} : { filterNote: query.filter }),
+      });
+
+      return result.ok
+        ? reply
+            .header('content-type', result.value.contentType)
+            .header('content-disposition', `attachment; filename="${result.value.fileName}"`)
+            .send(Buffer.from(result.value.bytes))
+        : reply.code(409).send(failure(result.error.code, result.error.message));
+    },
+  );
+
   /* ---------------------------------------------------------- snapshots */
 
   app.get('/api/snapshots', async (_request, reply) =>
@@ -1032,6 +1175,109 @@ export function registerRoutes(app: FastifyInstance): void {
   });
 
   /* --------------------------------------------------------- compliance */
+
+  /* Schedule FA inputs and readiness (Phase 6). CALENDAR year throughout. */
+
+  app.get('/api/compliance/foreign/readiness', async (request, reply) => {
+    const query = request.query as { cy?: string };
+    const result = await ForeignDisclosureUC.readiness(
+      Number(query.cy ?? new Date().getUTCFullYear() - 1),
+    );
+    return result.ok
+      ? reply.send(result.value)
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.get('/api/compliance/foreign/holdings', async (_request, reply) =>
+    reply.send({ details: await ForeignDisclosureUC.details() }),
+  );
+
+  app.post('/api/compliance/foreign/holdings', async (request, reply) => {
+    const body = request.body as Partial<RecordForeignDetailInput>;
+    const result = await ForeignDisclosureUC.recordDetail({
+      assetId: body.assetId ?? '',
+      countryCode: body.countryCode ?? '',
+      entityName: body.entityName ?? '',
+      entityAddress: body.entityAddress ?? '',
+      natureOfEntity: body.natureOfEntity ?? '',
+      ...(body.acquisitionDate === undefined ? {} : { acquisitionDate: body.acquisitionDate }),
+      ...(body.notes === undefined ? {} : { notes: body.notes }),
+    });
+    if (result.ok) return reply.code(201).send(result.value);
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.get('/api/compliance/foreign/accounts', async (request, reply) => {
+    const query = request.query as { cy?: string };
+    const year = query.cy === undefined ? undefined : Number(query.cy);
+    return reply.send({ accounts: await ForeignDisclosureUC.accounts(year) });
+  });
+
+  app.post('/api/compliance/foreign/accounts', async (request, reply) => {
+    /*
+     * `calendarYear` is typed loosely on purpose. It is a NUMBER on the use
+     * case, and a browser form sends it as a string; declaring it as the use
+     * case's type would tell the compiler a conversion is redundant when it is
+     * the only thing standing between a string and a year comparison.
+     */
+    const body = request.body as Omit<Partial<RecordForeignAccountInput>, 'calendarYear'> & {
+      calendarYear?: string | number;
+    };
+    const result = await ForeignDisclosureUC.recordAccount({
+      countryCode: body.countryCode ?? '',
+      institutionName: body.institutionName ?? '',
+      accountNumber: body.accountNumber ?? '',
+      accountOpenDate: body.accountOpenDate ?? '',
+      currency: body.currency ?? 'USD',
+      peakBalance: body.peakBalance ?? '0',
+      closingBalance: body.closingBalance ?? '0',
+      calendarYear: Number(body.calendarYear ?? new Date().getUTCFullYear() - 1),
+      ...(body.notes === undefined ? {} : { notes: body.notes }),
+    });
+    if (result.ok) return reply.code(201).send(result.value);
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/compliance/foreign/accounts/:id',
+    async (request, reply) => {
+      const result = await ForeignDisclosureUC.deleteAccount(request.params.id);
+      if (result.ok) return reply.send({ deleted: true });
+      const { status, body: failed } = refusal(result.error, 422);
+      return reply.code(status).send(failed);
+    },
+  );
+
+  app.post('/api/compliance/marks/sync', async (_request, reply) => {
+    const result = await MarksUC.sync();
+    return result.ok
+      ? reply.send(result.value)
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post('/api/compliance/marks', async (request, reply) => {
+    const body = request.body as {
+      kind?: 'CURRENCY' | 'ASSET';
+      key?: string;
+      date?: string;
+      value?: string;
+      currency?: string;
+      sourceDocumentRef?: string;
+    };
+    const result = await MarksUC.record({
+      kind: body.kind ?? 'ASSET',
+      key: body.key ?? '',
+      date: body.date ?? '',
+      value: body.value ?? '',
+      ...(body.currency === undefined ? {} : { currency: body.currency as 'USD' }),
+      sourceDocumentRef: body.sourceDocumentRef ?? '',
+    });
+    if (result.ok) return reply.code(201).send({ recorded: true });
+    const { status, body: failed } = refusal(result.error, 422);
+    return reply.code(status).send(failed);
+  });
 
   app.get('/api/compliance/schedule-fa', async (request, reply) => {
     const query = request.query as { cy?: string };

@@ -137,8 +137,19 @@ function assetIdFor(transaction: ParsedTransaction, assetClass: AssetClass): str
   const key = transaction.isin ?? transaction.symbol ?? transaction.folioRef;
   const base = `ast_${slug(assetClass)}_${key === undefined ? 'unidentified' : slug(key)}`;
 
-  if (transaction.handLoan === undefined) return base;
-  return `${base}_${slug(transaction.handLoan.startDate)}_${slug(transaction.pricePerUnit.amount)}`;
+  if (transaction.handLoan !== undefined) {
+    return `${base}_${slug(transaction.handLoan.startDate)}_${slug(transaction.pricePerUnit.amount)}`;
+  }
+  /*
+   * Two deposits at one bank are two assets. The label alone does not separate
+   * them — "HDFC FD" is a plausible name for both — so the opening date joins
+   * the key, exactly as a loan's start date does. Without it the second row
+   * would merge into the first and its balance would be lost.
+   */
+  if (transaction.balanceAccount !== undefined) {
+    return `${base}_${slug(transaction.balanceAccount.openedOn)}`;
+  }
+  return base;
 }
 
 /**
@@ -380,6 +391,19 @@ export function projectToLedger(input: {
       draft.asset = {
         ...draft.asset,
         property: { ...transaction.propertyDetail, assetId },
+      };
+    }
+
+    /*
+     * Deposit and scheme terms, like the property's own facts, belong to the
+     * ASSET rather than to the lot the row also creates. The lot records the
+     * opening entry; this is what the valuer reads to grow the balance (Phase 5).
+     */
+    if (transaction.balanceAccount !== undefined) {
+      const draft = draftFor(drafts, assetId, assetClass, transaction);
+      draft.asset = {
+        ...draft.asset,
+        balanceAccount: { ...transaction.balanceAccount, assetId },
       };
     }
 

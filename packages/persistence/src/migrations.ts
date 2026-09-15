@@ -746,6 +746,151 @@ export const MIGRATIONS: readonly Migration[] = [
         FROM liabilities;
     `,
   },
+  {
+    version: 18,
+    name: 'balance-accounts',
+    up: `
+      -- Balance-shaped holdings (Phase 5, objectives 1 and 4).
+      --
+      -- A fixed deposit is a balance with a rate and a maturity, not a quantity
+      -- at a price. There was no way to enter one, which is why
+      -- \`depositAccruedValue\`, \`recurringContributions\`, \`epfProjection\` and
+      -- \`gratuity\` had been correct and unit-tested since US-1.8 with no
+      -- non-test caller: nothing could exist for them to run on.
+      --
+      -- ONE table for ten asset classes. They differ by class and agree by
+      -- behaviour — EPF, VPF and PPF share one arithmetic, and NPS I/II, cash
+      -- and a bank balance share another — so \`kind\` carries the behaviour and
+      -- the asset row carries the class.
+
+      CREATE TABLE balance_accounts (
+        asset_id              TEXT PRIMARY KEY REFERENCES assets(asset_id) ON DELETE CASCADE,
+        -- TERM_DEPOSIT | RECURRING_DEPOSIT | PROVIDENT_FUND | STATED_BALANCE | GRATUITY
+        kind                  TEXT NOT NULL,
+        label                 TEXT NOT NULL,
+        institution_name      TEXT,
+        -- The account NUMBER never lands here. Same rule as the borrower name
+        -- and the property address (ADR-013, FR-7.2): an opaque ref is what
+        -- leaves the machine.
+        account_ref           TEXT,
+        opening_balance       TEXT NOT NULL,
+        currency              TEXT NOT NULL,
+        opened_on             TEXT NOT NULL,
+        -- NULL means no rate was recorded, which is NOT the same as zero: the
+        -- balance is carried flat and the screen says why, rather than being
+        -- grown from a rate nobody supplied.
+        annual_rate_pct       TEXT,
+        compounding           TEXT,
+        monthly_contribution  TEXT,
+        employer_contribution TEXT,
+        maturity_date         TEXT,
+        maturity_value        TEXT,
+        last_drawn_monthly    TEXT,
+        closed_on             TEXT,
+        notes                 TEXT
+      );
+      CREATE INDEX idx_balance_accounts_kind ON balance_accounts(kind);
+    `,
+  },
+  {
+    version: 19,
+    name: 'daily-marks-and-foreign-disclosure',
+    up: `
+      -- Schedule FA (Phase 6, objective 5).
+      --
+      -- Table A3 asks for the PEAK value a foreign holding reached during the
+      -- calendar year. That needs a daily price and exchange-rate series, and
+      -- nothing recorded one — so \`scheduleFaA3\` returned an unconditional
+      -- error. The error was RIGHT: under the Black Money Act an understated
+      -- foreign disclosure is treated far more harshly than an understated
+      -- domestic one, and a peak computed from a closing value understates it.
+      --
+      -- What changes is that the refusal is now a fact about the data rather
+      -- than about the build, and it names the gap.
+
+      -- Generalises the \`fx_rates\` shape to anything that has a daily value:
+      -- keyed, dated, decimal string, with the document it came from.
+      CREATE TABLE daily_marks (
+        -- CURRENCY (an FX rate) or ASSET (a market price).
+        mark_kind           TEXT NOT NULL CHECK (mark_kind IN ('CURRENCY','ASSET')),
+        -- The currency code, or the instrument as the statement wrote it.
+        mark_key            TEXT NOT NULL,
+        mark_date           TEXT NOT NULL,
+        -- Decimal string, never REAL (ADR-002). A float here reintroduces drift
+        -- into the multiplication that produces a disclosed amount.
+        value               TEXT NOT NULL,
+        -- Absent for a currency mark, which is a rate rather than an amount.
+        currency            TEXT,
+        source              TEXT NOT NULL,
+        -- Which document this came from. Required, not nullable: a disclosure
+        -- figure with no provenance cannot be defended to an assessing officer.
+        source_document_ref TEXT NOT NULL,
+        recorded_at         TEXT NOT NULL,
+        PRIMARY KEY (mark_kind, mark_key, mark_date)
+      );
+      CREATE INDEX idx_daily_marks_span ON daily_marks(mark_kind, mark_key, mark_date);
+
+      -- Backfill the FX half from the rates already imported from the SBI
+      -- archive. One source per (currency, date) — the archive's own TTBR is the
+      -- valuation rate, so it is the one a daily mark means.
+      INSERT OR IGNORE INTO daily_marks
+        (mark_kind, mark_key, mark_date, value, currency, source, source_document_ref, recorded_at)
+      SELECT 'CURRENCY', currency, rate_date, rate, NULL, source, source_document_ref, retrieved_at
+        FROM fx_rates
+       WHERE rate_type = 'TTBR';
+
+      -- And the price half from whatever statements have been imported. Sparse
+      -- by construction — there is no feed (ADR-010) — which is exactly why
+      -- coverage is checked rather than assumed.
+      INSERT OR IGNORE INTO daily_marks
+        (mark_kind, mark_key, mark_date, value, currency, source, source_document_ref, recorded_at)
+      SELECT 'ASSET', instrument, price_date, price, currency, source,
+             COALESCE(source_document, 'imported statement'), price_date
+        FROM asset_prices;
+
+      -- What Table A3 must state about the ENTITY, none of which is derivable
+      -- from a holding.
+      --
+      -- Country is not guessable from currency: a USD-denominated fund may be
+      -- domiciled in Ireland, and a wrong country on a foreign disclosure is a
+      -- defect in the disclosure. So it is recorded, and A3 refuses for any
+      -- foreign holding that has no row here rather than inventing one.
+      CREATE TABLE foreign_holding_disclosures (
+        asset_id          TEXT PRIMARY KEY REFERENCES assets(asset_id) ON DELETE CASCADE,
+        country_code      TEXT NOT NULL,
+        entity_name       TEXT NOT NULL,
+        entity_address    TEXT NOT NULL,
+        nature_of_entity  TEXT NOT NULL,
+        acquisition_date  TEXT,
+        notes             TEXT
+      );
+
+      -- Table D: foreign bank and custodial accounts, which were not modelled at
+      -- all — \`scheduleFaD\` passed an empty list, so a real account read as
+      -- "nothing to disclose".
+      CREATE TABLE foreign_accounts (
+        account_id        TEXT PRIMARY KEY,
+        country_code      TEXT NOT NULL,
+        institution_name  TEXT NOT NULL,
+        -- The RAW number, in the encrypted vault only. Table D carries the
+        -- masked reference \`accountRef\` derives from it (FR-7.2).
+        account_number    TEXT NOT NULL,
+        account_open_date TEXT NOT NULL,
+        currency          TEXT NOT NULL,
+        -- Peak is a fact the holder reads off statements; it is NOT derived from
+        -- the closing balance, for the same reason A3's peak is not.
+        peak_balance      TEXT NOT NULL,
+        closing_balance   TEXT NOT NULL,
+        -- The calendar year these two balances describe. A peak has no meaning
+        -- without the window it is the peak of.
+        calendar_year     INTEGER NOT NULL,
+        status            TEXT NOT NULL DEFAULT 'OPEN',
+        closed_on         TEXT,
+        notes             TEXT
+      );
+      CREATE INDEX idx_foreign_accounts_year ON foreign_accounts(calendar_year);
+    `,
+  },
 ];
 
 const SCHEMA_TABLE = `

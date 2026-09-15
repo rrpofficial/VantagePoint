@@ -15,6 +15,7 @@ export default defineConfig({
       '@porttrack/snapshot': pkg('snapshot'),
       '@porttrack/ingestion': pkg('ingestion'),
       '@porttrack/compliance': pkg('compliance'),
+      '@porttrack/exporters': pkg('exporters'),
       '@porttrack/pii-masker': pkg('pii-masker'),
       '@porttrack/persistence': pkg('persistence'),
       '@porttrack/adapters-fx': pkg('adapters-fx'),

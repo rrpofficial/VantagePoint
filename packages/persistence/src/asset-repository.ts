@@ -28,6 +28,7 @@ import type {
   AreaUnit,
   Asset,
   AssetClass,
+  BalanceAccount,
   ChitFund,
   CorporateAction,
   DualRate,
@@ -121,6 +122,26 @@ interface PropertyTxnRow {
   readonly prop_document_ref: string | null;
 }
 
+interface BalanceAccountRow {
+  readonly asset_id: string;
+  readonly kind: string;
+  readonly label: string;
+  readonly institution_name: string | null;
+  readonly account_ref: string | null;
+  readonly opening_balance: string;
+  readonly currency: string;
+  readonly opened_on: string;
+  readonly annual_rate_pct: string | null;
+  readonly compounding: string | null;
+  readonly monthly_contribution: string | null;
+  readonly employer_contribution: string | null;
+  readonly maturity_date: string | null;
+  readonly maturity_value: string | null;
+  readonly last_drawn_monthly: string | null;
+  readonly closed_on: string | null;
+  readonly notes: string | null;
+}
+
 interface PropertyRow {
   readonly asset_id: string;
   readonly property_name: string;
@@ -196,6 +217,46 @@ function propertyTxnArgs(txn: PropertyTransaction | undefined): readonly (string
     txn.stampDutyValue?.amount ?? null,
     txn.documentRef ?? null,
   ];
+}
+
+/**
+ * A NULL rate comes back ABSENT, never as zero.
+ *
+ * `money(row.x ?? '0', …)` is the idiom two columns above, and it is wrong for
+ * a rate: absent means "no rate was recorded, carry the balance flat and say
+ * so", while zero means "this deposit earns nothing" — and the valuer treats
+ * them differently on purpose. The same distinction bit the property import,
+ * where a blank per-unit price read back as ₹0 and zeroed the price.
+ */
+function toBalanceAccount(row: BalanceAccountRow): BalanceAccount {
+  const optional = (value: string | null): MoneyValue | undefined =>
+    value === null ? undefined : money(value, row.currency);
+
+  const monthly = optional(row.monthly_contribution);
+  const employer = optional(row.employer_contribution);
+  const maturityValue = optional(row.maturity_value);
+  const lastDrawn = optional(row.last_drawn_monthly);
+
+  return {
+    assetId: row.asset_id,
+    kind: row.kind as BalanceAccount['kind'],
+    label: row.label,
+    ...(row.institution_name === null ? {} : { institutionName: row.institution_name }),
+    ...(row.account_ref === null ? {} : { accountRef: row.account_ref }),
+    openingBalance: money(row.opening_balance, row.currency),
+    openedOn: row.opened_on,
+    ...(row.annual_rate_pct === null ? {} : { annualRatePct: row.annual_rate_pct }),
+    ...(row.compounding === null
+      ? {}
+      : { compounding: row.compounding as NonNullable<BalanceAccount['compounding']> }),
+    ...(monthly === undefined ? {} : { monthlyContribution: monthly }),
+    ...(employer === undefined ? {} : { employerContribution: employer }),
+    ...(row.maturity_date === null ? {} : { maturityDate: row.maturity_date }),
+    ...(maturityValue === undefined ? {} : { maturityValue }),
+    ...(lastDrawn === undefined ? {} : { lastDrawnMonthly: lastDrawn }),
+    ...(row.closed_on === null ? {} : { closedOn: row.closed_on }),
+    ...(row.notes === null ? {} : { notes: row.notes }),
+  };
 }
 
 function toProperty(row: PropertyRow): ImmovableProperty {
@@ -553,6 +614,10 @@ function hydrate(row: AssetRow): Asset {
     | PropertyRow
     | undefined;
 
+  const balance = db
+    .prepare('SELECT * FROM balance_accounts WHERE asset_id = ?')
+    .get(row.asset_id) as BalanceAccountRow | undefined;
+
   const chit = db.prepare('SELECT * FROM chit_funds WHERE asset_id = ?').get(row.asset_id) as
     | ChitFundRow
     | undefined;
@@ -579,6 +644,7 @@ function hydrate(row: AssetRow): Asset {
     ...(loan === undefined ? {} : { handLoan: toHandLoan(loan, repayments, interestPayments) }),
     ...(chit === undefined ? {} : { chitFund: toChitFund(chit, emis) }),
     ...(property === undefined ? {} : { property: toProperty(property) }),
+    ...(balance === undefined ? {} : { balanceAccount: toBalanceAccount(balance) }),
     ...(row.scheme_category === null
       ? {}
       : { schemeCategory: row.scheme_category as MfSchemeCategory }),
@@ -638,6 +704,7 @@ function writeAsset(asset: Asset): void {
   db.prepare('DELETE FROM hand_loans WHERE asset_id = ?').run(asset.assetId);
   db.prepare('DELETE FROM chit_funds WHERE asset_id = ?').run(asset.assetId);
   db.prepare('DELETE FROM properties WHERE asset_id = ?').run(asset.assetId);
+  db.prepare('DELETE FROM balance_accounts WHERE asset_id = ?').run(asset.assetId);
 
   const insertLot = db.prepare(
     `INSERT INTO lots
@@ -853,6 +920,38 @@ function writeAsset(asset: Asset): void {
       property.registrationNumber ?? null,
       property.surveyNumber ?? null,
       property.notes ?? null,
+    );
+  }
+
+  if (asset.balanceAccount !== undefined) {
+    const account = asset.balanceAccount;
+    db.prepare(
+      `INSERT INTO balance_accounts
+         (asset_id, kind, label, institution_name, account_ref, opening_balance, currency,
+          opened_on, annual_rate_pct, compounding, monthly_contribution, employer_contribution,
+          maturity_date, maturity_value, last_drawn_monthly, closed_on, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      asset.assetId,
+      account.kind,
+      account.label,
+      account.institutionName ?? null,
+      account.accountRef ?? null,
+      account.openingBalance.amount,
+      account.openingBalance.currency,
+      account.openedOn,
+      // `?? null`, not `?? '0'`: an absent rate is carried flat and explained,
+      // and writing a zero here would make that indistinguishable from a
+      // deposit that genuinely earns nothing.
+      account.annualRatePct ?? null,
+      account.compounding ?? null,
+      account.monthlyContribution?.amount ?? null,
+      account.employerContribution?.amount ?? null,
+      account.maturityDate ?? null,
+      account.maturityValue?.amount ?? null,
+      account.lastDrawnMonthly?.amount ?? null,
+      account.closedOn ?? null,
+      account.notes ?? null,
     );
   }
 }

@@ -64,6 +64,38 @@ export {
   type EditModeState,
 } from './edit-mode.js';
 
+export { BackupUC, type BackupArchive, type RestoreReport } from './backup-uc.js';
+
+export {
+  ExportUC,
+  type ExportedFile,
+  type ExportRegister,
+  type ExportRequest,
+} from './export-uc.js';
+
+export {
+  BalanceUC,
+  type BalanceRegister,
+  type BalanceTotals,
+} from './balance-uc.js';
+
+export {
+  ForeignDisclosureUC,
+  MarksUC,
+  type FaReadiness,
+  type HoldingReadiness,
+  type RecordForeignAccountInput,
+  type RecordForeignDetailInput,
+} from './foreign-disclosure-uc.js';
+export {
+  BALANCE_CLASSES,
+  accountRefOf,
+  balanceAssetIdOf,
+  buildBalanceEntry,
+  type BalanceClassOption,
+  type RecordBalanceInput,
+} from './balance-entry.js';
+
 export {
   DEFAULT_INCOME_INCLUSIONS,
   IncomeInclusionsUC,

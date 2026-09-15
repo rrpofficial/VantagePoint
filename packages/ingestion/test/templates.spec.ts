@@ -379,6 +379,21 @@ describe('US-4.6 Scenario: Template rows become the right assets on the ledger',
           currency: 'INR',
         }),
         Custom_Cash: 'An account,2026-03-31,412500,INR',
+        /*
+         * By column name too: this template carries ten optional columns, and a
+         * positional row would shift the moment one is added — which shows up as
+         * "no asset", the same misleading failure the property row produces.
+         */
+        Custom_Balances: rowFor('Custom_Balances', {
+          asset_class: 'FIXED_DEPOSIT',
+          account_label: 'HDFC FD 7.1%',
+          institution: 'HDFC Bank',
+          balance: '500000',
+          true_as_at: '2025-04-01',
+          currency: 'INR',
+          interest_rate_pct: '7.1',
+          compounding: 'QUARTERLY',
+        }),
         Custom_ChitFunds: 'A chit,2025-04-01,10000,24,INR',
         Custom_UnlistedShares: 'A company,2025-01-15,1000,250,INR',
         Custom_GenericBroker: '2025-01-01,ACME,INE000000001,buy,10,100,INR',

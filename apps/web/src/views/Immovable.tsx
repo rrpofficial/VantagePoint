@@ -16,6 +16,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Ledger as LedgerData, type LedgerAsset } from '../api.js';
 import { Amount, Card, Chip, GoToImport } from '../components/primitives.js';
+import { ExportControl } from '../components/ExportControl.js';
 import { DeleteControl } from '../components/DeleteControl.js';
 import { useEditMode } from '../edit-mode.js';
 import { navigate } from '../router.js';
@@ -157,6 +158,8 @@ export function Immovable() {
               }}
             />
             <GoToImport testId="go-to-import-immovable" />
+            {/* Street addresses are masked unless asked for (ADR-013). */}
+            <ExportControl register="property" />
           </div>
         }
       >

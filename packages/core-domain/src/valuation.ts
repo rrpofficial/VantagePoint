@@ -20,6 +20,7 @@ import { Decimal } from 'decimal.js';
 import { totalCostBasis } from './lots.js';
 import { handLoanAccruedInterest, handLoanOutstandingPrincipal } from './accruals.js';
 import { viewOf as chitViewOf } from './chit-book.js';
+import { viewOf as balanceViewOf } from './balance-account.js';
 import { JURISDICTION, LIQUIDITY } from './taxonomy.js';
 import type {
   Asset,
@@ -125,46 +126,130 @@ function marketValueOf(
   return { value, quote };
 }
 
+/**
+ * What a valuer is handed, and what it must answer with.
+ *
+ * `costBasis` comes back alongside the value because for several kinds the two
+ * are not the price and the quantity: a hand loan's basis is the principal still
+ * owed, a chit's is what has been paid in, and a gratuity entitlement has no
+ * cost at all.
+ */
+interface ValuerInput {
+  readonly asset: Asset;
+  readonly quantity: string;
+  readonly asOf: string;
+  readonly prices: PriceSource | undefined;
+}
+
+interface ValuerOutput {
+  readonly value: MoneyValue;
+  readonly costBasis: MoneyValue;
+  readonly navSource?: ValuedPosition['navSource'];
+}
+
+type Valuer = (input: ValuerInput) => ValuerOutput;
+
+/**
+ * Market price where one exists, cost where none does.
+ *
+ * The conservative default, and deliberately the fallback for every kind whose
+ * own valuer cannot speak: inventing a market value for an illiquid asset would
+ * corrupt net worth, and Schedule AL wants cost anyway.
+ */
+const marketElseCost: Valuer = ({ asset, quantity, asOf, prices }) => {
+  const { value: marketValue, quote } = marketValueOf(asset, quantity, asOf, prices);
+  return {
+    value: marketValue,
+    costBasis: positionCostBasis(asset),
+    ...(quote === undefined ? {} : { navSource: quote.source }),
+  };
+};
+
+const handLoanValuer: Valuer = (input) => {
+  const loan = input.asset.handLoan;
+  if (loan === undefined || !describesEveryLot(input.asset)) return marketElseCost(input);
+
+  /*
+   * ONE loan. Its cost basis is the principal still owed, and its value is that
+   * principal plus the interest still OUTSTANDING.
+   *
+   * Outstanding, not accrued: interest the borrower has already paid is now cash
+   * in a bank account, and counting it here as well would report it twice. The
+   * receivable is what has not arrived.
+   */
+  const costBasis = handLoanOutstandingPrincipal(loan, input.asOf);
+  return { value: Money.add(costBasis, unpaidInterest(loan, input.asOf)), costBasis };
+};
+
+const chitValuer: Valuer = (input) => {
+  const chit = input.asset.chitFund;
+  if (chit === undefined) return marketElseCost(input);
+
+  /*
+   * Contributions at cost, and nil once withdrawn.
+   *
+   * NOT the chit's face value: a ₹5,00,000 chit two instalments old is a
+   * ₹40,000 asset, and carrying it at face would overstate net worth by the
+   * entire undrawn amount. And once the pot is drawn it is cash in a bank
+   * account, counted there — carrying the instalments here as well would count
+   * the same rupees twice.
+   */
+  const view = chitViewOf(chit, input.asOf);
+  return { value: view.carryingValue, costBasis: view.carryingValue };
+};
+
+/**
+ * Deposits, retirement schemes, cash and gratuity (Phase 5).
+ *
+ * One valuer for ten asset classes, because they differ by asset class and agree
+ * by behaviour — see `BalanceAccountKind`. This is the whole point of the
+ * registry: before it, each of these would have been another `else if` in the
+ * function every net-worth figure passes through.
+ */
+const balanceValuer: Valuer = (input) => {
+  const account = input.asset.balanceAccount;
+  // No bag yet — an asset class that CAN be a balance but was imported as
+  // something else. Cost basis is the honest answer, not an assumed rate.
+  if (account === undefined) return marketElseCost(input);
+
+  const view = balanceViewOf(account, input.asOf);
+  return { value: view.value, costBasis: view.contributed };
+};
+
+/**
+ * The dispatch table D-3 asks for, replacing a closed `if/else if` chain.
+ *
+ * Anything absent here uses `marketElseCost`, so adding an asset class is a
+ * compile-clean no-op until someone writes a valuer for it — rather than silently
+ * falling into whichever branch happened to be last.
+ */
+const VALUERS: Readonly<Partial<Record<AssetClass, Valuer>>> = {
+  HAND_LOAN: handLoanValuer,
+  CHIT_FUND: chitValuer,
+  FIXED_DEPOSIT: balanceValuer,
+  RECURRING_DEPOSIT: balanceValuer,
+  EPF: balanceValuer,
+  VPF: balanceValuer,
+  PPF: balanceValuer,
+  NPS_TIER_I: balanceValuer,
+  NPS_TIER_II: balanceValuer,
+  GRATUITY: balanceValuer,
+  CASH_IN_HAND: balanceValuer,
+  BANK_BALANCE: balanceValuer,
+};
+
 export function value(input: ValuationInput): PortfolioValuation {
   const asOfDate = input.asOf.slice(0, 10);
   const positions: ValuedPosition[] = [];
 
   for (const asset of input.assets) {
     const quantity = heldQuantity(asset);
-    let costBasis = positionCostBasis(asset);
-
-    let native: MoneyValue;
-    let navSource: ValuedPosition['navSource'];
-
-    if (asset.assetClass === 'HAND_LOAN' && asset.handLoan && describesEveryLot(asset)) {
-      /*
-       * ONE loan. Its cost basis is the principal still owed, and its value is
-       * that principal plus the interest still OUTSTANDING.
-       *
-       * Outstanding, not accrued: interest the borrower has already paid is now
-       * cash in a bank account, and counting it here as well would report it
-       * twice. The receivable is what has not arrived.
-       */
-      costBasis = handLoanOutstandingPrincipal(asset.handLoan, asOfDate);
-      native = Money.add(costBasis, unpaidInterest(asset.handLoan, asOfDate));
-    } else if (asset.assetClass === 'CHIT_FUND' && asset.chitFund) {
-      /*
-       * Contributions at cost, and nil once withdrawn.
-       *
-       * NOT the chit's face value: a ₹5,00,000 chit two instalments old is a
-       * ₹40,000 asset, and carrying it at face would overstate net worth by the
-       * entire undrawn amount. And once the pot is drawn it is cash in a bank
-       * account, counted there — carrying the instalments here as well would
-       * count the same rupees twice.
-       */
-      const view = chitViewOf(asset.chitFund, asOfDate);
-      costBasis = view.carryingValue;
-      native = view.carryingValue;
-    } else {
-      const { value: marketValue, quote } = marketValueOf(asset, quantity, asOfDate, input.prices);
-      native = marketValue;
-      navSource = quote?.source;
-    }
+    const valuer = VALUERS[asset.assetClass] ?? marketElseCost;
+    const {
+      value: native,
+      costBasis,
+      navSource,
+    } = valuer({ asset, quantity, asOf: asOfDate, prices: input.prices });
 
     // Retained for price-vs-currency attribution downstream (US-3.7).
     const fxRate = asset.currency === INR ? undefined : input.fx?.rateFor(asset.currency, asOfDate);

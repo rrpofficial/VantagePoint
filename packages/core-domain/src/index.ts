@@ -113,6 +113,18 @@ export {
   type BorrowedView,
 } from './borrowed-book.js';
 
+/**
+ * Balance-shaped holdings — deposits, retirement schemes, cash (Phase 5).
+ * The callers `accruals.ts` never had.
+ */
+export {
+  interestAccruedBetween as balanceInterestAccruedBetween,
+  viewOf as balanceViewOf,
+} from './balance-account.js';
+
+/** Day-by-day quantity held, which Schedule FA's peak value is computed over. */
+export { dailyQuantities, firstAcquisitionOf } from './daily-holdings.js';
+
 /** Immovable property — area units, duty breakdown, and the lot mapping. */
 export {
   AREA_UNITS,

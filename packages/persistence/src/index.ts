@@ -59,8 +59,11 @@ export interface SnapshotRepositoryOps {
 }
 
 export interface BackupOps {
-  backup(destination: string): Promise<Result<string>>;
-  restore(source: string, destination: string): Promise<Result<void>>;
+  /** The archive as bytes, for a caller handing them straight to a browser. */
+  archive(createdAt: string): Promise<Result<Uint8Array>>;
+  backup(destination: string, createdAt?: string): Promise<Result<string>>;
+  restore(source: string, destination: string, fileName?: string): Promise<Result<void>>;
+  restoreBytes(bytes: Uint8Array, destination: string, fileName?: string): Promise<Result<void>>;
 }
 
 export interface ExitRepositoryOps {
@@ -90,3 +93,16 @@ export { ChitScheduleRepository } from './chit-schedule-repository.js';
 export { RateRepository, type StoredRate } from './rate-repository.js';
 export { PriceRepository, vaultPriceSource, type AssetPrice } from './price-repository.js';
 export { BorrowedLoanRepository } from './borrowed-loan-repository.js';
+export {
+  MarkRepository,
+  MAX_MARKET_CLOSURE_DAYS,
+  type DailyMark,
+  type MarkCoverage,
+  type MarkGap,
+  type MarkKind,
+} from './mark-repository.js';
+export {
+  ForeignDisclosureRepository,
+  type ForeignAccount,
+  type ForeignHoldingDetail,
+} from './foreign-disclosure-repository.js';

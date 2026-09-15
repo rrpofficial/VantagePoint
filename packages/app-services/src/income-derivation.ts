@@ -28,6 +28,7 @@
 import { Money, FyCalendar, type FinancialYear, type IsoDate, type Money as MoneyValue } from '@porttrack/shared-kernel';
 import {
   AccrualEngine,
+  balanceInterestAccruedBetween,
   chitViewOf,
   type Asset,
   type IncomeEvent,
@@ -123,6 +124,39 @@ export async function deriveOtherSources(
           amount,
           reason: 'hand-loan interest is switched off in Settings → income inclusions',
         });
+      }
+    }
+
+    /*
+     * Deposit interest (Phase 5).
+     *
+     * Unconditional, unlike hand-loan interest and chit returns. Those are gated
+     * because whether they are income at all is a position the taxpayer takes;
+     * interest on a fixed or recurring deposit is not — it is chargeable under
+     * s.56(2)(viii) / s.93 of the 2025 Act whether or not it has been withdrawn,
+     * and a switch would imply a choice that does not exist.
+     *
+     * Provident-fund interest is the genuine exception and is EXCLUDED with its
+     * reason stated: it is exempt under s.10(11)/(12), except on contributions
+     * above the ₹2,50,000 annual threshold, and this application does not hold
+     * the contribution history that decides which part of a balance is which.
+     * Taxing the whole of it would be worse than reporting it and saying so.
+     */
+    if (asset.balanceAccount !== undefined) {
+      const account = asset.balanceAccount;
+      const amount = balanceInterestAccruedBetween(account, from, to);
+      if (Money.compare(amount, Money.zero(amount.currency)) > 0) {
+        const label = `Deposit interest · ${account.label}`;
+        if (account.kind === 'PROVIDENT_FUND') {
+          excluded.push({
+            label: `Provident fund interest · ${account.label}`,
+            amount,
+            reason:
+              'provident fund interest is exempt under s.10(11)/(12) except on contributions above the ₹2,50,000 annual threshold, and portTrack does not hold the contribution history that decides the split',
+          });
+        } else {
+          accruals.push({ label, amount });
+        }
       }
     }
 
