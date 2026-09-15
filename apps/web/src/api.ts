@@ -101,6 +101,116 @@ export interface AcquisitionLot {
   readonly quantity: string;
   readonly remainingQuantity: string;
   readonly costPerUnit: Money;
+  /**
+   * Charges are part of the cost of acquisition, not decoration. For property
+   * they are the stamp duty and registration a purchase price alone omits, and
+   * they are deductible — so the Immovable screen reports them separately.
+   *
+   * The API has always sent these; the client type simply never declared them.
+   */
+  readonly fees?: Money;
+  readonly stt?: Money;
+  readonly otherCharges?: Money;
+  /** Present on a REAL_ESTATE lot: the deed's own breakdown. */
+  readonly property?: PropertyTransaction;
+}
+
+export type AreaUnit = string;
+export type PropertyKind = string;
+export type ValuationBasis =
+  | 'CIRCLE_RATE'
+  | 'REGISTERED_VALUER'
+  | 'BROKER_ESTIMATE'
+  | 'RECENT_COMPARABLE'
+  | 'OWNER_ESTIMATE';
+
+export interface Area {
+  readonly value: string;
+  readonly unit: AreaUnit;
+}
+
+/**
+ * The duty breakdown of one purchase or sale.
+ *
+ * Read, never derived here. The screen previously displayed `stt` as "Stamp
+ * duty" — a field nothing sets for property — so every property showed ₹0 duty
+ * while the real figure sat in an "other" column.
+ */
+export interface PropertyTransaction {
+  readonly area?: Area;
+  readonly pricePerAreaUnit?: Money;
+  readonly consideration: Money;
+  readonly stampDuty: Money;
+  readonly registrationFee: Money;
+  readonly gst: Money;
+  readonly otherTaxes: Money;
+  readonly brokerage?: Money;
+  readonly stampDutyValue?: Money;
+  readonly documentRef?: string;
+}
+
+export interface PropertyLocation {
+  readonly addressRef: string;
+  readonly address?: string;
+  readonly city?: string;
+  readonly state?: string;
+  readonly pincode?: string;
+  readonly country?: string;
+}
+
+export interface ImmovableProperty {
+  readonly assetId: string;
+  readonly propertyName: string;
+  readonly kind: PropertyKind;
+  readonly location?: PropertyLocation;
+  readonly area?: Area;
+  readonly currentValue?: {
+    readonly amount: Money;
+    readonly asOf: string;
+    readonly basis: ValuationBasis;
+    readonly notes?: string;
+  };
+  readonly registrationNumber?: string;
+  readonly surveyNumber?: string;
+  readonly notes?: string;
+}
+
+/**
+ * What the property form posts. Every money field is a STRING, not a `Money`:
+ * the server parses Indian digit grouping (`1,00,00,000`), which is exactly how
+ * a deed figure gets typed, and pre-parsing it here would be a second parser.
+ */
+export interface RecordPropertyBody {
+  side: 'BUY' | 'SELL';
+  transactionDate: string;
+  propertyName: string;
+  kind: PropertyKind;
+  consideration: string;
+  areaValue?: string;
+  areaUnit?: AreaUnit;
+  pricePerAreaUnit?: string;
+  stampDuty?: string;
+  registrationFee?: string;
+  gst?: string;
+  otherTaxes?: string;
+  brokerage?: string;
+  stampDutyValue?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  registrationNumber?: string;
+  surveyNumber?: string;
+  documentRef?: string;
+  notes?: string;
+  currentValue?: { amount: string; asOf: string; basis: ValuationBasis };
+  confirmDuplicate?: boolean;
+}
+
+/** Non-blocking findings the server reports after a property is recorded. */
+export interface PropertyAdvisory {
+  readonly code: 'CONSIDERATION_MISMATCH' | 'STAMP_DUTY_SHORTFALL';
+  readonly message: string;
 }
 
 export interface IncomeEvent {
@@ -122,7 +232,45 @@ export interface LedgerAsset {
   readonly folioRef?: string;
   readonly lots: readonly AcquisitionLot[];
   readonly incomeEvents: readonly IncomeEvent[];
+  /** Units still held. Summed by the server, in decimal, never in the browser. */
+  readonly heldQuantity: string;
+  /** What those units cost, in the holding's OWN currency. */
+  readonly costBasis: Money;
+  /**
+   * The same figure in rupees, at the latest published SBI TT buy rate.
+   *
+   * Absent when no rate could be resolved — a screen must then omit the holding
+   * from a rupee total rather than add its foreign amount as though it were one.
+   */
+  readonly costBasisInr?: Money;
+  /** The rate used, so a converted figure can be checked rather than trusted. */
+  readonly conversionRate?: string;
+  /**
+   * What the holding is WORTH, where a price is known. Absent for anything
+   * unpriced — property, unlisted shares, loans, chits — which is carried at
+   * cost, and must be labelled as such rather than folded into a "value" total.
+   */
+  readonly marketValue?: Money;
+  readonly marketValueInr?: Money;
+  readonly marketPricePerUnit?: Money;
+  /** When that price was recorded. Prices arrive by import, so it is not today. */
+  readonly priceAsOf?: string;
+  readonly unrealisedInr?: Money;
+  /**
+   * Which tab this holding belongs in, decided by the SERVER.
+   *
+   * Equity and Non-Equity are split by tax character where one exists, not by
+   * asset class — a debt-oriented fund and an equity-oriented one share a class
+   * and are taxed differently (ADR-016). Recomputing that here would be a second
+   * copy of the rule, free to drift from the engine's.
+   */
+  readonly bucket: AssetBucket;
+  /** Present only on REAL_ESTATE: name, type, area, location, current value. */
+  readonly property?: ImmovableProperty;
 }
+
+/** Mirrors core-domain's AssetBucket. The SPA never derives it, only reads it. */
+export type AssetBucket = 'EQUITY' | 'NON_EQUITY' | 'IMMOVABLE' | 'LOAN' | 'CHIT';
 
 export interface LedgerLiability {
   readonly liabilityId: string;
@@ -151,8 +299,28 @@ export type ParserName =
   | 'ZERODHA_TAX_PNL'
   | 'VESTED'
   | 'ETRADE'
+  | 'ETRADE_GL'
+  | 'ETRADE_HOLDINGS'
   | 'CAMS'
   | 'TEMPLATE';
+
+export interface TrancheDiscrepancy {
+  readonly assetId: string;
+  readonly lotId: string;
+  readonly symbol?: string;
+  readonly acquisitionDate: string;
+  readonly grantRef?: string;
+  readonly stated: string;
+  readonly computed: string;
+  readonly difference: string;
+}
+
+export interface HoldingsReconciliation {
+  readonly discrepancies: readonly TrancheDiscrepancy[];
+  readonly agreed: number;
+  readonly unaccountedUnits: string;
+  readonly noStatementLoaded: boolean;
+}
 
 export interface RowError {
   readonly row: number;
@@ -176,6 +344,8 @@ export interface FinancialYearOption {
   readonly isCurrent: boolean;
   readonly rulesAvailable: boolean;
   readonly rulesStatus?: 'PROVISIONAL' | 'VERIFIED';
+  /** That year's own reason for being provisional; they differ materially. */
+  readonly rulesNote?: string;
 }
 
 export interface CalendarYearOption {
@@ -448,6 +618,34 @@ export interface AdvanceTaxInstallment {
   readonly tdsCredit: Money;
   readonly alreadyPaid: Money;
   readonly netPayable: Money;
+  /**
+   * Gains that could NOT be converted to rupees, and are therefore absent from
+   * the figures above. Non-empty means the instalment is understated.
+   */
+  readonly capitalGains?: {
+    readonly unconvertible: readonly {
+      readonly txnId: string;
+      readonly currency: string;
+      readonly exitDate: string;
+      readonly reason: string;
+    }[];
+    readonly excludedSellToCover: readonly {
+      readonly txnId: string;
+      readonly exitDate: string;
+      readonly gainInr?: Money;
+      readonly straddlesBasisMonths: boolean;
+    }[];
+  };
+}
+
+export interface AdvanceTaxPayment {
+  readonly paymentId: string;
+  readonly financialYear: string;
+  readonly quarter: string;
+  readonly amount: Money;
+  readonly paidOn: string;
+  readonly challanRef?: string;
+  readonly notes?: string;
 }
 
 export interface TaxComputation {
@@ -470,6 +668,20 @@ export interface RegimeComparison {
 export interface IncomeProfileState {
   readonly present: boolean;
   readonly profile: Record<string, unknown> | null;
+}
+
+/** Ledger-derived receipts the user has opted INTO taxing. Both off by default. */
+export interface IncomeInclusions {
+  readonly handLoanInterest: boolean;
+  readonly chitFundReturns: boolean;
+  /** Charge shares sold on vest day to fund withholding. Off by default. */
+  readonly sellToCoverGains: boolean;
+}
+
+export interface IncomeInclusionsState {
+  readonly inclusions: IncomeInclusions;
+  /** Labels for what is switched on, phrased by the API so the two cannot drift. */
+  readonly enabled: readonly string[];
 }
 
 export interface ScheduleAlSection {
@@ -621,6 +833,16 @@ export const api = {
     confirmDuplicate?: boolean;
   }) => request<RecordedTrade>('/trades', { method: 'POST', body: JSON.stringify(input) }),
 
+  propertyReference: () =>
+    request<{ kinds: readonly PropertyKind[]; areaUnits: readonly AreaUnit[] }>(
+      '/property/reference',
+    ),
+  recordProperty: (input: RecordPropertyBody) =>
+    request<{ assetId: string; advisories: readonly PropertyAdvisory[] }>('/property', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
   loans: (query: LoanQuery = {}) => request<LoanRegister>(`/loans${loanQueryString(query)}`),
   recordLoan: (input: {
     borrowerName: string;
@@ -707,12 +929,41 @@ export const api = {
     request<AdvanceTaxInstallment>(
       `/tax/advance?fy=${encodeURIComponent(fy)}&quarter=${encodeURIComponent(quarter)}`,
     ),
+  advanceTaxPayments: (fy: string) =>
+    request<{ payments: readonly AdvanceTaxPayment[] }>(
+      `/tax/advance/payments?fy=${encodeURIComponent(fy)}`,
+    ),
+  recordAdvanceTaxPayment: (input: {
+    fy: string;
+    quarter: string;
+    amount: string;
+    paidOn: string;
+    challanRef?: string;
+  }) =>
+    request<AdvanceTaxPayment>('/tax/advance/payments', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  deleteAdvanceTaxPayment: (paymentId: string) =>
+    request<{ deleted?: boolean }>(`/tax/advance/payments/${encodeURIComponent(paymentId)}`, {
+      method: 'DELETE',
+    }),
+
   regimes: (fy: string) => request<RegimeComparison>(`/tax/regimes?fy=${encodeURIComponent(fy)}`),
   incomeProfile: () => request<IncomeProfileState>('/tax/income-profile'),
   saveIncomeProfile: (profile: Record<string, unknown>) =>
     request<{ present: boolean }>('/tax/income-profile', {
       method: 'POST',
       body: JSON.stringify({ profile }),
+    }),
+
+  reconciliation: () => request<HoldingsReconciliation>('/ledger/reconciliation'),
+
+  incomeInclusions: () => request<IncomeInclusionsState>('/tax/income-inclusions'),
+  saveIncomeInclusions: (inclusions: IncomeInclusions) =>
+    request<IncomeInclusionsState>('/tax/income-inclusions', {
+      method: 'PUT',
+      body: JSON.stringify(inclusions),
     }),
 
   scheduleFa: (calendarYear: number) =>

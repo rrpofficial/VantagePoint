@@ -1,5 +1,10 @@
 /** Ingestion types. Types only — no runtime behaviour. */
 import type { IsoDate, IsoDateTime, Money, Quantity } from '@porttrack/shared-kernel';
+import type {
+  EquityAward,
+  ImmovableProperty,
+  PropertyTransaction,
+} from '@porttrack/core-domain';
 
 /**
  * `MANUAL` is not a file format — it is a trade typed into the app by hand.
@@ -15,6 +20,15 @@ export type ParserName =
   | 'ZERODHA_TAX_PNL'
   | 'VESTED'
   | 'ETRADE'
+  /**
+   * E*TRADE Gains & Losses (Expanded) — a different document from `ETRADE`, which
+   * reads the transaction history. Separate rather than auto-detected: the two
+   * files describe the same account and disagree about what a row means, and
+   * picking the wrong reader silently produces a wrong cost basis.
+   */
+  | 'ETRADE_GL'
+  /** E*TRADE "By Status → Sellable": open stock-plan tranches. */
+  | 'ETRADE_HOLDINGS'
   | 'TEMPLATE'
   | 'MANUAL';
 export type ImportMode = 'STRICT' | 'LENIENT';
@@ -94,6 +108,67 @@ export interface ParsedTransaction {
   readonly fees?: Money;
   readonly otherCharges?: Money;
   readonly handLoan?: ParsedHandLoan;
+  /**
+   * Grant, tranche and order detail, where the source states them.
+   *
+   * Carried through the pipeline so the projector can give the lot an identity
+   * derived from the GRANT rather than from the file it was read from — which is
+   * what lets the same vest, seen in a Gains & Losses export and in a holdings
+   * export, resolve to one lot instead of two.
+   */
+  readonly equityAward?: EquityAward;
+  /**
+   * True when `quantity` is only PART of the tranche this row belongs to.
+   *
+   * A Gains & Losses row states the units one sale disposed of, not the size of
+   * the vest — and one tranche is routinely sold across several orders, so two
+   * such rows describe two slices of one lot. They must therefore SUM.
+   *
+   * A holdings export states the tranche whole, and is authoritative: once one
+   * has been seen, further partial statements of the same tranche add nothing
+   * and must not inflate it.
+   *
+   * Getting this wrong is silent. Taking the largest slice instead of the sum
+   * leaves the lot undersized, the second disposal then cannot be matched to it,
+   * and it falls back to FIFO against some unrelated tranche — which changes the
+   * cost basis and the gain, and only shows up as a figure that differs
+   * depending on which file was imported first.
+   */
+  readonly lotQuantityIsPartial?: boolean;
+  /**
+   * What the SOURCE claims is still held of this tranche.
+   *
+   * Set by a holdings export, which states both the tranche's original size and
+   * what is left of it. The lot is created at the original size and depleted by
+   * the disposals on record; this is the independent figure that depletion is
+   * checked against. A disagreement is disposal history that was never imported
+   * — the one gap a user cannot otherwise find.
+   */
+  readonly statedRemainingQuantity?: Quantity;
+  /**
+   * The market price per unit the SOURCE stated, where it states one.
+   *
+   * A holdings statement reports what the position is worth today as well as
+   * what it cost. Carried through so the import can record it: with no outbound
+   * network (ADR-010) this is the only way a market price ever reaches the
+   * product, and without it every holding is valued at cost.
+   */
+  readonly marketPricePerUnit?: Money;
+  /**
+   * Immovable property detail, where the row describes one.
+   *
+   * Carried through the pipeline so a manual entry and a template import reach
+   * the ledger by the same route. The projector writes it onto the lot or the
+   * exit; the canonical money fields on this transaction still decide the cost
+   * basis, and `propertyChargesOf` is what keeps the two in step.
+   */
+  readonly property?: PropertyTransaction;
+  /** The property itself, on a row that creates or updates one. */
+  readonly propertyDetail?: ImmovableProperty;
+  /** Set on a SELL. Flags the block sold on vest day to fund withholding. */
+  readonly disposalKind?: 'SALE' | 'SELL_TO_COVER';
+  /** The broker's order identifier, where the source states one. */
+  readonly orderRef?: string;
   readonly provenance: Provenance;
 }
 
@@ -120,6 +195,21 @@ export interface ImportReport {
   }[];
   /** Stated figures that the engine recomputed differently. Never silent. */
   readonly reconciliation?: readonly ReconciliationNote[];
+  /**
+   * Foreign records stored WITHOUT an INR value, because no exchange rate could
+   * be resolved for their Rule 115 basis date.
+   *
+   * The rows imported fine; what is missing is their rupee value. Reported
+   * rather than approximated — an invented rate produces a tax figure that looks
+   * entirely ordinary and is wrong.
+   */
+  readonly unpriced?: readonly {
+    readonly kind: 'LOT' | 'EXIT';
+    readonly id: string;
+    readonly currency: string;
+    readonly onDate: IsoDate;
+    readonly reason: string;
+  }[];
 }
 
 export interface IngestInput {

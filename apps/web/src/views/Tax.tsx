@@ -14,9 +14,11 @@ import { useCallback, useEffect, useState, type SyntheticEvent } from 'react';
 import {
   api,
   type AdvanceTaxInstallment,
+  type AdvanceTaxPayment,
   type RegimeComparison,
 } from '../api.js';
 import { Amount, Card, Chip, ProvisionalBanner } from '../components/primitives.js';
+import { DeleteControl } from '../components/DeleteControl.js';
 import { EditModeHint, useEditMode } from '../edit-mode.js';
 import { financialYearLabel, usePeriods } from '../usePeriods.js';
 
@@ -126,7 +128,7 @@ export function Tax() {
           </button>
         }
       >
-        <ProvisionalBanner />
+        <ProvisionalBanner status={selectedYear?.rulesStatus} note={selectedYear?.rulesNote} />
 
         <div className="pt-controls">
           <label htmlFor="fy">Financial year</label>
@@ -225,14 +227,61 @@ export function Tax() {
                   <Amount value={installment.tdsCredit} />
                 </dd>
               </div>
+              <div>
+                <dt>Already paid</dt>
+                <dd>
+                  <Amount value={installment.alreadyPaid} />
+                </dd>
+              </div>
             </dl>
+
+            {/*
+              A gain with no exchange rate is ABSENT from the figure above, not
+              approximated into it. Saying so beside the number is the whole
+              point: an instalment that is quietly short is indistinguishable
+              from a correct one, and the shortfall surfaces at assessment.
+            */}
+            {(installment.capitalGains?.unconvertible.length ?? 0) > 0 && (
+              <p className="pt-error" role="alert" data-testid="unconvertible-gains">
+                <strong>This figure is incomplete.</strong>{' '}
+                {installment.capitalGains?.unconvertible.length} disposal
+                {installment.capitalGains?.unconvertible.length === 1 ? '' : 's'} could not be
+                converted to rupees — no SBI TT buy rate is held for the month-end that Rule 115
+                names — so {installment.capitalGains?.unconvertible.length === 1 ? 'it is' : 'they are'}{' '}
+                left out entirely. Import the rate archive covering{' '}
+                {installment.capitalGains?.unconvertible.map((g) => g.exitDate).join(', ')} before
+                relying on this.
+              </p>
+            )}
+
+            {(installment.capitalGains?.excludedSellToCover.length ?? 0) > 0 && (
+              <p className="pt-callout" role="status" data-testid="excluded-sell-to-cover">
+                Excludes {installment.capitalGains?.excludedSellToCover.length} sell-to-cover
+                disposal
+                {installment.capitalGains?.excludedSellToCover.length === 1 ? '' : 's'}, by your
+                setting under <strong>What counts as income</strong>. Gains left out:{' '}
+                <strong>
+                  ₹
+                  {(installment.capitalGains?.excludedSellToCover ?? [])
+                    .reduce((sum, d) => sum + Number(d.gainInr?.amount ?? 0), 0)
+                    .toFixed(2)}
+                </strong>
+                {(installment.capitalGains?.excludedSellToCover ?? []).some(
+                  (d) => d.straddlesBasisMonths,
+                ) && ' — some span two Rule 115 months, where the amount is not a rounding error'}
+                .
+              </p>
+            )}
           </>
         )}
       </Card>
 
+      {/* Recomputes the instalment above: it is stated net of what is paid. */}
+      <AdvanceTaxPayments financialYear={financialYear} onRecorded={() => void compute()} />
+
       {regimes !== undefined && (
         <Card title="Regime comparison" action={<Chip>{regimes.recommended} regime</Chip>}>
-          <ProvisionalBanner />
+          <ProvisionalBanner status={selectedYear?.rulesStatus} note={selectedYear?.rulesNote} />
           <div className="pt-table-scroll">
             <table className="pt-table" data-testid="regime-table">
               <thead>
@@ -328,5 +377,187 @@ export function Tax() {
         </form>
       </Card>
     </div>
+  );
+}
+
+/**
+ * Advance tax already paid, and the form to record it.
+ *
+ * Instalments are cumulative — 15/45/75/100% of the year's liability — so every
+ * quarter after the first is net of what came before. Until a payment is
+ * recorded the engine assumes nothing was paid, and each quarter re-demands tax
+ * the taxpayer already has a challan for.
+ *
+ * Recording is ungated; deleting is not. Adding a payment that happened can only
+ * make the demand more accurate, while removing one RAISES every later
+ * instalment — which is the direction edit mode exists to guard.
+ */
+function AdvanceTaxPayments({
+  financialYear,
+  onRecorded,
+}: {
+  financialYear: string;
+  onRecorded: () => void;
+}) {
+  const editMode = useEditMode();
+  const [payments, setPayments] = useState<readonly AdvanceTaxPayment[]>([]);
+  const [quarter, setQuarter] = useState<string>('Q1');
+  const [amount, setAmount] = useState('');
+  const [paidOn, setPaidOn] = useState('');
+  const [challanRef, setChallanRef] = useState('');
+  const [error, setError] = useState<string | undefined>();
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async (): Promise<void> => {
+    const result = await api.advanceTaxPayments(financialYear);
+    if (result.ok) setPayments(result.value.payments);
+  }, [financialYear]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const submit = useCallback(async (): Promise<void> => {
+    setBusy(true);
+    setError(undefined);
+    const result = await api.recordAdvanceTaxPayment({
+      fy: financialYear,
+      quarter,
+      amount,
+      paidOn,
+      ...(challanRef.trim().length === 0 ? {} : { challanRef }),
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error.message);
+      return;
+    }
+    setAmount('');
+    setPaidOn('');
+    setChallanRef('');
+    await load();
+    // The instalment above is now net of this payment, so it has to be recomputed.
+    onRecorded();
+  }, [amount, challanRef, financialYear, load, onRecorded, paidOn, quarter]);
+
+  const total = payments.reduce((sum, payment) => sum + Number(payment.amount.amount), 0);
+
+  return (
+    <Card
+      title="Advance tax paid"
+      action={<Chip>{`₹${total.toLocaleString('en-IN')}`}</Chip>}
+    >
+      <p className="pt-muted">
+        Each quarter&rsquo;s demand is the year&rsquo;s liability at 15, 45, 75 or 100 per cent,
+        less TDS and less everything already paid. Record each challan here or every quarter after
+        the first will ask again for tax you have already remitted.
+      </p>
+
+      {payments.length > 0 && (
+        <div className="pt-table-scroll">
+          <table className="pt-table" data-testid="advance-tax-payments">
+            <thead>
+              <tr>
+                <th scope="col">Quarter</th>
+                <th scope="col">Paid on</th>
+                <th scope="col">Challan</th>
+                <th scope="col" className="pt-align-end">Amount</th>
+                {editMode.enabled && <th scope="col" />}
+              </tr>
+            </thead>
+            <tbody>
+              {payments.map((payment) => (
+                <tr key={payment.paymentId}>
+                  <td>{payment.quarter}</td>
+                  <td>{payment.paidOn}</td>
+                  <td>{payment.challanRef ?? '—'}</td>
+                  <td className="pt-align-end">
+                    <Amount value={payment.amount} />
+                  </td>
+                  {editMode.enabled && (
+                    <td>
+                      <DeleteControl
+                        label="Delete"
+                        describes={`this ₹${payment.amount.amount} payment for ${payment.quarter}, which will RAISE every later instalment`}
+                        testId={`delete-payment-${payment.paymentId}`}
+                        onDelete={() => api.deleteAdvanceTaxPayment(payment.paymentId)}
+                        onDeleted={() => {
+                          void load();
+                          onRecorded();
+                        }}
+                      />
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <form
+        className="pt-form"
+        data-testid="record-advance-tax-payment"
+        onSubmit={(event: SyntheticEvent) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <label htmlFor="payment-quarter">Quarter</label>
+        <select
+          id="payment-quarter"
+          value={quarter}
+          onChange={(event) => {
+            setQuarter(event.target.value);
+          }}
+        >
+          {QUARTERS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+
+        <label htmlFor="payment-amount">Amount paid</label>
+        <input
+          id="payment-amount"
+          inputMode="decimal"
+          value={amount}
+          placeholder="1,00,000"
+          onChange={(event) => {
+            setAmount(event.target.value);
+          }}
+        />
+
+        <label htmlFor="payment-date">Paid on</label>
+        <input
+          id="payment-date"
+          type="date"
+          value={paidOn}
+          onChange={(event) => {
+            setPaidOn(event.target.value);
+          }}
+        />
+
+        <label htmlFor="payment-challan">Challan reference (optional)</label>
+        <input
+          id="payment-challan"
+          value={challanRef}
+          onChange={(event) => {
+            setChallanRef(event.target.value);
+          }}
+        />
+
+        <button type="submit" disabled={busy}>
+          {busy ? 'Recording…' : 'Record payment'}
+        </button>
+
+        {error !== undefined && (
+          <p className="pt-error" role="alert" data-testid="payment-error">
+            {error}
+          </p>
+        )}
+      </form>
+    </Card>
   );
 }

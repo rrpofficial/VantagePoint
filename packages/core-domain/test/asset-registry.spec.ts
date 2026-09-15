@@ -11,8 +11,6 @@ const ALL_ASSET_CLASSES: readonly AssetClass[] = [
   'DOMESTIC_MUTUAL_FUND',
   'FOREIGN_EQUITY',
   'FOREIGN_ETF',
-  'RSU',
-  'ESPP',
   'EPF',
   'VPF',
   'NPS_TIER_I',
@@ -33,7 +31,7 @@ const ALL_ASSET_CLASSES: readonly AssetClass[] = [
   'CHIT_FUND',
 ];
 
-const FOREIGN_CLASSES: readonly AssetClass[] = ['FOREIGN_EQUITY', 'FOREIGN_ETF', 'RSU', 'ESPP'];
+const FOREIGN_CLASSES: readonly AssetClass[] = ['FOREIGN_EQUITY', 'FOREIGN_ETF'];
 
 describe('US-1.1 asset registry', () => {
   describe('Scenario: Asset class determines jurisdiction and snapshot membership', () => {
@@ -74,7 +72,7 @@ describe('US-1.1 asset registry', () => {
     });
   });
 
-  describe('DoD: taxonomy covers all 25 classes in FR-1.1', () => {
+  describe('DoD: taxonomy covers all 23 classes in FR-1.1', () => {
     it('assigns a jurisdiction to every declared asset class', () => {
       for (const cls of ALL_ASSET_CLASSES) {
         expect(['DOMESTIC', 'FOREIGN']).toContain(AssetRegistry.jurisdictionOf(cls));

@@ -21,7 +21,7 @@ import {
   type ChitWithdrawalSchedule,
   type PaymentMode,
 } from '../api.js';
-import { Amount, Card, Chip } from '../components/primitives.js';
+import { Amount, Card, Chip, GoToImport } from '../components/primitives.js';
 import { DeleteControl } from '../components/DeleteControl.js';
 import { EditModeHint, useEditMode } from '../edit-mode.js';
 
@@ -120,15 +120,18 @@ export function Chits() {
       <Card
         title="Chit funds"
         action={
-          <button
-            type="button"
-            className="pt-button-inline"
-            onClick={() => {
-              setShowNew((open) => !open);
-            }}
-          >
-            {showNew ? 'Cancel' : 'Record a chit'}
-          </button>
+          <div className="pt-actions pt-actions--inline">
+            <button
+              type="button"
+              className="pt-button-inline"
+              onClick={() => {
+                setShowNew((open) => !open);
+              }}
+            >
+              {showNew ? 'Cancel' : 'Record a chit'}
+            </button>
+            <GoToImport testId="go-to-import-chits" />
+          </div>
         }
       >
         <div className="pt-tiles" data-testid="chit-tiles">

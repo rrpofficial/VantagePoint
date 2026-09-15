@@ -31,6 +31,9 @@ export function installment(input: AdvanceTaxInput): Result<AdvanceTaxInstallmen
     realisedByCutoff,
     input.assetClasses,
     rules,
+    input.includeSellToCover === undefined
+      ? {}
+      : { includeSellToCover: input.includeSellToCover },
   );
 
   const regime = input.regime ?? 'NEW_REGIME';

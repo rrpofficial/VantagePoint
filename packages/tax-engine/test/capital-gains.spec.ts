@@ -187,15 +187,83 @@ describe('US-5.8 capital gains computation', () => {
       expect(result.gains[0]?.gain.currency).toBe('INR');
     });
 
+    /*
+     * Rewritten when `taxableInr` became `taxableGainInr`.
+     *
+     * It used to seed BOTH rupee fields and assert only that the answer was not
+     * the valuation figure — which passed while the seeded "taxable" value was
+     * converted PROCEEDS rather than a gain, the exact confusion the rename
+     * exists to end. Seeding nothing and checking the computed number is the
+     * assertion that was intended.
+     *
+     * A sale on 2026-02-15 takes its Rule 115 basis from 2026-01-31: 83.55, not
+     * the 84.10 that applied on the day itself.
+     */
     it('never reads the valuation rate for a taxable computation (ADR-003)', () => {
-      const exit = anExit({
-        txnId: 'txn_fx',
-        exitDate: '2026-02-15',
-        valuationInr: inr('605520.00'),
-        taxableInr: inr('601560.00'),
-      });
+      const exit = anExit({ txnId: 'txn_fx', exitDate: '2026-02-15', pricePerUnit: usd('180') });
+
       const result = CapitalGainsEngine.compute([exit], { txn_fx: 'FOREIGN_EQUITY' }, RULES());
-      expect(Number(result.gains[0]?.gain.amount)).not.toBe(605520);
+
+      expectMoney(result.gains[0]?.gain ?? inr('0'), inr('15039.00')); // 180 × 83.55
+      expect(Number(result.gains[0]?.gain.amount)).not.toBe(180 * 84.1);
+    });
+
+    /*
+     * The taxpayer's own statement of the rule, asserted as arithmetic:
+     *
+     *   gain = (sp$ × q × rate[month-end before sale])
+     *        − (vp$ × q × rate[month-end before vest])
+     *
+     * Vested 2025-08-10 at $100, sold 2026-02-15 at $180, 40 units.
+     *   cost     = 100 × 40 × 83.45 (basis 2025-07-31) = ₹333,800
+     *   proceeds = 180 × 40 × 83.55 (basis 2026-01-31) = ₹601,560
+     *   gain     =                                       ₹267,760
+     *
+     * Note the two rates are a month apart and neither is the 84.10 that applied
+     * on the sale day itself.
+     */
+    it('reports both legs and the gain between them', () => {
+      const exit = anExit({
+        txnId: 'txn_legs',
+        exitDate: '2026-02-15',
+        pricePerUnit: usd('180'),
+        allocations: [
+          {
+            lotId: 'lot_1',
+            quantity: '40',
+            costPerUnit: usd('100'),
+            acquisitionDate: '2025-08-10',
+          },
+        ],
+      });
+
+      const legs = expectOk(CapitalGainsEngine.rule115Legs(exit));
+
+      expect(legs.legsSeparable).toBe(true);
+      expectMoney(legs.costBasisInr, inr('333800.00'));
+      expectMoney(legs.proceedsInr, inr('601560.00'));
+      expectMoney(legs.gainInr, inr('267760.00'));
+    });
+
+    /*
+     * The trap the rename closes, stated as a test.
+     *
+     * Storing converted PROCEEDS where the finished GAIN belongs charges tax on
+     * the whole sale instead of the profit — here ₹601,560 rather than ₹267,760,
+     * a figure that looks entirely ordinary. The field now says which it holds,
+     * and the engine returns exactly what was stored.
+     */
+    it('returns a stored gain unchanged, so the field must hold a gain', () => {
+      const exit = anExit({
+        txnId: 'txn_stored',
+        exitDate: '2026-02-15',
+        pricePerUnit: usd('180'),
+        taxableGainInr: inr('267760.00'),
+      });
+
+      const result = CapitalGainsEngine.compute([exit], { txn_stored: 'FOREIGN_EQUITY' }, RULES());
+
+      expectMoney(result.gains[0]?.gain ?? inr('0'), inr('267760.00'));
     });
   });
 });

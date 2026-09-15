@@ -20,6 +20,8 @@ const PARSERS: readonly { readonly value: ParserName; readonly label: string }[]
   { value: 'CAMS', label: 'CAMS / KFintech statement (PDF)' },
   { value: 'VESTED', label: 'Vested account activity' },
   { value: 'ETRADE', label: 'E*TRADE transaction history' },
+  { value: 'ETRADE_GL', label: 'E*TRADE Gains & Losses (Expanded)' },
+  { value: 'ETRADE_HOLDINGS', label: 'E*TRADE stock plan holdings (By Status → Sellable)' },
   { value: 'TEMPLATE', label: 'portTrack CSV template' },
 ];
 
@@ -147,6 +149,42 @@ export function Import({ onImported }: { onImported: () => void }) {
                 </p>
               )}
             </>
+          )}
+
+          {/*
+            The two E*TRADE options read different files from the same account and
+            are easy to pick wrongly, so this says which is which at the point of
+            choosing rather than failing afterwards on a header mismatch.
+          */}
+          {parser === 'ETRADE_GL' && (
+            <p className="pt-muted" data-testid="etrade-gl-hint">
+              The <strong>Gains &amp; Losses (Expanded)</strong> export, where each row is a
+              completed sale with its cost basis — not the plain transaction history. Cost is taken
+              from <strong>Adjusted Cost Basis</strong>, which already includes the vest or purchase
+              value taxed as salary, so that value is not taxed again as capital gain. Each leg is
+              converted to rupees at the SBI TT buy rate for the last day of the month before it
+              (Rule 115): the vest month for the cost, the sale month for the proceeds.
+            </p>
+          )}
+
+          {parser === 'ETRADE_GL' && (
+            <p className="pt-callout" data-testid="etrade-gl-fifo-note">
+              <strong>Gains here will not match the ones printed on the statement.</strong> E*TRADE
+              matches each sale to the specific lot it came from; Indian law matches FIFO, oldest
+              lot first. Where you hold more than one lot of a symbol the two disagree row by row,
+              and converge once everything is sold. The FIFO figure is the one that belongs on a
+              return.
+            </p>
+          )}
+
+          {parser === 'ETRADE_HOLDINGS' && (
+            <p className="pt-muted" data-testid="etrade-holdings-hint">
+              The <strong>Sellable</strong> tab of the By Status export — the tranches you still
+              hold. It pairs with the Gains &amp; Losses file, which covers the ones you have
+              already sold; each tranche appears in one or the other, matched on grant and vest
+              date, so importing both counts nothing twice. Export Sellable, not Unvested: unvested
+              shares are not yours yet and have no cost basis.
+            </p>
           )}
 
           <label htmlFor="statement">Statement file</label>

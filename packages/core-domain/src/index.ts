@@ -11,6 +11,7 @@ import {
 } from '@porttrack/shared-kernel';
 import {
   allocateFifo,
+  allocateSpecific,
   recordAcquisition,
   restoreAllocations,
   totalCostBasis,
@@ -84,6 +85,46 @@ export {
   taxCharacterOf,
   type EquityBands,
 } from './mf-tax-character.js';
+export { HOLDING_BUCKETS, bucketOf, type AssetBucket } from './asset-bucket.js';
+
+/** Immovable property — area units, duty breakdown, and the lot mapping. */
+export {
+  AREA_UNITS,
+  PROPERTY_KINDS,
+  areaUnitLabel,
+  considerationMismatch,
+  formatArea,
+  isApproximateUnit,
+  propertyChargesOf,
+  stampDutyShortfall,
+  toSquareFeet,
+  totalOutlayOf,
+  totalTaxOf,
+} from './property.js';
+
+/**
+ * US-4.5c — grant → tranche → disposal identity for equity compensation.
+ *
+ * Exported so every parser derives the same id for the same vest. Two parsers
+ * with two derivations would split one tranche across two lots, which is the
+ * failure this exists to prevent.
+ */
+export {
+  equityExitId,
+  equityLotId,
+  grantRefOf,
+  isSellToCover,
+} from './equity-award.js';
+
+/**
+ * US-4.5e — the broker's stated holdings against what the ledger can account
+ * for. The only check that reveals disposal history which was never imported.
+ */
+export {
+  reconcileHoldings,
+  type HoldingsReconciliation,
+  type TrancheDiscrepancy,
+} from './holdings-reconciliation.js';
 
 let assetCounter = 0;
 
@@ -122,7 +163,16 @@ export const AssetRegistry = {
 export const LotBook = { recordAcquisition, totalCostBasis };
 
 /** US-1.3 — FIFO lot allocation, and its reversal when a disposal is deleted. */
-export const FifoAllocator = { allocate: allocateFifo, restore: restoreAllocations };
+export const FifoAllocator = {
+  allocate: allocateFifo,
+  /**
+   * Matches a disposal to the lot its source named, for holdings whose identity
+   * is documented rather than fungible. See the note in `lots.ts` for why FIFO
+   * is not universal.
+   */
+  allocateSpecific,
+  restore: restoreAllocations,
+};
 
 /** US-1.6 — splits, bonuses, mergers, demergers. */
 export const CorporateActionEngine = { apply: applyCorporateAction };

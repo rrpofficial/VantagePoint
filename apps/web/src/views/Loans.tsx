@@ -29,7 +29,7 @@ import {
   type LoanView,
   type PaymentMode,
 } from '../api.js';
-import { Amount, Card, Chip } from '../components/primitives.js';
+import { Amount, Card, Chip, GoToImport } from '../components/primitives.js';
 import { DeleteControl } from '../components/DeleteControl.js';
 import { EditModeHint, useEditMode } from '../edit-mode.js';
 
@@ -134,15 +134,18 @@ export function Loans() {
       <Card
         title="Hand loans"
         action={
-          <button
-            type="button"
-            className="pt-button-inline"
-            onClick={() => {
-              setShowNewLoan((open) => !open);
-            }}
-          >
-            {showNewLoan ? 'Cancel' : 'Record a loan'}
-          </button>
+          <div className="pt-actions pt-actions--inline">
+            <button
+              type="button"
+              className="pt-button-inline"
+              onClick={() => {
+                setShowNewLoan((open) => !open);
+              }}
+            >
+              {showNewLoan ? 'Cancel' : 'Record a loan'}
+            </button>
+            <GoToImport testId="go-to-import-loans" />
+          </div>
         }
       >
         <div className="pt-tiles" data-testid="loan-tiles">

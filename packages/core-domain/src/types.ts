@@ -16,10 +16,19 @@ export type AssetClass =
   | 'DOMESTIC_EQUITY'
   | 'DOMESTIC_ETF'
   | 'DOMESTIC_MUTUAL_FUND'
+  /*
+   * Covers equity compensation too. RSU and ESPP were once asset classes of
+   * their own, which split one company's shares across two holdings: the same
+   * symbol bought outright and received as an RSU became two assets, double
+   * counted on screen and — worse — matched FIFO in two separate queues, when
+   * the law treats them as one pool of one security.
+   *
+   * They were identical to this class in every tax dimension anyway: same
+   * 24-month holding period, same jurisdiction, same settlement lag, same
+   * bucket. How a tranche was acquired now lives on the lot, as `equityAward`.
+   */
   | 'FOREIGN_EQUITY'
   | 'FOREIGN_ETF'
-  | 'RSU'
-  | 'ESPP'
   | 'EPF'
   | 'VPF'
   | 'NPS_TIER_I'
@@ -77,8 +86,87 @@ export interface DualRate {
   readonly fallbackNote?: string;
 }
 
+/**
+ * Where an equity-compensation lot came from: the grant, and the event that
+ * turned part of that grant into shares.
+ *
+ * Three levels, because the broker's own data has three:
+ *
+ *   grant   →  many vests / purchases  →  many sell orders
+ *
+ * One grant vests in tranches over years; one tranche is commonly sold across
+ * several orders (a sell-to-cover on vest day, a manual sale later). A real
+ * E*TRADE export shows 33 disposal rows resolving to 28 tranches from 5 grants.
+ *
+ * **This is what makes a lot identifiable across FILES.** Lot ids were derived
+ * from the source file name and row number, so the same vest read from a Gains &
+ * Losses export and from a holdings export produced two different ids, and
+ * deduplication fell back to matching quantity and price — which breaks on a
+ * cent of rounding. A grant reference plus the acquisition date is stable
+ * wherever it is read from.
+ */
+/**
+ * How shares of an equity-compensation award came to be held.
+ *
+ * A property of the LOT, not of the asset. Once acquired, a share received as an
+ * RSU and a share bought on the market are the same security: same holding
+ * period, same rate, same FIFO pool. What differs is the acquisition — which
+ * perquisite was charged and what the cost basis became — and that belongs to
+ * the tranche, not to the holding.
+ *
+ * Every value here is grounded in a column of the E*TRADE exports this product
+ * reads: `Plan Type` distinguishes RS from ESPP; `Exercise Date` and
+ * `Grant Price` exist for options; `83(b) Election` applies to a restricted
+ * stock AWARD rather than a unit; the unvested schedule carries
+ * `Performance Metric`, `Target %` and `% Achieved` for performance awards.
+ */
+export type EquityAwardKind =
+  /** Restricted stock unit — vests, FMV at vest is the perquisite and the basis. */
+  | 'RSU'
+  /** Employee share purchase plan — bought at a discount; the discount is the perquisite. */
+  | 'ESPP'
+  /** Exercised stock option — FMV at exercise less the exercise price. */
+  | 'ESOP'
+  /** Restricted stock award — issued up front, the 83(b) election applies to it. */
+  | 'RSA'
+  /** Performance share unit — vests on a metric rather than on time alone. */
+  | 'PSU';
+
+export interface EquityAward {
+  readonly kind: EquityAwardKind;
+  /**
+   * The grant's own identifier.
+   *
+   * E*TRADE gives RSUs a `Grant Number`. ESPP rows carry no grant number, so the
+   * offering's grant date stands in — see `grantDate`.
+   */
+  readonly grantRef: string;
+  /** When the grant (RSU) or the offering period (ESPP) was made. */
+  readonly grantDate?: IsoDate;
+  /** RSU: when this tranche vested. Absent on ESPP, which does not vest. */
+  readonly vestDate?: IsoDate;
+  /** ESPP: when the shares were bought under the offering. Absent on RSU. */
+  readonly purchaseDate?: IsoDate;
+  /**
+   * ESPP: what was actually PAID per share, after the plan discount.
+   *
+   * Kept beside `costPerUnit` rather than replacing it, because they differ and
+   * only one of them is the cost basis. Section 49(2AA) sets the basis at fair
+   * market value on the acquisition date; the discount below it was already
+   * charged as a salary perquisite. Using the price paid would tax that discount
+   * a second time.
+   */
+  readonly purchasePrice?: Money;
+  /** ESPP: FMV less price paid — the per-share discount taxed as salary. */
+  readonly discountPerUnit?: Money;
+  /** Fair market value per share on the vest or purchase date: the cost basis. */
+  readonly fmvAtAcquisition?: Money;
+}
+
 export interface AcquisitionLot {
   readonly lotId: string;
+  /** Present on RSU and ESPP lots; absent on ordinary purchases. */
+  readonly equityAward?: EquityAward;
   readonly acquisitionDate: IsoDate;
   readonly settlementDate: IsoDate;
   readonly quantity: Quantity;
@@ -92,7 +180,25 @@ export interface AcquisitionLot {
   readonly grandfatheredFmv?: Money;
   /** ESPP discount / RSU vest value taxable as a perquisite. */
   readonly perquisiteValue?: Money;
+  /**
+   * What the BROKER says is still held of this tranche, when a holdings export
+   * has stated it.
+   *
+   * Kept beside `remainingQuantity`, which the ledger derives by applying its own
+   * disposals — deliberately not merged with it. The two disagreeing is the
+   * single most useful fact a holdings import can produce: it means disposals
+   * exist that were never imported, and no figure on screen can reveal that
+   * otherwise, because every one of them is internally consistent and wrong.
+   *
+   * Stored on the lot rather than computed at import so the check stands
+   * afterwards. An import-time comparison only fires on the import that happened
+   * to carry the stated figure — load the holdings file first and the disposals
+   * second, and nothing would ever be compared.
+   */
+  readonly statedRemainingQuantity?: Quantity;
   readonly isBonus?: boolean;
+  /** Present on REAL_ESTATE lots: the duty and area detail of the purchase. */
+  readonly property?: PropertyTransaction;
 }
 
 export interface LotAllocation {
@@ -119,9 +225,96 @@ export interface ExitTransaction {
   readonly fees: Money;
   readonly stt: Money;
   readonly allocations: readonly LotAllocation[];
+
+  /**
+   * Why the shares left.
+   *
+   * `SELL_TO_COVER` is the block sold on vest day to fund the employer's
+   * withholding. It is a genuine transfer and is recorded like any other — the
+   * units must deplete the lot, and Schedule FA counts them — but whether it is
+   * charged to capital gains is a position the taxpayer takes, not a fact, so it
+   * is flagged here and filtered downstream rather than dropped at import.
+   *
+   * The gain on one is usually a rounding error, because the sale is same-day at
+   * roughly the vest price. That holds only while both legs fall in the SAME
+   * month: a vest on the 31st sold on the 1st takes Rule 115 basis rates a month
+   * apart, and the taxable difference is then the whole proceeds times the rate
+   * movement, not the few dollars of price movement.
+   */
+  readonly disposalKind?: 'SALE' | 'SELL_TO_COVER';
+  /** The broker's own order identifier, where the source states one. */
+  readonly orderRef?: string;
+  /**
+   * Which lot-identification convention produced this disposal's allocations.
+   *
+   * Recorded rather than assumed, because the two give different answers and a
+   * filed figure should say which one it rests on. `SPECIFIC` means the source
+   * named the tranche and it was matched to it; `FIFO` means oldest-first, the
+   * convention CBDT Circular 768 prescribes for fungible demat holdings.
+   */
+  readonly lotMatching?: 'SPECIFIC' | 'FIFO';
   readonly fx?: DualRate;
+
+  /*
+   * ---------------------------------------------------------------------------
+   * The rupee figures. FOUR of them, and the distinction between them is not
+   * cosmetic — mixing two up misstates a tax liability by the whole cost basis.
+   *
+   * For a lot vested on d1 at vp$ and sold on d2 at sp$, quantity q:
+   *
+   *   valuationInr    = sp$ × q × rate(d2)              ← trade-date rate
+   *   proceedsTaxInr  = sp$ × q × rate(month-end before d2)
+   *   costBasisTaxInr = vp$ × q × rate(month-end before d1)
+   *   taxableGainInr  = proceedsTaxInr − costBasisTaxInr
+   *
+   * Only the last is the figure tax is charged on. The first uses a DIFFERENT
+   * rate from the other three (ADR-003) and must never reach a tax computation.
+   * ---------------------------------------------------------------------------
+   */
+
+  /**
+   * Gross proceeds at the rate on the SALE DAY ITSELF.
+   *
+   * Portfolio display only. Present so a holding's realised value reads
+   * consistently with the rest of the portfolio, which is marked at trade-date
+   * rates. **Never a tax figure** — Rule 115 names the preceding month-end, not
+   * the transaction date, and these differ by real money.
+   */
   readonly valuationInr?: Money;
-  readonly taxableInr?: Money;
+
+  /** Gross proceeds at the Rule 115 rate for the month preceding the SALE. */
+  readonly proceedsTaxInr?: Money;
+
+  /**
+   * Cost of the units sold, each allocation converted at the Rule 115 rate for
+   * the month preceding ITS OWN acquisition.
+   *
+   * Summed per allocation rather than converted once, because one sale order
+   * routinely consumes lots from several vests with basis months years apart.
+   */
+  readonly costBasisTaxInr?: Money;
+
+  /**
+   * `proceedsTaxInr − costBasisTaxInr`. The figure tax is charged on.
+   *
+   * Named for what it IS rather than for the rate that produced it. Its
+   * predecessor was `taxableInr`, which sat beside `valuationInr` and read as
+   * the same quantity at a second rate — so it was populated with converted
+   * PROCEEDS at least once, while the capital-gains engine reads it as the
+   * finished GAIN and returns it unchanged. That substitutes the whole sale
+   * value for the profit, and the resulting number looks entirely ordinary.
+   */
+  readonly taxableGainInr?: Money;
+
+  /**
+   * Present on a REAL_ESTATE disposal: the duty and area detail of the sale.
+   *
+   * A sale carries duties too — the buyer usually pays stamp duty, but the
+   * seller's brokerage and any TDS deducted under s.194-IA belong to this
+   * transaction, and `stampDutyValue` on a sale is what s.50C substitutes for
+   * the consideration when it is higher.
+   */
+  readonly property?: PropertyTransaction;
 }
 
 export type IncomeEventKind =
@@ -173,6 +366,8 @@ export interface Asset {
   readonly handLoan?: HandLoan;
   /** Present only for CHIT_FUND assets. */
   readonly chitFund?: ChitFund;
+  /** Present only for REAL_ESTATE assets. */
+  readonly property?: ImmovableProperty;
   /** Present only for DOMESTIC_MUTUAL_FUND assets. */
   readonly schemeCategory?: MfSchemeCategory;
   /** Equity allocation, required to place a HYBRID scheme. */
@@ -186,6 +381,25 @@ export interface TaxSubject {
   readonly equityAllocationPct?: Percentage;
 }
 
+/**
+ * One advance-tax instalment actually paid.
+ *
+ * Instalments are cumulative, so every quarter after the first is computed net
+ * of these. Recorded rather than inferred: the engine cannot know what reached
+ * the exchequer, and assuming nothing did re-demands tax the taxpayer has
+ * already remitted.
+ */
+export interface AdvanceTaxPayment {
+  readonly paymentId: string;
+  readonly financialYear: string;
+  readonly quarter: 'Q1' | 'Q2' | 'Q3' | 'Q4';
+  readonly amount: Money;
+  readonly paidOn: IsoDate;
+  /** The challan identifier — the taxpayer's evidence the payment happened. */
+  readonly challanRef?: string;
+  readonly notes?: string;
+}
+
 export interface Liability {
   readonly liabilityId: string;
   readonly kind: 'HOME_LOAN' | 'PERSONAL_LOAN' | 'MORTGAGE' | 'OTHER';
@@ -196,6 +410,183 @@ export interface Liability {
 
 /** How a payment reached the lender. Recorded because it is what a dispute turns on. */
 export type PaymentMode = 'CASH' | 'BANK_TRANSFER' | 'UPI' | 'CHEQUE' | 'OTHER';
+
+/* ------------------------------------------------------ immovable property */
+
+/**
+ * Units land and buildings are actually measured in here.
+ *
+ * Not a tidy SI subset: a Chennai sale deed says "ground", a Punjab one says
+ * "kanal and marla", a Bengal one "katha", and an agricultural record "guntha" or
+ * "bigha". Storing everything as square feet would mean converting at import —
+ * and the regional units are not exact across states (a bigha is not one size),
+ * so a conversion would be a guess baked into the stored figure.
+ *
+ * The unit is therefore recorded AS STATED and converted only for display, where
+ * a wrong conversion is visible rather than permanent.
+ */
+export type AreaUnit =
+  | 'SQ_FT'
+  | 'SQ_M'
+  | 'SQ_YARD'
+  | 'SQ_KM'
+  | 'ACRE'
+  | 'HECTARE'
+  | 'ARE'
+  | 'CENT'
+  | 'GUNTHA'
+  | 'GROUND'
+  | 'AANKADAM'
+  | 'BIGHA'
+  | 'BISWA'
+  | 'KATHA'
+  | 'DECIMAL'
+  | 'KANAL'
+  | 'MARLA'
+  | 'ROOD'
+  | 'PERCH';
+
+/**
+ * What the property is.
+ *
+ * Recorded because it changes the tax treatment, not for tidiness: agricultural
+ * land outside the s.2(14) limits is not a capital asset at all, and a let-out
+ * building produces house property income where a plot produces none.
+ */
+export type PropertyKind =
+  | 'LAND'
+  | 'PLOT'
+  | 'AGRICULTURAL_LAND'
+  | 'FLAT'
+  | 'APARTMENT'
+  | 'INDEPENDENT_HOUSE'
+  | 'VILLA'
+  | 'COMMERCIAL'
+  | 'SHOP'
+  | 'OFFICE'
+  | 'WAREHOUSE'
+  | 'INDUSTRIAL'
+  | 'PARKING'
+  | 'OTHER';
+
+export interface Area {
+  readonly value: Quantity;
+  readonly unit: AreaUnit;
+}
+
+/**
+ * Where the property is.
+ *
+ * A street address identifies a household, so it follows the same rule as a
+ * borrower's name (ADR-013): the full address lives ONLY in the encrypted vault
+ * and `addressRef` is what leaves this machine. City and state are kept in the
+ * clear because Schedule AL asks for them and they do not identify anyone.
+ */
+export interface PropertyLocation {
+  /** Masked reference; resolving it requires the local vault. */
+  readonly addressRef: string;
+  /** The real address, held only in the vault. Never substitute it for the ref. */
+  readonly address?: string;
+  readonly city?: string;
+  readonly state?: string;
+  readonly pincode?: string;
+  readonly country?: string;
+}
+
+/**
+ * How a current value was arrived at.
+ *
+ * REQUIRED whenever a current value is recorded. A valuation with no stated
+ * basis is the figure this module exists to keep out of net worth: "someone said
+ * it's worth ₹2 crore" and a registered valuer's report are not the same fact,
+ * and once stored as a bare number they become indistinguishable.
+ */
+export type ValuationBasis =
+  | 'CIRCLE_RATE'
+  | 'REGISTERED_VALUER'
+  | 'BROKER_ESTIMATE'
+  | 'RECENT_COMPARABLE'
+  | 'OWNER_ESTIMATE';
+
+export interface PropertyValuation {
+  readonly amount: Money;
+  readonly asOf: IsoDate;
+  readonly basis: ValuationBasis;
+  readonly notes?: string;
+}
+
+/**
+ * The property itself — the facts that do not change when it is bought or sold.
+ *
+ * Present only on REAL_ESTATE assets, following `handLoan` and `chitFund`: an
+ * asset class whose shape differs from an instrument gets a block of its own
+ * rather than having its fields smuggled into `symbol` and `otherCharges`, which
+ * is what happened here before.
+ */
+export interface ImmovableProperty {
+  readonly assetId: string;
+  readonly propertyName: string;
+  readonly kind: PropertyKind;
+  readonly location?: PropertyLocation;
+  /** Total extent of the property, as the deed states it. */
+  readonly area?: Area;
+  /**
+   * An optional current value, for when one is genuinely known.
+   *
+   * Deliberately NOT what the asset is carried at. Schedule AL asks for cost,
+   * and `ValuationEngine` values property at cost for the reason the Immovable
+   * screen states: a valuation nobody performed is not an asset figure. This is
+   * shown beside the cost, labelled with its basis and date, and is never summed
+   * into net worth silently.
+   */
+  readonly currentValue?: PropertyValuation;
+  /** Sub-registrar document number, as on the deed. */
+  readonly registrationNumber?: string;
+  readonly surveyNumber?: string;
+  readonly notes?: string;
+}
+
+/**
+ * The property-specific detail of ONE purchase or sale.
+ *
+ * Sits beside the canonical money fields rather than replacing them. The lot's
+ * `quantity`, `costPerUnit`, `fees`, `stt` and `otherCharges` remain what the
+ * tax engine and valuation read — this block is the BREAKDOWN, so a screen can
+ * show stamp duty as stamp duty instead of as an undifferentiated charge.
+ *
+ * The mapping onto those fields is fixed and enforced by `propertyChargesOf`:
+ *
+ *   quantity      = area.value, or '1' when no area is stated
+ *   costPerUnit   = pricePerAreaUnit, or the whole consideration when quantity is 1
+ *   fees          = registrationFee + brokerage
+ *   stt           = 0, ALWAYS — securities transaction tax cannot arise on land,
+ *                   and the importer previously wrote stamp duty here
+ *   otherCharges  = stampDuty + gst + otherTaxes
+ */
+export interface PropertyTransaction {
+  /** Area transacted, which can be less than the property's total extent. */
+  readonly area?: Area;
+  /** Price per unit of area — the "rate" a deed quotes. */
+  readonly pricePerAreaUnit?: Money;
+  /** Total price for this transaction, before duties and fees. */
+  readonly consideration: Money;
+  readonly stampDuty: Money;
+  readonly registrationFee: Money;
+  /** GST, which arises on an under-construction purchase and not on resale. */
+  readonly gst: Money;
+  /** Cess, local body tax, TDS under s.194-IA — anything not named above. */
+  readonly otherTaxes: Money;
+  readonly brokerage?: Money;
+  /**
+   * The value the sub-registrar assessed, where it differs from the price paid.
+   *
+   * Recorded because the difference is itself taxable: s.50C substitutes the
+   * stamp duty value for the seller's consideration, and s.56(2)(x) charges the
+   * shortfall in the buyer's hands. Both are invisible without this number.
+   */
+  readonly stampDutyValue?: Money;
+  readonly documentRef?: string;
+}
 
 export interface LoanPayment {
   readonly paymentId: string;
@@ -291,6 +682,10 @@ export interface RecordAcquisitionInput {
   readonly perquisiteValue?: Money;
   /** Fair market value per unit at vest/purchase; drives the ESPP discount. */
   readonly fmvPerUnit?: Money;
+  /** Grant and tranche detail, for an RSU or ESPP lot. */
+  readonly equityAward?: EquityAward;
+  /** Area and duty detail, for a REAL_ESTATE lot. */
+  readonly property?: PropertyTransaction;
   readonly lotId?: string;
 }
 

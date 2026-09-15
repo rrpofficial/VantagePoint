@@ -20,6 +20,25 @@ const HAND_LOAN_HEADER = TemplateRegistry.definitions()
 /** Only the leading fact columns are filled; the rest are blank, as a sheet may be. */
 const handLoanRow = (cells: string) => `${cells}${','.repeat(17)}`;
 
+/**
+ * A CSV row built BY COLUMN NAME from the live template definition.
+ *
+ * Typing a row positionally couples the test to a column order that changes
+ * whenever a template gains a field — and a shifted row fails as "no asset",
+ * which looks like a projector bug rather than a stale fixture.
+ */
+function rowFor(templateName: string, values: Readonly<Record<string, string>>): string {
+  const template = TemplateRegistry.definitions().find((entry) => entry.name === templateName);
+  if (template === undefined) throw new Error(`no template named ${templateName}`);
+
+  const unknown = Object.keys(values).filter((key) => !template.columns.includes(key));
+  if (unknown.length > 0) {
+    throw new Error(`${templateName} has no column(s): ${unknown.join(', ')}`);
+  }
+
+  return template.columns.map((column) => values[column] ?? '').join(',');
+}
+
 const HAND_LOANS = [
   HAND_LOAN_HEADER,
   handLoanRow('Rajesh Sharma,,2025-04-01,,5000000,8.0,INR'),
@@ -339,7 +358,26 @@ describe('US-4.6 Scenario: Template rows become the right assets on the ledger',
       const header = TemplateRegistry.generate(template.name);
       const sample: Readonly<Record<string, string>> = {
         Custom_HandLoans: handLoanRow('A Borrower,,2025-04-01,,100000,8,INR,Active'),
-        Custom_RealEstate: 'A flat,2024-06-10,9500000,570000,30000,INR',
+        /*
+         * Built from the template's own columns rather than typed positionally.
+         * Custom_RealEstate has grown twice, and each time a hand-written row
+         * silently shifted every value one column left — the failure that
+         * produces is "no asset", which reads as a projector bug.
+         */
+        Custom_RealEstate: rowFor('Custom_RealEstate', {
+          property_name: 'A flat',
+          property_type: 'FLAT',
+          transaction_type: 'BUY',
+          purchase_date: '2024-06-10',
+          area: '1450',
+          area_unit: 'SQ_FT',
+          purchase_price: '9500000',
+          stamp_duty: '570000',
+          registration_fee: '30000',
+          city: 'Bengaluru',
+          state: 'Karnataka',
+          currency: 'INR',
+        }),
         Custom_Cash: 'An account,2026-03-31,412500,INR',
         Custom_ChitFunds: 'A chit,2025-04-01,10000,24,INR',
         Custom_UnlistedShares: 'A company,2025-01-15,1000,250,INR',

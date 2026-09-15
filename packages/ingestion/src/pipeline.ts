@@ -10,6 +10,8 @@
 import { Err, Ok, UnsupportedAssetClassError, type Result } from '@porttrack/shared-kernel';
 import { parseCams } from './cams.js';
 import { parseEtrade, parseVested, parseZerodhaTradebook, type ParseOutcome } from './brokers.js';
+import { parseEtradeGainsLosses } from './etrade-gl.js';
+import { parseEtradeHoldings } from './etrade-holdings.js';
 import { parseTemplateFile } from './templates.js';
 import { partition } from './duplicates.js';
 import type { ImportReport, IngestInput } from './types.js';
@@ -25,6 +27,10 @@ async function runParser(input: IngestInput): Promise<Result<ParseOutcome>> {
       return parseVested(text, input.fileName);
     case 'ETRADE':
       return parseEtrade(text, input.fileName);
+    case 'ETRADE_GL':
+      return parseEtradeGainsLosses(text, input.fileName);
+    case 'ETRADE_HOLDINGS':
+      return parseEtradeHoldings(text, input.fileName);
     case 'TEMPLATE': {
       const parsed = parseTemplateFile(text, input.fileName, input.templateName);
       // Row errors are carried through, not swallowed: a template is hand-edited,

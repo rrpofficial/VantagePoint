@@ -81,6 +81,36 @@ body {
   white-space: nowrap;
 }
 
+/*
+ * Secondary navigation, shown throughout the Assets area.
+ *
+ * Visually subordinate to the top bar — lighter weight, an underline rail rather
+ * than a bold border — so the two rows read as a hierarchy instead of competing.
+ * It wraps rather than scrolls: six short labels fit two lines at phone width,
+ * and a horizontally scrolling nav hides its own contents.
+ */
+.pt-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--pt-space-4);
+  padding: 0 var(--pt-space-2) var(--pt-space-4);
+  border-bottom: 1px solid var(--pt-border);
+  margin-bottom: var(--pt-space-4);
+}
+
+.pt-subnav a {
+  color: var(--pt-ink-muted);
+  text-decoration: none;
+  font: var(--pt-text-caption);
+  padding-bottom: var(--pt-space-1);
+  border-bottom: 2px solid transparent;
+}
+
+.pt-subnav a.is-active {
+  color: var(--pt-ink);
+  border-bottom-color: var(--pt-accent);
+}
+
 /* ------------------------------------------------------------------- cards */
 
 .pt-grid {
@@ -258,12 +288,32 @@ body {
 /* Spans the grid: a free-text reason needs the room a date field does not. */
 .pt-form__wide { grid-column: 1 / -1; }
 
+/*
+ * Two controls that are one measurement — an area and its unit. Splitting them
+ * across grid cells reads as two unrelated questions, and a unit on its own line
+ * looks optional when it is not.
+ */
+.pt-field-row { display: flex; gap: var(--pt-space-2); }
+.pt-field-row input { flex: 1 1 auto; min-width: 0; }
+.pt-field-row select { flex: 0 0 auto; }
+
 .pt-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--pt-space-3);
   align-items: center;
   margin-top: var(--pt-space-3);
+}
+
+/*
+ * The same row inside a card header, where the block margin would push the
+ * buttons out of line with the heading they sit beside. `flex-end` so a wrap at
+ * phone width stacks them against the right edge rather than centring them under
+ * the title.
+ */
+.pt-actions--inline {
+  margin-top: 0;
+  justify-content: flex-end;
 }
 
 /*

@@ -8,7 +8,12 @@
 import { assertFilingReady, isProvisional, rulesFor } from './rule-table.js';
 import { compare, compute as computeSlab, slabTax, taxableIncome, topMarginalRatePct } from './slabs.js';
 import { apply as applySurcharge } from './surcharge.js';
-import { classify, compute as computeCapitalGains, grandfatheredCost } from './capital-gains.js';
+import {
+  classify,
+  compute as computeCapitalGains,
+  grandfatheredCost,
+  rule115Legs,
+} from './capital-gains.js';
 import { aggregate, withholdingCredit } from './other-sources.js';
 import { compute as computeForeignTaxCredit } from './foreign-tax-credit.js';
 import { classify as classifyHni } from './hni.js';
@@ -28,7 +33,19 @@ export const SlabCalculator = { compute: computeSlab, compare, slabTax, taxableI
 export const SurchargeCalculator = { apply: applySurcharge };
 
 /** US-5.7 / US-5.8 — capital gains. */
-export const CapitalGainsEngine = { classify, compute: computeCapitalGains, grandfatheredCost };
+export const CapitalGainsEngine = {
+  classify,
+  compute: computeCapitalGains,
+  grandfatheredCost,
+  /**
+   * The two rupee legs of a disposal and the gain between them (Rule 115).
+   *
+   * Exported so the import path can STORE what the engine would compute, rather
+   * than reimplementing the conversion beside it.
+   */
+  rule115Legs,
+};
+export type { Rule115Legs } from './capital-gains.js';
 
 /** US-5.9 — other-sources income. */
 export const OtherSourcesAggregator = { aggregate, withholdingCredit };

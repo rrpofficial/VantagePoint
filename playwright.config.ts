@@ -26,6 +26,12 @@ const port = process.env.PORTTRACK_WEB_PORT ?? '5173';
 
 export default defineConfig({
   testDir: './tests/e2e',
+  /*
+   * Refuses to start against a vault that already has data. The suite is
+   * cumulative and asserts that figures CHANGED — false on a second run, which
+   * surfaces as half a dozen failures that name everything except the cause.
+   */
+  globalSetup: './tests/e2e/global-setup.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

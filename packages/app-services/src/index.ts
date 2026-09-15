@@ -18,6 +18,7 @@ export {
   MANUAL_TRADE_CLASSES,
   ReferenceUC,
   TemplateUC,
+  PropertyUC,
   TradeUC,
   ValuePortfolioUC,
   VaultUC,
@@ -41,6 +42,9 @@ export {
   type ManualTradeClass,
   type RecordLoanInput,
   type RecordPaymentInput,
+  type RecordPropertyInput,
+  type RecordPropertyResult,
+  type PropertyAdvisory,
   type RecordTradeInput,
   type RecordTradeResult,
   type TemplateSummary,
@@ -52,6 +56,33 @@ export {
   resetEditMode,
   type EditModeState,
 } from './edit-mode.js';
+
+export {
+  DEFAULT_INCOME_INCLUSIONS,
+  IncomeInclusionsUC,
+  enabledInclusionLabels,
+  incomeInclusionsOf,
+  loadIncomeInclusions,
+  resetIncomeInclusions,
+  saveIncomeInclusions,
+  type IncomeInclusions,
+} from './income-inclusions.js';
+
+export {
+  RatesUC,
+  type ImportRatesInput,
+  type ImportRatesReport,
+  type RateCoverage,
+} from './rates.js';
+
+export {
+  stampForeignRates,
+  type RateStampResult,
+  type UnpricedLeg,
+} from './foreign-rates.js';
+
+export { useVaultRateStore, useMemoryRateStore, vaultRateStore } from './vault-rate-store.js';
+export { vaultFxSource } from './fx-source.js';
 
 export {
   configure,

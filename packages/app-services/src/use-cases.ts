@@ -5,6 +5,8 @@
  * business rule lives here — if a calculation appears in this file it is in the
  * wrong layer, and the API's "thin shell" test exists to keep it that way.
  */
+import { Decimal } from 'decimal.js';
+import { DualRateConverter } from '@porttrack/fx-itbr';
 import {
   DuplicateLoanError,
   DuplicateTradeError,
@@ -13,6 +15,7 @@ import {
   FyCalendar,
   Money,
   Ok,
+  RateUnavailableError,
   VaultStateError,
   type EgressAuditEntry,
   type FinancialYear,
@@ -24,12 +27,23 @@ import {
 } from '@porttrack/shared-kernel';
 import { createHash } from 'node:crypto';
 import {
+  AREA_UNITS,
+  PROPERTY_KINDS,
   ChitLedger,
   FifoAllocator,
   HandLoanLedger,
   LoanExporter,
   ValuationEngine,
   applyLoanEdit,
+  bucketOf,
+  reconcileHoldings,
+  type AdvanceTaxPayment,
+  type AreaUnit,
+  type PropertyKind,
+  type AssetClass,
+  type HoldingsReconciliation,
+  type TaxSubject,
+  type AssetBucket,
   loanDuplicatesOf,
   type Asset,
   type ChitEmiType,
@@ -69,6 +83,7 @@ import {
 } from '@porttrack/snapshot';
 import {
   AdvanceTaxEngine,
+  CapitalGainsEngine,
   HniClassifier,
   SlabCalculator,
   TaxRuleTable,
@@ -76,6 +91,7 @@ import {
   type HniClassification,
   type IncomeProfile,
   type RegimeComparison,
+  type TaxRuleSet,
 } from '@porttrack/tax-engine';
 import {
   LedgerProjector,
@@ -84,6 +100,7 @@ import {
   TemplateRegistry,
   type ImportMode,
   type ImportReport,
+  type ParsedTransaction,
   type ParserName,
 } from '@porttrack/ingestion';
 import {
@@ -92,13 +109,31 @@ import {
   ExitRepository,
   LiabilityRepository,
   LoanAuditRepository,
+  AdvanceTaxPaymentRepository,
+  PriceRepository,
   SettingsRepository,
+  type AssetPrice,
   SnapshotRepository,
   Vault,
   type SnapshotSummary,
 } from '@porttrack/persistence';
 import { currentPorts } from './context.js';
 import { requireEditMode, resetEditMode } from './edit-mode.js';
+import {
+  incomeInclusionsOf,
+  loadIncomeInclusions,
+  resetIncomeInclusions,
+} from './income-inclusions.js';
+import { stampForeignRates } from './foreign-rates.js';
+import { useMemoryRateStore, useVaultRateStore } from './vault-rate-store.js';
+import {
+  buildPropertyEntry,
+  type PropertyAdvisory,
+  type RecordPropertyInput,
+  type RecordPropertyResult,
+} from './property-entry.js';
+
+export type { PropertyAdvisory, RecordPropertyInput, RecordPropertyResult };
 
 /* ------------------------------------------------------------------- vault */
 
@@ -108,6 +143,14 @@ export const VaultUC = {
     if (!result.ok) return result;
     // Vault-backed state can only be read once the key exists.
     await loadIncomeProfile();
+    await loadIncomeInclusions();
+    /*
+     * Rate resolution moves to the vault here, and only here. Before this point
+     * `fx-itbr` resolves against an empty in-memory store, which is correct: a
+     * locked vault has no rates to offer, and a lookup must fail as unavailable
+     * rather than throw out of pure valuation code.
+     */
+    useVaultRateStore();
     currentPorts().logger.info('vault unlocked');
     return Ok({ dataDir: '', unlocked: true });
   },
@@ -116,10 +159,16 @@ export const VaultUC = {
     // Salary is as sensitive as holdings; it must not outlive the session in
     // memory once the vault it came from is closed.
     setIncomeProfile(undefined);
+    // Back to the default (both excluded) rather than to the last vault's
+    // choice: the next unlock may be a different vault, and inheriting its
+    // predecessor's tax position would apply a setting nobody chose here.
+    resetIncomeInclusions();
     // The passphrase was entered to open one window on one session. Leaving edit
     // mode on across a lock would hand the next person who unlocks a permission
     // they never asked for.
     resetEditMode();
+    // Back to memory, so nothing reads rates through a closed connection.
+    useMemoryRateStore();
   },
   /** Exposed so the API can answer readiness without importing persistence. */
   isUnlocked(): boolean {
@@ -142,15 +191,31 @@ export const ValuePortfolioUC = {
     // returns a plain array still satisfies this.
     const [assets, liabilities] = await Promise.all([ports.assets(), ports.liabilities()]);
 
-    return Ok(
-      ValuationEngine.value({
-        assets,
-        liabilities,
-        asOf,
-        ...(ports.prices === undefined ? {} : { prices: ports.prices }),
-        ...(ports.fx === undefined ? {} : { fx: ports.fx }),
-      }),
-    );
+    /*
+     * `toInr` REFUSES to convert without a rate, and refuses by throwing — the
+     * right call, since substituting 1.0 would report a $2,594 holding as ₹2,594.
+     * But a throw is not this layer's contract: it escaped as an exception, the
+     * route turned it into a 500, and the dashboard — which drops a failed
+     * valuation silently — showed "Loading your portfolio…" forever.
+     *
+     * Caught and returned as a Result so the missing rate is reported as the
+     * missing rate, which names the currency and date and is fixable from the
+     * message. Only a rate gap is caught; any other fault is still a fault.
+     */
+    try {
+      return Ok(
+        ValuationEngine.value({
+          assets,
+          liabilities,
+          asOf,
+          ...(ports.prices === undefined ? {} : { prices: ports.prices }),
+          ...(ports.fx === undefined ? {} : { fx: ports.fx }),
+        }),
+      );
+    } catch (cause) {
+      if (cause instanceof RateUnavailableError) return Err(cause);
+      throw cause;
+    }
   },
 };
 
@@ -323,30 +388,192 @@ function profileFor(fy: FinancialYear): Result<IncomeProfile> {
   });
 }
 
+/**
+ * Everything the year's instalments are computed from, read once.
+ *
+ * Disposals are filtered to the financial year here rather than in the engine:
+ * the engine narrows further to each quarter's due date, and handing it another
+ * year's sales would put them in scope for a quarter they cannot belong to.
+ *
+ * `assetClasses` is keyed by TRANSACTION, not by asset. One asset can hold lots
+ * of differing tax character — an equity-oriented and a debt-oriented tranche of
+ * the same fund — and the classifier reads the transaction key first.
+ */
+async function advanceTaxInputsFor(financialYear: FinancialYear): Promise<{
+  exits: readonly ExitTransaction[];
+  assetClasses: Record<string, AssetClass | TaxSubject>;
+  alreadyPaid: MoneyValue;
+}> {
+  const [allExits, assets, payments] = await Promise.all([
+    ExitRepository.all(),
+    AssetRepository.all(),
+    AdvanceTaxPaymentRepository.forYear(financialYear),
+  ]);
+
+  const from = FyCalendar.fyStart(financialYear);
+  const to = FyCalendar.fyEnd(financialYear);
+  const exits = allExits.filter((exit) => exit.exitDate >= from && exit.exitDate <= to);
+
+  const subjectOf = new Map<string, AssetClass | TaxSubject>(
+    assets.map((asset) => [
+      asset.assetId,
+      {
+        assetClass: asset.assetClass,
+        ...(asset.schemeCategory === undefined ? {} : { schemeCategory: asset.schemeCategory }),
+        ...(asset.equityAllocationPct === undefined
+          ? {}
+          : { equityAllocationPct: asset.equityAllocationPct }),
+      },
+    ]),
+  );
+
+  const assetClasses: Record<string, AssetClass | TaxSubject> = {};
+  for (const exit of exits) {
+    const subject = subjectOf.get(exit.assetId);
+    // A disposal whose asset is gone cannot be classified; the engine reports it
+    // by omission rather than guessing an asset class and a holding period.
+    if (subject !== undefined) assetClasses[exit.txnId] = subject;
+  }
+
+  return {
+    exits,
+    assetClasses,
+    alreadyPaid: Money.sum(
+      payments.map((payment) => payment.amount),
+      'INR',
+    ),
+  };
+}
+
+/**
+ * Total income for the ₹50 lakh tests — salary AND everything else.
+ *
+ * Both the HNI classification and the Schedule AL requirement turn on total
+ * income, and both were passed `grossSalary` alone. A taxpayer on ₹40 lakh of
+ * salary with ₹15 lakh of capital gains has ₹55 lakh of total income and was
+ * being told they were under the threshold — so Schedule AL read as not required
+ * when it was. That is a filing omission, not a display rounding.
+ *
+ * Capital gains come from the ledger, which is what Phase 1 made available. A
+ * disposal whose rupee value could not be established is EXCLUDED rather than
+ * guessed at, exactly as it is in the tax computation — so the answer can be
+ * understated when rates are missing, never invented.
+ */
+async function totalIncomeFor(
+  financialYear: FinancialYear,
+  income: IncomeProfile,
+  rules: TaxRuleSet,
+): Promise<MoneyValue> {
+  const ledger = await advanceTaxInputsFor(financialYear);
+  const gains = CapitalGainsEngine.compute(ledger.exits, ledger.assetClasses, rules, {
+    includeSellToCover: incomeInclusionsOf().sellToCoverGains,
+  });
+
+  return Money.sum(
+    [
+      income.grossSalary,
+      income.housePropertyIncome,
+      income.otherSourcesIncome,
+      gains.taxableStcg,
+      gains.taxableLtcg,
+    ],
+    'INR',
+  );
+}
+
 export const ComputeAdvanceTaxUC = {
-  execute(input: {
+  async execute(input: {
     financialYear: FinancialYear;
     quarter: Quarter;
   }): Promise<Result<AdvanceTaxInstallment>> {
     // Rules resolve first: a missing rule set must surface as its own error
     // rather than as a missing income profile (ADR-005).
     const rules = TaxRuleTable.rulesFor(input.financialYear);
-    if (!rules.ok) return Promise.resolve(rules);
+    if (!rules.ok) return rules;
 
     const profile = profileFor(input.financialYear);
-    if (!profile.ok) return Promise.resolve(profile);
+    if (!profile.ok) return profile;
 
-    return Promise.resolve(
-      AdvanceTaxEngine.installment({
-        financialYear: input.financialYear,
-        quarter: input.quarter,
-        income: profile.value,
-        exits: [],
-        assetClasses: {},
-        alreadyPaid: { amount: '0', currency: 'INR' },
-        rules: rules.value,
-      }),
-    );
+    const ledger = await advanceTaxInputsFor(input.financialYear);
+
+    return AdvanceTaxEngine.installment({
+      financialYear: input.financialYear,
+      quarter: input.quarter,
+      income: profile.value,
+      exits: ledger.exits,
+      assetClasses: ledger.assetClasses,
+      alreadyPaid: ledger.alreadyPaid,
+      rules: rules.value,
+      /*
+       * The taxpayer's own position on sell-to-cover, carried into the
+       * instalment so it rests on the same basis the year-end figure will. An
+       * instalment computed one way and a return filed the other is a shortfall
+       * that surfaces only at assessment.
+       */
+      includeSellToCover: incomeInclusionsOf().sellToCoverGains,
+    });
+  },
+
+  /** Advance tax already remitted for the year, newest first. */
+  payments(financialYear: FinancialYear): Promise<readonly AdvanceTaxPayment[]> {
+    return AdvanceTaxPaymentRepository.forYear(financialYear);
+  },
+
+  /**
+   * Records a payment against a quarter.
+   *
+   * An addition, so ungated like every other addition — the risk edit mode
+   * exists for is a figure silently CHANGING, and recording a challan that
+   * exists cannot understate anything.
+   */
+  async recordPayment(input: {
+    financialYear: FinancialYear;
+    quarter: Quarter;
+    amount: string;
+    paidOn: IsoDate;
+    challanRef?: string;
+    notes?: string;
+  }): Promise<Result<AdvanceTaxPayment>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    if (!ISO_DATE.test(input.paidOn)) {
+      return Err(new VaultStateError('a payment needs the date it was made, as YYYY-MM-DD'));
+    }
+    // Parsed, never trusted: `1,00,000` is a reasonable thing to type and must
+    // not reach storage unparsed (ADR-002).
+    const amount = Money.parse(input.amount, 'INR');
+    if (!amount.ok) return amount;
+    if (Money.compare(amount.value, Money.zero('INR')) <= 0) {
+      return Err(new VaultStateError('an advance tax payment must be greater than zero'));
+    }
+
+    const payment: AdvanceTaxPayment = {
+      paymentId: `atp_${input.financialYear}_${input.quarter}_${input.paidOn}_${amount.value.amount}`,
+      financialYear: input.financialYear,
+      quarter: input.quarter,
+      amount: amount.value,
+      paidOn: input.paidOn,
+      ...(input.challanRef === undefined || input.challanRef.trim().length === 0
+        ? {}
+        : { challanRef: input.challanRef.trim() }),
+      ...(input.notes === undefined || input.notes.trim().length === 0
+        ? {}
+        : { notes: input.notes.trim() }),
+    };
+
+    const saved = await AdvanceTaxPaymentRepository.save(payment);
+    return saved.ok ? Ok(payment) : saved;
+  },
+
+  async deletePayment(paymentId: string): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+    // Removing a recorded payment RAISES every later instalment, so it is a
+    // destructive change and gated like one.
+    const permitted = requireEditMode('deleting a recorded advance tax payment');
+    if (!permitted.ok) return permitted;
+    return AdvanceTaxPaymentRepository.delete(paymentId);
   },
 
   compareRegimes(financialYear: FinancialYear): Promise<Result<RegimeComparison>> {
@@ -368,7 +595,9 @@ export const ComputeAdvanceTaxUC = {
 
     return Ok(
       HniClassifier.classify({
-        totalIncome: profile.value.grossSalary,
+        // Salary plus house property, other sources and capital gains — not
+        // salary alone, which under-reported the ₹50 lakh test.
+        totalIncome: await totalIncomeFor(financialYear, profile.value, rules.value),
         netWorth,
         rules: rules.value,
       }),
@@ -377,6 +606,52 @@ export const ComputeAdvanceTaxUC = {
 };
 
 /* --------------------------------------------------------------- ingestion */
+
+/**
+ * Distinct market prices a statement stated, one per instrument.
+ *
+ * Every row of a holdings export carries the same price for a given symbol, so
+ * they collapse to one. Where two rows DISAGREE the price is dropped rather than
+ * picked between — a statement contradicting itself about what a share is worth
+ * is not a source to guess from, and valuing at cost is the safe answer.
+ */
+function marketPricesFrom(
+  transactions: readonly ParsedTransaction[],
+  sourceDocument: string,
+): readonly AssetPrice[] {
+  const seen = new Map<string, { price: string; currency: string; conflicting: boolean }>();
+
+  for (const txn of transactions) {
+    const instrument = txn.isin ?? txn.symbol;
+    if (instrument === undefined || txn.marketPricePerUnit === undefined) continue;
+
+    const existing = seen.get(instrument);
+    if (existing === undefined) {
+      seen.set(instrument, {
+        price: txn.marketPricePerUnit.amount,
+        currency: txn.marketPricePerUnit.currency,
+        conflicting: false,
+      });
+      continue;
+    }
+    // Compared numerically: `259.43` and `259.430` are the same price.
+    if (!new Decimal(existing.price).equals(txn.marketPricePerUnit.amount)) {
+      existing.conflicting = true;
+    }
+  }
+
+  const today = currentPorts().clock.today();
+  return [...seen.entries()]
+    .filter(([, value]) => !value.conflicting)
+    .map(([instrument, value]) => ({
+      instrument,
+      priceDate: today,
+      price: value.price,
+      currency: value.currency as 'USD',
+      source: 'STATEMENT',
+      sourceDocument,
+    }));
+}
 
 export const ImportStatementUC = {
   /**
@@ -417,12 +692,45 @@ export const ImportStatementUC = {
     });
     if (!projected.ok) return projected;
 
-    const saved = await AssetRepository.saveAll(projected.value.assets);
+    /*
+     * Rule 115 rates are stamped here rather than in the projector, because
+     * `ingestion` is pure and resolving a rate is a lookup against the vault's
+     * rate store. Each foreign lot is stamped from its acquisition date and each
+     * disposal from its exit date, so a vest and the sale that ended it are
+     * converted at the basis months that actually apply to them.
+     */
+    const stamped = stampForeignRates({
+      assets: projected.value.assets,
+      exits: projected.value.exits,
+    });
+
+    /*
+     * Market prices the statement stated, recorded so holdings can be carried at
+     * what they are WORTH rather than at what they cost.
+     *
+     * Dated with today, and that is a deliberate compromise: the export does not
+     * state its own as-of date anywhere, so the honest reading is "this is what
+     * the statement said when it was imported". Every screen showing a value
+     * derived from it shows that date, rather than implying the figure is live.
+     */
+    const prices = marketPricesFrom(report.value.transactions ?? [], input.fileName);
+    if (prices.length > 0) {
+      const stored = await PriceRepository.save(prices);
+      if (!stored.ok) return stored;
+    }
+
+    const saved = await AssetRepository.saveAll(stamped.assets);
     if (!saved.ok) return saved;
 
     // After the assets: an exit references its asset by foreign key.
-    const savedExits = await ExitRepository.saveAll(projected.value.exits);
+    const savedExits = await ExitRepository.saveAll(stamped.exits);
     if (!savedExits.ok) return savedExits;
+
+    if (stamped.unpriced.length > 0) {
+      currentPorts().logger.info(
+        `import stored ${String(stamped.unpriced.length)} foreign record(s) with no INR rate`,
+      );
+    }
 
     return Ok({
       ...report.value,
@@ -431,6 +739,13 @@ export const ImportStatementUC = {
       // Stated figures the engine recomputed differently — shown, not silently
       // overridden in either direction.
       reconciliation: projected.value.reconciliation,
+      /*
+       * Foreign figures that were stored WITHOUT an INR value, because no rate
+       * could be resolved for their Rule 115 basis date. Surfaced on the import
+       * report for the same reason a rejected row is: an amount silently missing
+       * its rupee value is one that quietly drops out of a tax total later.
+       */
+      ...(stamped.unpriced.length === 0 ? {} : { unpriced: stamped.unpriced }),
     });
   },
 };
@@ -978,6 +1293,16 @@ export const TradeUC = {
       quantity.value.amount,
       price.value.amount,
       price.value.currency,
+      /*
+       * The tranche field, empty for a hand-typed trade.
+       *
+       * Present so this key has the SAME shape as the ones `ledgerNaturalKeys`
+       * builds — it gained a trailing tranche segment so that one stock-plan
+       * order selling equal amounts out of two vests is not read as one sale.
+       * Omitting it here compares `…|INR` against `…|INR|` and nothing ever
+       * matches, which silently turns duplicate detection off.
+       */
+      '',
     ].join('|');
     const existingKeys = LedgerProjector.naturalKeys(existing, existingExits);
     const occurrences = existingKeys.filter((key) => key === naturalKey).length;
@@ -1051,6 +1376,127 @@ export const TradeUC = {
       unapplied: projected.value.unapplied.map((row) => ({ reason: row.reason })),
     });
   },
+};
+
+/* ------------------------------------------------------ immovable property */
+
+export const PropertyUC = {
+  /**
+   * A property purchase or sale typed in by hand.
+   *
+   * Through the projector, like every other manual entry: a sale must deplete
+   * its lot and reach the capital-gains engine as an ordinary disposal. What is
+   * different is only the INPUT — a deed states area, a rate and four separate
+   * duties where a contract note states quantity and price — and
+   * `buildPropertyEntry` is what turns one into the other.
+   */
+  async record(input: RecordPropertyInput): Promise<Result<RecordPropertyResult>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    /*
+     * Ungated, like every other ADDITION — `TradeUC.record` and
+     * `recordPayment` are the precedent. Edit mode exists for the risk of a
+     * figure silently CHANGING; recording a purchase or a sale that happened
+     * adds a fact and cannot understate anything. Gating it here made the only
+     * way to enter a property unreachable until the user found Settings, for a
+     * write no less safe than typing a trade.
+     */
+    const built = buildPropertyEntry(input);
+    if (!built.ok) return built;
+    const { property, transaction, charges, advisories } = built.value;
+
+    const [existing, existingExits] = await Promise.all([
+      AssetRepository.all(),
+      ExitRepository.all(),
+    ]);
+
+    /*
+     * Two purchases of one property on one day for one price is not a thing that
+     * happens, but the same entry typed twice is — and unlike a share trade
+     * there is no order id to tell them apart, so the check is on the deed's
+     * identity rather than on a natural key the projector builds.
+     */
+    const naturalKey = [
+      input.side,
+      input.transactionDate,
+      property.propertyName,
+      transaction.consideration.amount,
+    ].join('|');
+    const duplicate = existing.some(
+      (asset) =>
+        asset.property?.propertyName === property.propertyName &&
+        (input.side === 'BUY'
+          ? asset.lots.some(
+              (lot) =>
+                lot.acquisitionDate === input.transactionDate &&
+                lot.property?.consideration.amount === transaction.consideration.amount,
+            )
+          : existingExits.some(
+              (exit) =>
+                exit.assetId === asset.assetId &&
+                exit.exitDate === input.transactionDate &&
+                exit.property?.consideration.amount === transaction.consideration.amount,
+            )),
+    );
+
+    if (duplicate && input.confirmDuplicate !== true) {
+      return Err(
+        new DuplicateTradeError(
+          `a ${input.side.toLowerCase()} of ${property.propertyName} on ${input.transactionDate} ` +
+            'for this amount is already recorded',
+          [property.propertyName],
+        ),
+      );
+    }
+
+    const token = createHash('sha256')
+      .update([naturalKey, duplicate ? '1' : '0'].join('|'))
+      .digest('hex')
+      .slice(0, 16);
+
+    const projected = LedgerProjector.project({
+      transactions: [
+        {
+          kind: input.side,
+          date: input.transactionDate,
+          // The property's name is its identity on the ledger, the way a symbol
+          // is a share's. `propertyDetail` carries everything a symbol cannot.
+          symbol: property.propertyName,
+          assetClass: 'REAL_ESTATE',
+          quantity: charges.quantity,
+          pricePerUnit: charges.costPerUnit,
+          fees: charges.fees,
+          otherCharges: charges.otherCharges,
+          property: transaction,
+          propertyDetail: property,
+          provenance: {
+            sourceFile: 'manual entry',
+            sourceRow: 1,
+            parserName: 'MANUAL' as const,
+            importedAt: `manual:${token}`,
+          },
+        },
+      ],
+      parser: 'MANUAL',
+      existing,
+      existingExits,
+    });
+    if (!projected.ok) return projected;
+
+    const saved = await AssetRepository.saveAll(projected.value.assets);
+    if (!saved.ok) return saved;
+    const savedExits = await ExitRepository.saveAll(projected.value.exits);
+    if (!savedExits.ok) return savedExits;
+
+    return Ok({
+      assetId: projected.value.touched[0] ?? '',
+      advisories,
+    });
+  },
+
+  kinds: (): Promise<Result<readonly PropertyKind[]>> => Promise.resolve(Ok(PROPERTY_KINDS)),
+  areaUnits: (): Promise<Result<readonly AreaUnit[]>> => Promise.resolve(Ok(AREA_UNITS)),
 };
 
 /* -------------------------------------------------------------- hand loans */
@@ -1583,6 +2029,15 @@ export interface FinancialYearOption {
   /** False when no rule set exists; the engine refuses rather than approximating. */
   readonly rulesAvailable: boolean;
   readonly rulesStatus?: 'PROVISIONAL' | 'VERIFIED';
+  /**
+   * Why that year's rule set is provisional, in its own words.
+   *
+   * The years differ in ways the generic warning cannot express: one is sourced
+   * from Bills awaiting enactment, another has figures never checked against the
+   * Act at all. Both cannot be filed on; only the second is a placeholder. A
+   * user deciding whether to trust a number needs to know which.
+   */
+  readonly rulesNote?: string;
 }
 
 export interface CalendarYearOption {
@@ -1643,6 +2098,9 @@ export const ReferenceUC = {
         isCurrent: fy === currentFy,
         rulesAvailable: rules.ok,
         ...(rules.ok ? { rulesStatus: rules.value.status } : {}),
+        ...(rules.ok && rules.value.provisionalNote !== undefined
+          ? { rulesNote: rules.value.provisionalNote }
+          : {}),
       });
     }
 
@@ -1701,15 +2159,182 @@ export const TemplateUC = {
 
 /* ------------------------------------------------------------------ ledger */
 
+/**
+ * A holding plus the tab it belongs in.
+ *
+ * Computed HERE rather than in the browser. The SPA holds no domain logic by
+ * design, and the equity/non-equity split turns on tax character (ADR-016) — a
+ * second copy of that rule in the browser would drift from the engine's, and the
+ * screen would start disagreeing with the tax figure beside it.
+ */
+export interface BucketedAsset extends Asset {
+  readonly bucket: AssetBucket;
+  /**
+   * What the units still held cost, in the holding's OWN currency, with the
+   * charges that formed the basis.
+   *
+   * Computed here rather than in the browser, for the reason the loan and chit
+   * registers already are: summing decimal strings as JavaScript numbers
+   * reintroduces exactly the drift ADR-002 exists to prevent.
+   */
+  readonly costBasis: MoneyValue;
+  /**
+   * The same figure in rupees, at the most recent published SBI TT buy rate.
+   *
+   * ABSENT when no rate could be resolved — never silently equal to the native
+   * amount. A screen adding an unconverted dollar figure into a rupee total is
+   * how `$88,711` came to be added to a column of rupees and labelled `₹`.
+   *
+   * This is the VALUATION rate (ADR-003) — the latest working day's — because
+   * this figure is what a holding is carried at today. The Rule 115 rate, from
+   * the month-end before a transaction, belongs to tax computations only.
+   */
+  readonly costBasisInr?: MoneyValue;
+  /** The rate used, so the rupee figure can be checked rather than trusted. */
+  readonly conversionRate?: string;
+  readonly heldQuantity: string;
+
+  /**
+   * What the holding is WORTH, where a price is known — native and in rupees.
+   *
+   * Absent when no price has ever been recorded for the instrument, which is the
+   * permanent state for a flat, an unlisted holding, a hand loan or a chit.
+   * Those are carried at cost, deliberately: inventing a market value for an
+   * illiquid asset corrupts net worth.
+   *
+   * A screen must therefore never assume this exists, and must say which of the
+   * two it is showing — a total that silently mixes priced and unpriced holdings
+   * is a hybrid, not a valuation.
+   */
+  readonly marketValue?: MoneyValue;
+  readonly marketValueInr?: MoneyValue;
+  readonly marketPricePerUnit?: MoneyValue;
+  /**
+   * When that price was recorded. Shown wherever the value is, because prices
+   * arrive by import: the figure is as at the last statement loaded, not today.
+   */
+  readonly priceAsOf?: string;
+  /** `marketValueInr − costBasisInr`, where both are known. */
+  readonly unrealisedInr?: MoneyValue;
+}
+
+/** Cost of the units still held, plus the charges on them. Decimal throughout. */
+function heldCostBasis(asset: Asset): { cost: MoneyValue; quantity: string } {
+  let cost = new Decimal(0);
+  let quantity = new Decimal(0);
+
+  for (const lot of asset.lots) {
+    const remaining = new Decimal(lot.remainingQuantity);
+    if (remaining.lessThanOrEqualTo(0)) continue;
+    quantity = quantity.plus(remaining);
+
+    // Charges are apportioned to the units still held, so a partly-sold lot
+    // does not carry the whole purchase's brokerage.
+    const proportion = remaining.dividedBy(lot.quantity);
+    cost = cost
+      .plus(remaining.times(lot.costPerUnit.amount))
+      .plus(new Decimal(lot.fees.amount).times(proportion))
+      .plus(new Decimal(lot.stt.amount).times(proportion))
+      .plus(new Decimal(lot.otherCharges.amount).times(proportion));
+  }
+
+  return {
+    cost: Money.of(cost.toFixed(2), asset.currency),
+    quantity: quantity.toFixed(),
+  };
+}
+
 export const LedgerUC = {
-  assets(): Promise<readonly Asset[]> {
-    return AssetRepository.all();
+  async assets(): Promise<readonly BucketedAsset[]> {
+    const assets = await AssetRepository.all();
+    const today = currentPorts().clock.today();
+
+    return assets.map((asset) => {
+      const { cost, quantity } = heldCostBasis(asset);
+
+      /*
+       * `ratesFor` walks back from today over non-publishing days, so this is the
+       * last WORKING day's rate — which is what "what is it worth now" means for
+       * a holding. A currency with no rate yields no rupee figure at all.
+       */
+      const rates =
+        asset.currency === 'INR' ? undefined : DualRateConverter.ratesFor(asset.currency, today);
+      const inr =
+        asset.currency === 'INR'
+          ? cost
+          : rates?.ok === true
+            ? DualRateConverter.convert(cost, rates.value).valuationInr
+            : undefined;
+
+      /*
+       * What it is worth, where a price exists. Same conversion path as the cost
+       * so the two figures are comparable — a value in rupees against a cost in
+       * dollars would make the difference between them meaningless.
+       */
+      const recorded =
+        new Decimal(quantity).lessThanOrEqualTo(0)
+          ? undefined
+          : PriceRepository.latest(asset.isin ?? asset.symbol ?? '', today);
+
+      const marketValue =
+        recorded === undefined
+          ? undefined
+          : Money.of(
+              new Decimal(recorded.price).times(quantity).toFixed(2),
+              recorded.currency,
+            );
+
+      const marketValueInr =
+        marketValue === undefined
+          ? undefined
+          : marketValue.currency === 'INR'
+            ? marketValue
+            : rates?.ok === true
+              ? DualRateConverter.convert(marketValue, rates.value).valuationInr
+              : undefined;
+
+      const unrealisedInr =
+        marketValueInr === undefined || inr === undefined
+          ? undefined
+          : Money.of(new Decimal(marketValueInr.amount).minus(inr.amount).toFixed(2), 'INR');
+
+      return {
+        ...asset,
+        bucket: bucketOf(asset),
+        costBasis: cost,
+        heldQuantity: quantity,
+        ...(inr === undefined ? {} : { costBasisInr: inr }),
+        ...(asset.currency === 'INR' || rates?.ok !== true
+          ? {}
+          : { conversionRate: rates.value.valuationRate }),
+        ...(marketValue === undefined ? {} : { marketValue }),
+        ...(marketValueInr === undefined ? {} : { marketValueInr }),
+        ...(recorded === undefined
+          ? {}
+          : {
+              marketPricePerUnit: Money.of(recorded.price, recorded.currency),
+              priceAsOf: recorded.priceDate,
+            }),
+        ...(unrealisedInr === undefined ? {} : { unrealisedInr }),
+      };
+    });
   },
   liabilities(): Promise<readonly Liability[]> {
     return LiabilityRepository.all();
   },
   exits(): Promise<readonly ExitTransaction[]> {
     return ExitRepository.all();
+  },
+
+  /**
+   * Whether the imported history accounts for what the broker says is held.
+   *
+   * A standing check, not an import-time one. The stated figures live on the
+   * lots, so this answers the same question whatever order the files were loaded
+   * in — and keeps answering it as more history arrives.
+   */
+  async reconciliation(): Promise<HoldingsReconciliation> {
+    return reconcileHoldings(await AssetRepository.all());
   },
 
   /**
@@ -1859,6 +2484,11 @@ export const GenerateComplianceUC: GenerateComplianceUCOps = {
     const profile = profileFor(financialYear);
     if (!profile.ok) return profile;
 
+    // The AL threshold is read from the rule set, so the year's rules have to
+    // resolve before the total income that is tested against them.
+    const rules = TaxRuleTable.rulesFor(financialYear);
+    if (!rules.ok) return rules;
+
     const [assets, liabilities] = await Promise.all([
       AssetRepository.all(),
       LiabilityRepository.all(),
@@ -1866,7 +2496,9 @@ export const GenerateComplianceUC: GenerateComplianceUCOps = {
 
     return ScheduleAlGenerator.generate({
       domesticSnapshot: snapshot,
-      totalIncome: profile.value.grossSalary,
+      // Schedule AL is required on TOTAL income above the threshold. Passing
+      // salary alone told a taxpayer with large gains that they need not file it.
+      totalIncome: await totalIncomeFor(financialYear, profile.value, rules.value),
       // Schedule AL is filed with the return for the ASSESSMENT year (FY + 1).
       assessmentYear: FyCalendar.assessmentYearOf(financialYear),
       items: ScheduleAlGenerator.itemsFrom({ assets, liabilities }),

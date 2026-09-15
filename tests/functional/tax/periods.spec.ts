@@ -70,25 +70,102 @@ describe('Scenario: The assessment year is the year AFTER the financial year', (
 });
 
 describe('Scenario: Years without a rule set are offered but flagged', () => {
+  /*
+   * Asserted against a year that genuinely ships no rule set, rather than
+   * against "the current year". It used to name 2026-27, which stopped being an
+   * example the moment that year was added — and a test that only passes while a
+   * gap exists is a test that expires.
+   */
   it('marks a year with no rates as unavailable rather than hiding it', () => {
     on('2026-08-04');
     const periods = ReferenceUC.periods();
 
-    const current = periods.financialYears.find((year) => year.financialYear === '2026-27');
-    // Rule sets ship for 2024-25 and 2025-26 only. Hiding 2026-27 would leave a
-    // user hunting for the year they are actually in; flagging it explains why
-    // nothing computes.
-    expect(current?.rulesAvailable).toBe(false);
-    expect(current?.rulesStatus).toBeUndefined();
+    const unsupported = periods.financialYears.find((year) => year.financialYear === '2023-24');
+    // Hiding it would leave a user hunting for the year they want; flagging it
+    // explains why nothing computes.
+    expect(unsupported?.rulesAvailable).toBe(false);
+    expect(unsupported?.rulesStatus).toBeUndefined();
   });
 
-  it('reports the status of a year that does have rates', () => {
+  /*
+   * FY 2026-27 is the first year under the Income-tax Act 2025, and its rates
+   * are transcribed from Bills rather than from enacted text — so it is offered,
+   * computes, and still carries PROVISIONAL.
+   */
+  /*
+   * FY 2026-27 is the first year charged under the Income-tax Act 2025, and it
+   * was provisional only for as long as its source was a Bill. The Finance Act
+   * 2026 was assented on 30 March 2026, so it is now sourced from enacted text.
+   */
+  it('offers the first Income-tax Act 2025 year, sourced from the enacted Act', () => {
+    on('2026-08-04');
+
+    const current = ReferenceUC.periods().financialYears.find(
+      (year) => year.financialYear === '2026-27',
+    );
+
+    expect(current?.rulesAvailable).toBe(true);
+    expect(current?.rulesStatus).toBe('VERIFIED');
+  });
+
+  /*
+   * FY 2025-26 was verified against the Finance Bill 2026 First Schedule
+   * Part I-A, so it is the year that proves the status is real data and not a
+   * constant: every year reporting PROVISIONAL would assert nothing.
+   */
+  it('reports a verified year as verified, carrying no note', () => {
     on('2026-08-04');
     const available = ReferenceUC.periods().financialYears.find(
       (year) => year.financialYear === '2025-26',
     );
     expect(available?.rulesAvailable).toBe(true);
-    expect(available?.rulesStatus).toBe('PROVISIONAL');
+    expect(available?.rulesStatus).toBe('VERIFIED');
+    expect(available?.rulesNote).toBeUndefined();
+  });
+
+  it('still reports a year that is genuinely unverified as provisional', () => {
+    on('2026-08-04');
+    const unverified = ReferenceUC.periods().financialYears.find(
+      (year) => year.financialYear === '2024-25',
+    );
+    expect(unverified?.rulesStatus).toBe('PROVISIONAL');
+    expect(unverified?.rulesNote).toContain('FY 2025-26');
+  });
+
+  /*
+   * The banner reads this. It used to render unconditionally on every tax
+   * screen for every year, so it could not be cleared by sourcing a year's
+   * rates and carried no information about which year was unverified or why.
+   */
+  it('carries each year’s own reason, because the years differ', () => {
+    on('2026-08-04');
+    const years = ReferenceUC.periods().financialYears;
+
+    const provisional = years.filter((year) => year.rulesStatus === 'PROVISIONAL');
+    expect(provisional.length).toBeGreaterThan(0);
+    for (const year of provisional) {
+      expect(year.rulesNote).toBeDefined();
+      expect(year.rulesNote?.length ?? 0).toBeGreaterThan(0);
+    }
+
+    // FY 2024-25 is provisional because its slab table is the FOLLOWING year's,
+    // carried back — materially different from a year merely awaiting enactment,
+    // and the generic banner text said neither.
+    const carriedBack = years.find((year) => year.financialYear === '2024-25');
+    expect(carriedBack?.rulesNote).toContain('FY 2025-26');
+    expect(carriedBack?.rulesNote).toContain('Finance (No. 2) Act 2024');
+  });
+
+  /** A year with no rule set carries no status and no note to show. */
+  it('leaves status and note absent when there are no rates', () => {
+    on('2030-01-15');
+    const missing = ReferenceUC.periods().financialYears.find(
+      (year) => !year.rulesAvailable,
+    );
+
+    expect(missing).toBeDefined();
+    expect(missing?.rulesStatus).toBeUndefined();
+    expect(missing?.rulesNote).toBeUndefined();
   });
 });
 
@@ -115,14 +192,18 @@ describe('Scenario: The current calendar year is offered for Schedule FA', () =>
 });
 
 describe('Scenario: Offering a period and defaulting to it are separate decisions', () => {
+  /*
+   * Now that FY 2026-27 ships a rule set, the current year IS computable and the
+   * default follows it. The rule being asserted is unchanged — default to the
+   * most recent year that can actually be computed — but the answer moved when
+   * the rates arrived, which is the behaviour working rather than breaking.
+   */
   it('defaults to the most recent year that can actually be computed', () => {
     on('2026-08-04');
     const periods = ReferenceUC.periods();
 
-    // FY 2026-27 is current but has no rule set: opening the tax screen on it
-    // would show an error the user cannot act on and did not cause.
     expect(periods.currentFinancialYear).toBe('2026-27');
-    expect(periods.defaultFinancialYear).toBe('2025-26');
+    expect(periods.defaultFinancialYear).toBe('2026-27');
   });
 
   it('still offers the current year even when it is not the default', () => {

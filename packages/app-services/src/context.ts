@@ -8,8 +8,9 @@
  */
 import { Money, type Clock } from '@porttrack/shared-kernel';
 import type { Asset, FxSource, Liability, PriceSource } from '@porttrack/core-domain';
-import { AssetRepository, LiabilityRepository } from '@porttrack/persistence';
+import { AssetRepository, LiabilityRepository, vaultPriceSource } from '@porttrack/persistence';
 import { createLogger, type Logger } from '@porttrack/platform';
+import { vaultFxSource } from './fx-source.js';
 
 export interface AppContext {
   readonly dataDir: string;
@@ -57,6 +58,27 @@ function vaultBackedPorts(): Ports {
     logger: createLogger({ sink: NO_SINK, now: () => systemClock.now() }),
     assets: () => AssetRepository.all(),
     liabilities: () => LiabilityRepository.all(),
+    /*
+     * Wired at last. This port existed from the start and nothing ever supplied
+     * it, so `marketValueOf` looked for a quote, found none, and fell back to
+     * cost basis — for every holding, everywhere. Three screens then labelled
+     * that cost "value" and "net worth".
+     *
+     * A locked vault returns no quote rather than throwing, so this is safe to
+     * call before unlock; valuation then carries everything at cost, which is
+     * what it did before and is still the correct answer for an unpriced asset.
+     */
+    prices: vaultPriceSource,
+    /*
+     * Also wired at last, and its absence was louder than the price port's. An
+     * unsupplied `prices` falls back to cost; an unsupplied `fx` THROWS, because
+     * valuation refuses to invent an exchange rate. That throw escaped the use
+     * case as an exception rather than a Result, so one USD holding returned a
+     * 500 for the whole portfolio and the dashboard sat on "Loading your
+     * portfolio…" indefinitely — with the rupee assets valued perfectly well and
+     * never shown.
+     */
+    fx: vaultFxSource,
   };
 }
 

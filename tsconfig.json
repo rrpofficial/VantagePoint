@@ -20,6 +20,15 @@
       "@porttrack/test-kit": ["tests/test-kit/index.ts"]
     }
   },
+  /*
+   * `apps/web` is excluded HERE because it needs a different compiler setup —
+   * JSX, DOM libs, and vite's client types rather than node's. It is NOT
+   * unchecked: `pnpm typecheck` runs `apps/web/tsconfig.json` as a second pass.
+   *
+   * That second pass was missing until a `ReferenceError` for a constant left
+   * behind during a refactor reached a running container. The whole SPA had been
+   * outside the typecheck, and nothing said so.
+   */
   "include": ["packages/**/*.ts", "apps/**/*.ts", "tests/**/*.ts", "scripts/**/*.mts", "*.ts"],
   "exclude": ["apps/web"]
 }
