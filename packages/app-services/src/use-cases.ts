@@ -39,6 +39,8 @@ import {
   ValuationEngine,
   applyLoanEdit,
   bucketOf,
+  dailyQuantities,
+  firstAcquisitionOf,
   reconcileHoldings,
   type AdvanceTaxPayment,
   type BorrowedLoan,
@@ -79,6 +81,8 @@ import { borrowerRef } from '@porttrack/ingestion';
 import {
   ScheduleAlGenerator,
   ScheduleFaGenerator,
+  type ForeignAccountDisclosure,
+  type ForeignHoldingDisclosure,
   type ScheduleAl,
   type ScheduleFaA3Row,
   type ScheduleFaDRow,
@@ -118,8 +122,10 @@ import {
   AssetRepository,
   ChitScheduleRepository,
   ExitRepository,
+  ForeignDisclosureRepository,
   LiabilityRepository,
   LoanAuditRepository,
+  MarkRepository,
   AdvanceTaxPaymentRepository,
   PriceRepository,
   SettingsRepository,
@@ -769,6 +775,16 @@ export const ImportStatementUC = {
     if (prices.length > 0) {
       const stored = await PriceRepository.save(prices);
       if (!stored.ok) return stored;
+      /*
+       * Into the daily marks series too (Phase 6). Schedule FA's peak is taken
+       * over that series, so a price that reached `asset_prices` and stopped
+       * there would leave a gap in a disclosure — and the gap would be reported
+       * as missing data when the data had in fact been imported.
+       *
+       * Idempotent, so this is free to run on every import.
+       */
+      const synced = await MarkRepository.syncFromLedger();
+      if (!synced.ok) return synced;
     }
 
     const saved = await AssetRepository.saveAll(stamped.assets);
@@ -1228,6 +1244,18 @@ export const MANUAL_TRADE_CLASSES = [
   { assetClass: 'FOREIGN_ETF', label: 'Foreign ETF', identifier: 'SYMBOL' },
   { assetClass: 'UNLISTED_SHARES', label: 'Unlisted shares', identifier: 'NAME' },
   { assetClass: 'SGB', label: 'Sovereign gold bond', identifier: 'SYMBOL' },
+  /*
+   * Bullion and crypto are trades, not balances (Phase 5).
+   *
+   * Ten grams bought at a rate and sold FIFO is a quantity at a price in every
+   * respect that matters here: it has a cost basis, a holding period and a
+   * capital gain on disposal. Putting them in the balance form would have given
+   * them a stated figure with no basis, which is precisely what a gains
+   * computation cannot work from.
+   */
+  { assetClass: 'GOLD_PHYSICAL', label: 'Gold — physical (grams)', identifier: 'NAME' },
+  { assetClass: 'GOLD_DIGITAL', label: 'Gold — digital / ETF units', identifier: 'NAME' },
+  { assetClass: 'CRYPTO', label: 'Crypto asset', identifier: 'SYMBOL' },
 ] as const;
 
 export type ManualTradeClass = (typeof MANUAL_TRADE_CLASSES)[number]['assetClass'];
@@ -2817,6 +2845,20 @@ const domesticSnapshotId = (financialYear: FinancialYear) =>
   `DOM_31MAR${String(Number(financialYear.slice(0, 4)) + 1)}`;
 
 export const GenerateComplianceUC: GenerateComplianceUCOps = {
+  /**
+   * Table A3, from a real daily series or not at all (Phase 6).
+   *
+   * This used to return `Err` unconditionally, and that was the RIGHT answer for
+   * a build with no daily history: a peak taken from a closing value understates
+   * the disclosure, and under the Black Money Act an understated foreign
+   * disclosure is treated far more harshly than an understated domestic one.
+   *
+   * What changes here is that the refusal becomes a fact about the DATA. Every
+   * reason to refuse is now named and locatable — a missing rate series for a
+   * currency, a price gap of forty days in March, a holding with no entity
+   * detail — so the user can close it. What has not changed is that a gap is
+   * still a refusal. Nothing here approximates.
+   */
   async scheduleFaA3(calendarYear: number): Promise<Result<readonly ScheduleFaA3Row[]>> {
     const snapshot = await SnapshotRepository.findById(foreignSnapshotId(calendarYear));
     if (snapshot === undefined) {
@@ -2827,20 +2869,130 @@ export const GenerateComplianceUC: GenerateComplianceUCOps = {
       );
     }
 
-    /*
-     * Table A3 requires the PEAK value reached during the calendar year, which
-     * needs a daily price and rate series. This build records holdings and
-     * closing values but no daily history, so there is nothing to take a maximum
-     * over. Returning rows computed from the closing value alone would understate
-     * the peak — and under the Black Money Act an understated foreign disclosure
-     * is treated far more harshly than an understated domestic one, so this fails
-     * loudly instead.
-     */
-    return Err(
-      new VaultStateError(
-        'Schedule FA Table A3 needs a daily price and exchange-rate history to compute peak value; this build does not yet record one',
-      ),
+    const window = ScheduleFaGenerator.calendarYearWindow(calendarYear);
+    const [assets, exits, details] = await Promise.all([
+      AssetRepository.all(),
+      ExitRepository.all(),
+      ForeignDisclosureRepository.details(),
+    ]);
+    const detailFor = new Map(details.map((detail) => [detail.assetId, detail]));
+
+    const foreign = assets.filter(
+      (asset) => asset.jurisdiction === 'FOREIGN' && asset.lots.length > 0,
     );
+    if (foreign.length === 0) return Ok([]);
+
+    const holdings: ForeignHoldingDisclosure[] = [];
+    const blockers: string[] = [];
+
+    for (const asset of foreign) {
+      const detail = detailFor.get(asset.assetId);
+      if (detail === undefined) {
+        blockers.push(
+          `${asset.symbol ?? asset.assetId}: no entity country, name, address or nature recorded — ` +
+            'Schedule FA states all four and none is derivable from a holding (a USD-denominated ' +
+            'fund is routinely domiciled elsewhere)',
+        );
+        continue;
+      }
+
+      const acquired = firstAcquisitionOf(asset) ?? window.from;
+      // The series only has to cover the part of the year the holding existed.
+      const from = acquired > window.from ? acquired : window.from;
+
+      const instrument = asset.isin ?? asset.symbol ?? asset.assetId;
+      const prices = MarkRepository.coverage('ASSET', instrument, from, window.to);
+      const rates =
+        asset.currency === 'INR'
+          ? { covered: true, shortfall: undefined }
+          : MarkRepository.coverage('CURRENCY', asset.currency, from, window.to);
+
+      if (!prices.covered) blockers.push(`${asset.symbol ?? asset.assetId}: ${prices.shortfall ?? ''}`);
+      if (!rates.covered) blockers.push(`${asset.symbol ?? asset.assetId}: ${rates.shortfall ?? ''}`);
+      if (!prices.covered || !rates.covered) continue;
+
+      const priceSeries = MarkRepository.seriesFor('ASSET', instrument, from, window.to);
+      const rateSeries =
+        asset.currency === 'INR'
+          ? new Map<string, string>()
+          : MarkRepository.seriesFor('CURRENCY', asset.currency, from, window.to);
+
+      const dailyPrices = new Map(
+        [...priceSeries].map(([date, price]) => [date, Money.of(price, asset.currency)]),
+      );
+      const dailyRates = new Map(
+        asset.currency === 'INR'
+          ? [...priceSeries].map(([date]) => [date, '1'] as const)
+          : [...rateSeries],
+      );
+
+      const closingRate = dailyRates.get(window.to);
+      const closingPrice = dailyPrices.get(window.to);
+      if (closingRate === undefined || closingPrice === undefined) {
+        blockers.push(
+          `${asset.symbol ?? asset.assetId}: no 31-December mark, so the closing value cannot be stated`,
+        );
+        continue;
+      }
+
+      const quantities = dailyQuantities(asset, exits, from, window.to);
+      const closingQuantity = quantities.get(window.to) ?? '0';
+
+      const dividend = asset.incomeEvents
+        .filter((event) => event.date >= window.from && event.date <= window.to)
+        .reduce(
+          (sum, event) => Money.add(sum, event.grossAmount),
+          Money.zero(asset.currency),
+        );
+      const proceeds = exits
+        .filter(
+          (exit) =>
+            exit.assetId === asset.assetId &&
+            exit.exitDate >= window.from &&
+            exit.exitDate <= window.to,
+        )
+        .reduce(
+          (sum, exit) => Money.add(sum, Money.multiply(exit.pricePerUnit, exit.quantity)),
+          Money.zero(asset.currency),
+        );
+
+      holdings.push({
+        assetId: asset.assetId,
+        countryCode: detail.countryCode,
+        entityName: detail.entityName,
+        address: detail.entityAddress,
+        natureOfEntity: detail.natureOfEntity,
+        acquisitionDate: detail.acquisitionDate ?? acquired,
+        initialInvestment: Money.sum(
+          asset.lots.map((lot) => Money.multiply(lot.costPerUnit, lot.quantity)),
+          asset.currency,
+        ),
+        dailyQuantities: quantities,
+        dailyPrices,
+        dailyRates,
+        closingValueNative: Money.round(
+          Money.multiply(closingPrice, closingQuantity),
+          2,
+          'HALF_UP',
+        ),
+        closingRate,
+        grossDividend: dividend,
+        grossProceeds: proceeds,
+      });
+    }
+
+    if (blockers.length > 0) {
+      return Err(
+        new VaultStateError(
+          'Schedule FA Table A3 needs a complete daily price and exchange-rate series, and the ' +
+            'entity detail the schedule states. It is not generated from a closing value, because ' +
+            'that would understate the peak. Outstanding: ' +
+            blockers.join('; '),
+        ),
+      );
+    }
+
+    return ScheduleFaGenerator.tableA3({ foreignSnapshot: snapshot, calendarYear, holdings });
   },
 
   async scheduleFaD(calendarYear: number): Promise<Result<readonly ScheduleFaDRow[]>> {
@@ -2852,9 +3004,50 @@ export const GenerateComplianceUC: GenerateComplianceUCOps = {
         ),
       );
     }
-    // Foreign bank and custodial accounts are not modelled as assets yet, so
-    // there is genuinely nothing to disclose rather than nothing recorded.
-    return ScheduleFaGenerator.tableD({ foreignSnapshot: snapshot, calendarYear, accounts: [] });
+
+    /*
+     * Real accounts at last (Phase 6). This passed `accounts: []`, so a foreign
+     * bank account the user held read as "nothing to disclose" — indistinguishable
+     * from having none, and an omission rather than an understatement.
+     *
+     * The peak balance is recorded by the holder off their statements rather than
+     * derived from the closing one, for exactly the reason A3's peak is not
+     * derived that way.
+     */
+    const stored = await ForeignDisclosureRepository.accounts(calendarYear);
+    const accounts: ForeignAccountDisclosure[] = [];
+    for (const account of stored) {
+      const rate =
+        account.currency === 'INR'
+          ? '1'
+          : MarkRepository.seriesFor(
+              'CURRENCY',
+              account.currency,
+              `${String(calendarYear)}-12-01`,
+              `${String(calendarYear)}-12-31`,
+            ).get(`${String(calendarYear)}-12-31`);
+
+      if (rate === undefined) {
+        return Err(
+          new VaultStateError(
+            `no 31-December ${String(calendarYear)} ${account.currency}/INR rate is recorded, so ` +
+              `the balance of the ${account.institutionName} account cannot be stated in rupees`,
+          ),
+        );
+      }
+
+      accounts.push({
+        countryCode: account.countryCode,
+        institutionName: account.institutionName,
+        accountNumber: account.accountNumber,
+        accountOpenDate: account.accountOpenDate,
+        peakBalance: account.peakBalance,
+        closingBalance: account.closingBalance,
+        closingRate: rate,
+      });
+    }
+
+    return ScheduleFaGenerator.tableD({ foreignSnapshot: snapshot, calendarYear, accounts });
   },
 
   async scheduleAl(financialYear: FinancialYear): Promise<Result<ScheduleAl>> {

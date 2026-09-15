@@ -12,6 +12,7 @@
       "@porttrack/snapshot": ["packages/snapshot/src/index.ts"],
       "@porttrack/ingestion": ["packages/ingestion/src/index.ts"],
       "@porttrack/compliance": ["packages/compliance/src/index.ts"],
+      "@porttrack/exporters": ["packages/exporters/src/index.ts"],
       "@porttrack/pii-masker": ["packages/pii-masker/src/index.ts"],
       "@porttrack/persistence": ["packages/persistence/src/index.ts"],
       "@porttrack/adapters-fx": ["packages/adapters-fx/src/index.ts"],

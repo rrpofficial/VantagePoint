@@ -25,6 +25,7 @@ import {
   type TradeClass,
 } from '../api.js';
 import { Amount, Card, Chip, Delta, GoToImport } from '../components/primitives.js';
+import { ExportControl } from '../components/ExportControl.js';
 import { DeleteControl } from '../components/DeleteControl.js';
 import { useEditMode } from '../edit-mode.js';
 import { TradeForm } from './TradeForm.js';
@@ -112,6 +113,9 @@ export function Holdings({ bucket, title, blurb, tradeClasses }: HoldingsProps) 
     <div className="pt-actions pt-actions--inline">
       {recordButton}
       <GoToImport testId={`go-to-import-${bucket.toLowerCase()}`} />
+      {/* Holdings and LOTS, which is what makes an export usable for a
+          capital-gains conversation. No names or addresses, so no toggle. */}
+      <ExportControl register="holdings" hasPii={false} filterNote={`${title} holdings`} />
     </div>
   );
 

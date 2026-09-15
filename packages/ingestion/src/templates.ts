@@ -30,8 +30,19 @@ import {
   type ValuationBasis,
 } from '@porttrack/core-domain';
 import { normaliseDate, parseCsv, type CsvRow, type CsvTable } from './csv.js';
-import { addressRef, borrowerRef, deterministicImportedAt, provenanceFor } from './provenance.js';
-import type { ParsedLoanPayment, ParsedTransaction, RowError } from './types.js';
+import {
+  accountRef,
+  addressRef,
+  borrowerRef,
+  deterministicImportedAt,
+  provenanceFor,
+} from './provenance.js';
+import type {
+  ParsedBalanceAccount,
+  ParsedLoanPayment,
+  ParsedTransaction,
+  RowError,
+} from './types.js';
 
 export interface TemplateDefinition {
   readonly name: string;
@@ -192,6 +203,59 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
       'do not enter the account number.',
   },
   {
+    name: 'Custom_Balances',
+    columns: [
+      'asset_class',
+      'account_label',
+      'institution',
+      'account_number',
+      'balance',
+      'true_as_at',
+      'interest_rate_pct',
+      'compounding',
+      'monthly_contribution',
+      'employer_contribution',
+      'maturity_date',
+      'maturity_amount',
+      'last_drawn_monthly',
+      'closed_on',
+      'notes',
+      'currency',
+    ],
+    /*
+     * A deposit sheet and a provident-fund sheet need different halves of this
+     * template, so most of it is optional. Listed here rather than omitted from
+     * `columns` because `validateHeaders` reads optional names as a SUBSET of
+     * the declared columns — a name in only one of the two lists imports as an
+     * unexpected column and is silently dropped.
+     */
+    optionalColumns: [
+      'account_number',
+      'interest_rate_pct',
+      'compounding',
+      'monthly_contribution',
+      'employer_contribution',
+      'maturity_date',
+      'maturity_amount',
+      'last_drawn_monthly',
+      'closed_on',
+      'notes',
+    ],
+    description: 'Fixed and recurring deposits, EPF, VPF, PPF, NPS, gratuity, bank and cash',
+    // Overridden per row from `asset_class` — one template covers ten classes
+    // because they share a shape, not a class.
+    assetClass: 'FIXED_DEPOSIT',
+    guidance:
+      'One row per account. asset_class is one of FIXED_DEPOSIT, RECURRING_DEPOSIT, EPF, VPF, ' +
+      'PPF, NPS_TIER_I, NPS_TIER_II, BANK_BALANCE, CASH_IN_HAND or GRATUITY. true_as_at is the ' +
+      'date the balance was TRUE — for a provident fund use your statement date, not the date ' +
+      'the account was opened, or the contributions already inside that balance are counted ' +
+      'again. For GRATUITY, true_as_at is the date service began and last_drawn_monthly is the ' +
+      'wage the 15/26 formula runs on. Leave interest_rate_pct blank and the balance is carried ' +
+      'flat and says so, rather than being grown from a rate you did not supply. ' +
+      'account_number is stored only as an opaque reference and never leaves this machine.',
+  },
+  {
     name: 'Custom_ChitFunds',
     columns: ['scheme_name', 'start_date', 'monthly_instalment', 'total_months', 'currency'],
     description: 'Chit funds and family savings schemes',
@@ -218,6 +282,29 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
     guidance: 'trade_type is buy or sell. Sells consume lots FIFO, oldest first.',
   },
 ];
+
+/**
+ * Asset class → the arithmetic that governs it.
+ *
+ * Deliberately a copy of the table `app-services/balance-entry.ts` declares,
+ * rather than an import: `ingestion` must not depend on `app-services`, which
+ * sits above it. A functional test pins the two together so a class added to one
+ * and not the other fails the suite rather than silently importing as flat.
+ */
+const BALANCE_KIND_BY_CLASS: Readonly<Record<string, ParsedBalanceAccount['kind']>> = {
+  FIXED_DEPOSIT: 'TERM_DEPOSIT',
+  RECURRING_DEPOSIT: 'RECURRING_DEPOSIT',
+  EPF: 'PROVIDENT_FUND',
+  VPF: 'PROVIDENT_FUND',
+  PPF: 'PROVIDENT_FUND',
+  NPS_TIER_I: 'STATED_BALANCE',
+  NPS_TIER_II: 'STATED_BALANCE',
+  BANK_BALANCE: 'STATED_BALANCE',
+  CASH_IN_HAND: 'STATED_BALANCE',
+  GRATUITY: 'GRATUITY',
+};
+
+const COMPOUNDING_VALUES = new Set(['MONTHLY', 'QUARTERLY', 'ANNUAL']);
 
 const byName = new Map(TEMPLATES.map((template) => [template.name, template]));
 
@@ -672,6 +759,117 @@ function mapRow(
           symbol: label,
           quantity: '1',
           pricePerUnit: Money.of(balance, currency),
+        },
+      };
+    }
+
+    case 'Custom_Balances': {
+      const date = requireDate(reader, 'true_as_at');
+      if (isRowResult(date)) return date;
+
+      const label = reader.cell('account_label');
+      if (label.length === 0) {
+        return invalid(reader, 'account_label', '', 'an account label is required', 'a label');
+      }
+
+      const declaredClass = reader.cell('asset_class').toUpperCase().replace(/[\s-]+/g, '_');
+      const kind = BALANCE_KIND_BY_CLASS[declaredClass];
+      if (kind === undefined) {
+        return invalid(
+          reader,
+          'asset_class',
+          reader.cell('asset_class'),
+          'not a balance-type asset class',
+          Object.keys(BALANCE_KIND_BY_CLASS).join(', '),
+        );
+      }
+
+      /*
+       * Blank is allowed and means zero here, but ONLY for the balance itself.
+       * A gratuity row states a wage rather than a balance, and a recurring
+       * deposit opened with no lump sum genuinely starts at nil.
+       */
+      const rawBalance = reader.cell('balance');
+      if (rawBalance.length > 0 && !NUMBER.test(rawBalance)) {
+        return invalid(reader, 'balance', rawBalance, 'not a valid number', 'a decimal amount');
+      }
+      const balance = rawBalance.length === 0 ? '0' : rawBalance;
+
+      const optionalAmount = (column: string): MoneyValue | undefined | RowResult => {
+        const raw = reader.cell(column);
+        if (raw.length === 0) return undefined;
+        if (!NUMBER.test(raw)) {
+          return invalid(reader, column, raw, 'not a valid number', 'a decimal amount');
+        }
+        return Money.of(raw, currency);
+      };
+
+      const monthly = optionalAmount('monthly_contribution');
+      if (isRowError(monthly)) return monthly;
+      const employer = optionalAmount('employer_contribution');
+      if (isRowError(employer)) return employer;
+      const maturityAmount = optionalAmount('maturity_amount');
+      if (isRowError(maturityAmount)) return maturityAmount;
+      const wage = optionalAmount('last_drawn_monthly');
+      if (isRowError(wage)) return wage;
+
+      const maturity = optionalDate(reader, 'maturity_date');
+      if (isRowError(maturity)) return maturity;
+      const closed = optionalDate(reader, 'closed_on');
+      if (isRowError(closed)) return closed;
+
+      const rawRate = reader.cell('interest_rate_pct');
+      if (rawRate.length > 0 && !NUMBER.test(rawRate)) {
+        return invalid(reader, 'interest_rate_pct', rawRate, 'not a valid number', 'a decimal rate');
+      }
+
+      const rawCompounding = reader.cell('compounding').toUpperCase();
+      if (rawCompounding.length > 0 && !COMPOUNDING_VALUES.has(rawCompounding)) {
+        return invalid(
+          reader,
+          'compounding',
+          rawCompounding,
+          'not a recognised compounding frequency',
+          'MONTHLY, QUARTERLY or ANNUAL',
+        );
+      }
+
+      const institution = reader.cell('institution');
+      const accountNumber = reader.cell('account_number');
+      const notes = reader.cell('notes');
+
+      return {
+        txn: {
+          ...base,
+          kind: 'BUY',
+          date,
+          symbol: label,
+          // The class the ROW states, overriding the template's placeholder.
+          assetClass: declaredClass,
+          // One unit at the balance, exactly as `Custom_Cash` records a bank
+          // balance. The lot is the opening entry; the account below is what
+          // the valuer actually reads.
+          quantity: '1',
+          pricePerUnit: Money.of(balance, currency),
+          balanceAccount: {
+            kind,
+            label,
+            ...(institution.length === 0 ? {} : { institutionName: institution }),
+            ...(accountNumber.length === 0 ? {} : { accountRef: accountRef(accountNumber) }),
+            openingBalance: Money.of(balance, currency),
+            openedOn: date,
+            ...(rawRate.length === 0 ? {} : { annualRatePct: rawRate }),
+            ...(rawCompounding.length === 0
+              ? {}
+              : { compounding: rawCompounding as 'MONTHLY' | 'QUARTERLY' | 'ANNUAL' }),
+            ...(monthly === undefined ? {} : { monthlyContribution: monthly }),
+            ...(employer === undefined ? {} : { employerContribution: employer }),
+            ...(maturity === undefined ? {} : { maturityDate: maturity }),
+            ...(maturityAmount === undefined ? {} : { maturityValue: maturityAmount }),
+            ...(wage === undefined ? {} : { lastDrawnMonthly: wage }),
+            ...(closed === undefined ? {} : { closedOn: closed }),
+            ...(notes.length === 0 ? {} : { notes }),
+          },
         },
       };
     }

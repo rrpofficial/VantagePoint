@@ -22,6 +22,7 @@ import {
   type PaymentMode,
 } from '../api.js';
 import { Amount, Card, Chip, GoToImport } from '../components/primitives.js';
+import { ExportControl } from '../components/ExportControl.js';
 import { DeleteControl } from '../components/DeleteControl.js';
 import { EditModeHint, useEditMode } from '../edit-mode.js';
 
@@ -131,6 +132,9 @@ export function Chits() {
               {showNew ? 'Cancel' : 'Record a chit'}
             </button>
             <GoToImport testId="go-to-import-chits" />
+            {/* A chit register names an organisation, not a person, so there is
+                nothing to mask — hence no PII toggle here. */}
+            <ExportControl register="chits" hasPii={false} />
           </div>
         }
       >

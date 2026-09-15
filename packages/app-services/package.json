@@ -11,6 +11,7 @@
   "dependencies": {
     "@porttrack/compliance": "workspace:*",
     "@porttrack/core-domain": "workspace:*",
+    "@porttrack/exporters": "workspace:*",
     "@porttrack/fx-itbr": "workspace:*",
     "@porttrack/ingestion": "workspace:*",
     "@porttrack/persistence": "workspace:*",

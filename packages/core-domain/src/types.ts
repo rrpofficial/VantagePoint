@@ -368,6 +368,13 @@ export interface Asset {
   readonly chitFund?: ChitFund;
   /** Present only for REAL_ESTATE assets. */
   readonly property?: ImmovableProperty;
+  /**
+   * Present on a BALANCE-shaped holding — a deposit, a retirement scheme, cash
+   * (Phase 5). One bag for ten asset classes rather than one per class: the
+   * valuer registry dispatches on the bag, so a new balance kind adds a variant
+   * here and nothing in `valuation.ts`.
+   */
+  readonly balanceAccount?: BalanceAccount;
   /** Present only for DOMESTIC_MUTUAL_FUND assets. */
   readonly schemeCategory?: MfSchemeCategory;
   /** Equity allocation, required to place a HYBRID scheme. */
@@ -809,6 +816,104 @@ export interface EpfResult {
 export interface GratuityInput {
   readonly lastDrawnMonthly: Money;
   readonly completedYears: number;
+}
+
+/* -------------------------------------------- balance accounts (Phase 5) */
+
+/**
+ * How a balance behaves over time — which is a different question from which
+ * asset class it is.
+ *
+ * EPF, VPF and PPF are three asset classes with one arithmetic (`PROVIDENT_FUND`),
+ * and NPS Tier I, NPS Tier II, cash and a bank balance are four with another
+ * (`STATED_BALANCE`). Keying the valuer on behaviour rather than on class is what
+ * keeps `valuation.ts` from growing a branch per class — the defect D-3 names.
+ */
+export type BalanceAccountKind =
+  /** A lump sum that compounds to maturity. FD, and anything shaped like one. */
+  | 'TERM_DEPOSIT'
+  /** A monthly instalment, each tranche compounding from the date it was paid. */
+  | 'RECURRING_DEPOSIT'
+  /** Opening balance plus monthly contributions, interest on the running balance. */
+  | 'PROVIDENT_FUND'
+  /**
+   * A figure the user states and re-states, which accrues NOTHING on its own.
+   *
+   * An NPS corpus moves with NAV and a bank balance moves with transactions.
+   * This application has neither feed, and growing the figure from an assumed
+   * rate would be fabricating a return — the thing this codebase refuses to do
+   * with exchange rates, for the same reason.
+   */
+  | 'STATED_BALANCE'
+  /** The statutory 15/26 formula, which grows with completed years of service. */
+  | 'GRATUITY';
+
+export interface BalanceAccount {
+  readonly assetId: string;
+  readonly kind: BalanceAccountKind;
+  /** What the user calls it: "HDFC FD 7.1% 2027", "EPF — Acme Corp". */
+  readonly label: string;
+  readonly institutionName?: string;
+  /**
+   * Opaque handle for the account number, never the number itself (ADR-013,
+   * FR-7.2) — the same rule the borrower name and the property address follow.
+   */
+  readonly accountRef?: string;
+  /**
+   * The balance as at `openedOn`. Zero for a recurring deposit opened with no
+   * lump sum, and zero for gratuity, which has no balance at all.
+   */
+  readonly openingBalance: Money;
+  /**
+   * Where accrual starts, and the date `openingBalance` is stated as at.
+   *
+   * For a term deposit, the booking date. For a provident fund, the date of the
+   * balance the user copied off a statement — NOT the date the account was
+   * opened years earlier, which would compound contributions that were already
+   * inside that balance. For gratuity, the date service began.
+   */
+  readonly openedOn: IsoDate;
+  /** Absent means no accrual: a balance with no stated rate is carried flat. */
+  readonly annualRatePct?: Percentage;
+  readonly compounding?: 'MONTHLY' | 'QUARTERLY' | 'ANNUAL';
+  /** RD instalment, or the employee's monthly provident-fund contribution. */
+  readonly monthlyContribution?: Money;
+  readonly employerContribution?: Money;
+  readonly maturityDate?: IsoDate;
+  /**
+   * The institution's own maturity figure, preferred over the computed one once
+   * the deposit matures — for the same reason a lender's stated EMI is preferred
+   * over a derived one: a bank rounds, and a figure that disagrees with the
+   * certificate is one the holder cannot reconcile.
+   */
+  readonly maturityValue?: Money;
+  /** GRATUITY only: last drawn monthly wage, the base of the 15/26 formula. */
+  readonly lastDrawnMonthly?: Money;
+  /**
+   * When the money left — an FD withdrawn, a PF transferred out. From this date
+   * the account is worth nil here, because the proceeds are a bank balance now
+   * and counting both would report the same rupees twice.
+   */
+  readonly closedOn?: IsoDate;
+  readonly notes?: string;
+}
+
+export interface BalanceView {
+  readonly account: BalanceAccount;
+  readonly asOf: IsoDate;
+  readonly value: Money;
+  /** What actually went in — the cost basis, and what Schedule AL wants. */
+  readonly contributed: Money;
+  readonly accruedInterest: Money;
+  readonly instalmentsPaid?: number;
+  readonly completedYears?: number;
+  readonly matured: boolean;
+  readonly closed: boolean;
+  /**
+   * Why the figure is flat when a reader expects it to grow. Stated rather than
+   * left to be inferred from a number that has not moved.
+   */
+  readonly flatReason?: string;
 }
 
 /* ------------------------------------------------------------------- ports */

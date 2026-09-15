@@ -15,6 +15,7 @@ import { Card } from './components/primitives.js';
 import { EditModeProvider, useEditMode } from './edit-mode.js';
 import { ASSET_TABS, SECTIONS, assetHrefFor, hrefFor, useRoute } from './router.js';
 import { AssetsOverview } from './views/AssetsOverview.js';
+import { Balances } from './views/Balances.js';
 import { Chits } from './views/Chits.js';
 import { Compliance } from './views/Compliance.js';
 import { Dashboard } from './views/Dashboard.js';
@@ -45,7 +46,12 @@ const EQUITY_TRADE_CLASSES = [
   'FOREIGN_ETF',
   'UNLISTED_SHARES',
 ];
-const NON_EQUITY_TRADE_CLASSES = ['SGB'];
+/*
+ * Bullion and crypto sit here rather than on the Deposits tab because they are
+ * trades — a quantity bought at a price, sold FIFO, with a cost basis and a
+ * capital gain. A deposit is a balance with a rate (Phase 5).
+ */
+const NON_EQUITY_TRADE_CLASSES = ['SGB', 'GOLD_PHYSICAL', 'GOLD_DIGITAL', 'CRYPTO'];
 
 /**
  * The provider sits OUTSIDE the unlock gate so the mode is read once and stays
@@ -285,6 +291,7 @@ function AppShell() {
                 tradeClasses={NON_EQUITY_TRADE_CLASSES}
               />
             )}
+            {assetTab === 'Deposits' && <Balances />}
             {assetTab === 'Immovable' && <Immovable />}
             {assetTab === 'Loans' && <Loans />}
             {assetTab === 'Chits' && <Chits />}

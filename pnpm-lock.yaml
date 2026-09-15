@@ -136,6 +136,9 @@ importers:
       '@porttrack/core-domain':
         specifier: workspace:*
         version: link:../core-domain
+      '@porttrack/exporters':
+        specifier: workspace:*
+        version: link:../exporters
       '@porttrack/fx-itbr':
         specifier: workspace:*
         version: link:../fx-itbr
@@ -190,6 +193,19 @@ importers:
       '@porttrack/pii-masker':
         specifier: workspace:*
         version: link:../pii-masker
+      '@porttrack/test-kit':
+        specifier: workspace:*
+        version: link:../../tests/test-kit
+
+  packages/exporters:
+    dependencies:
+      '@porttrack/core-domain':
+        specifier: workspace:*
+        version: link:../core-domain
+      '@porttrack/shared-kernel':
+        specifier: workspace:*
+        version: link:../shared-kernel
+    devDependencies:
       '@porttrack/test-kit':
         specifier: workspace:*
         version: link:../../tests/test-kit

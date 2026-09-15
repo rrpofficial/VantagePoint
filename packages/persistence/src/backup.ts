@@ -5,6 +5,10 @@
  * beside the database rather than inside it, so a backup of `vault.db` alone
  * restores to a vault nobody can open — the failure would surface only when the
  * user needs the backup most.
+ *
+ * The bytes are produced separately from the write, because the two callers want
+ * different things: the container upgrade path wants a file on disk, and the SPA
+ * wants a download it never has to clean up afterwards.
  */
 import { Err, Ok, VaultStateError, type Result } from '@porttrack/shared-kernel';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -13,8 +17,59 @@ import { Vault } from './vault.js';
 
 const META_SUFFIX = '.meta.json';
 
+/**
+ * Stamped into every archive so restore can refuse a file that is not one.
+ *
+ * Without it, pointing restore at an arbitrary JSON file writes whatever
+ * `database` happened to decode to over the vault — and the user discovers that
+ * at the moment they have nothing else left.
+ */
+const MAGIC = 'porttrack.vault.backup' as const;
+
+interface Archive {
+  readonly magic: typeof MAGIC;
+  readonly version: 1;
+  readonly createdAt: string;
+  /** Already encrypted at rest, so the archive inherits that protection. */
+  readonly database: string;
+  readonly meta: string;
+}
+
+function parseArchive(bytes: Uint8Array): Result<Archive> {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(bytes).toString('utf8'));
+  } catch {
+    return Err(new VaultStateError('this file is not a portTrack backup archive'));
+  }
+
+  const archive = parsed as Partial<Archive>;
+  /*
+   * Version 1 archives predate the magic string, so a missing one is accepted
+   * where the shape is otherwise right. A WRONG one never is.
+   */
+  if (archive.magic !== undefined && archive.magic !== MAGIC) {
+    return Err(new VaultStateError('this file is not a portTrack backup archive'));
+  }
+  if (typeof archive.database !== 'string' || typeof archive.meta !== 'string') {
+    return Err(
+      new VaultStateError(
+        'this backup archive is incomplete — it is missing the database or its key metadata',
+      ),
+    );
+  }
+  return Ok({
+    magic: MAGIC,
+    version: 1,
+    createdAt: typeof archive.createdAt === 'string' ? archive.createdAt : '',
+    database: archive.database,
+    meta: archive.meta,
+  });
+}
+
 export const Backup = {
-  backup(destination: string): Promise<Result<string>> {
+  /** The archive as bytes, for a caller that hands them straight to a browser. */
+  archive(createdAt: string): Promise<Result<Uint8Array>> {
     const source = Vault.currentPaths();
     if (source === undefined) {
       return Promise.resolve(Err(new VaultStateError('no vault is open to back up')));
@@ -28,33 +83,79 @@ export const Backup = {
       );
     }
 
-    mkdirSync(dirname(destination), { recursive: true });
-    const archive = {
-      version: 1 as const,
+    /*
+     * Checkpoint FIRST, or the archive is silently short.
+     *
+     * The vault runs in WAL mode, so a committed transaction lives in
+     * `vault.db-wal` until SQLite folds it back. Reading `vault.db` alone
+     * therefore captured the database as it stood at the last checkpoint and
+     * dropped everything since — a backup that restores, unlocks, passes every
+     * integrity check, and is missing the most recent work. TRUNCATE folds the
+     * log in and empties it, so the single file is complete on its own.
+     */
+    if (Vault.isUnlocked()) {
+      Vault.connection().pragma('wal_checkpoint(TRUNCATE)');
+    }
+
+    const archive: Archive = {
+      magic: MAGIC,
+      version: 1,
+      createdAt,
       database: readFileSync(source.dbPath).toString('base64'),
       meta: readFileSync(source.metaPath, 'utf8'),
     };
-    // The database is already encrypted at rest, so the archive inherits that
-    // protection without a second key to manage.
-    writeFileSync(destination, JSON.stringify(archive), { mode: 0o600 });
-    return Promise.resolve(Ok(destination));
+    return Promise.resolve(Ok(new Uint8Array(Buffer.from(JSON.stringify(archive), 'utf8'))));
   },
 
-  restore(source: string, destination: string): Promise<Result<void>> {
+  async backup(destination: string, createdAt = new Date().toISOString()): Promise<Result<string>> {
+    const bytes = await Backup.archive(createdAt);
+    if (!bytes.ok) return bytes;
+
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, bytes.value, { mode: 0o600 });
+    return Ok(destination);
+  },
+
+  /**
+   * Writes an archive into `destination` as a vault directory.
+   *
+   * Both files land or neither does: the database is written first and the meta
+   * second, and a failure between them would leave a database with the WRONG
+   * salt beside it — unopenable, and indistinguishable from a corrupted backup.
+   * So the meta is validated before either write.
+   */
+  restoreBytes(bytes: Uint8Array, destination: string, fileName = 'vault.db'): Promise<Result<void>> {
+    const archive = parseArchive(bytes);
+    if (!archive.ok) return Promise.resolve(archive);
+
+    try {
+      JSON.parse(archive.value.meta);
+    } catch {
+      return Promise.resolve(
+        Err(new VaultStateError('this backup archive carries unreadable key metadata')),
+      );
+    }
+
+    mkdirSync(destination, { recursive: true });
+    const dbPath = join(destination, fileName);
+    writeFileSync(dbPath, Buffer.from(archive.value.database, 'base64'), { mode: 0o600 });
+    writeFileSync(`${dbPath}${META_SUFFIX}`, archive.value.meta, { mode: 0o600 });
+    /*
+     * A WAL sidecar from the vault being replaced would be replayed over the
+     * restored database on the next open, reinstating the very rows the restore
+     * was meant to roll back.
+     */
+    for (const sidecar of [`${dbPath}-wal`, `${dbPath}-shm`]) {
+      if (existsSync(sidecar)) writeFileSync(sidecar, Buffer.alloc(0));
+    }
+    return Promise.resolve(Ok(undefined));
+  },
+
+  restore(source: string, destination: string, fileName = 'vault.db'): Promise<Result<void>> {
     if (!existsSync(source)) {
       return Promise.resolve(Err(new VaultStateError('backup archive was not found')));
     }
-    const archive = JSON.parse(readFileSync(source, 'utf8')) as {
-      version: number;
-      database: string;
-      meta: string;
-    };
-
-    mkdirSync(destination, { recursive: true });
-    const dbPath = join(destination, 'vault.db');
-    writeFileSync(dbPath, Buffer.from(archive.database, 'base64'), { mode: 0o600 });
-    writeFileSync(`${dbPath}${META_SUFFIX}`, archive.meta, { mode: 0o600 });
-    return Promise.resolve(Ok(undefined));
+    return Backup.restoreBytes(new Uint8Array(readFileSync(source)), destination, fileName);
   },
 
   /** Copies a vault directory verbatim; used by the container upgrade path. */

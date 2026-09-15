@@ -790,9 +790,24 @@ export interface ScheduleFaDRow {
   readonly closingBalanceInr: Money;
 }
 
+export interface ScheduleFaA3Row {
+  readonly countryCode: string;
+  readonly entityName: string;
+  readonly address: string;
+  readonly natureOfEntity: string;
+  readonly acquisitionDate: string;
+  readonly initialInvestmentInr: Money;
+  /** The column the whole daily-marks series exists to produce. */
+  readonly peakValueInr: Money;
+  readonly peakValueNative: Money;
+  readonly closingValueInr: Money;
+  readonly grossDividendInr: Money;
+  readonly grossProceedsInr: Money;
+}
+
 export interface ScheduleFa {
   readonly calendarYear: number;
-  readonly tableA3: readonly unknown[] | null;
+  readonly tableA3: readonly ScheduleFaA3Row[] | null;
   readonly tableA3Error: ApiError | null;
   readonly tableD: readonly ScheduleFaDRow[] | null;
   readonly tableDError: ApiError | null;
@@ -801,6 +816,162 @@ export interface ScheduleFa {
 export interface EditModeState {
   readonly enabled: boolean;
   readonly since?: string;
+}
+
+/* --------------------------------------- Schedule FA inputs (Phase 6) */
+
+export interface MarkGap {
+  readonly after: string;
+  readonly before: string;
+  readonly days: number;
+}
+
+export interface MarkCoverage {
+  readonly covered: boolean;
+  readonly firstMark?: string;
+  readonly lastMark?: string;
+  readonly markCount: number;
+  readonly gaps: readonly MarkGap[];
+  readonly shortfall?: string;
+}
+
+export interface HoldingReadiness {
+  readonly assetId: string;
+  readonly label: string;
+  readonly currency: string;
+  readonly hasEntityDetail: boolean;
+  readonly priceCoverage: MarkCoverage;
+  readonly rateCoverage: MarkCoverage;
+  readonly ready: boolean;
+  readonly blockers: readonly string[];
+}
+
+export interface FaReadiness {
+  readonly calendarYear: number;
+  readonly holdings: readonly HoldingReadiness[];
+  readonly accountCount: number;
+  readonly ready: boolean;
+}
+
+export interface ForeignAccount {
+  readonly accountId: string;
+  readonly countryCode: string;
+  readonly institutionName: string;
+  readonly accountOpenDate: string;
+  readonly currency: string;
+  readonly peakBalance: Money;
+  readonly closingBalance: Money;
+  readonly calendarYear: number;
+  readonly status: string;
+}
+
+/* ----------------------------------------- balance accounts (Phase 5) */
+
+export interface BalanceClassOption {
+  readonly assetClass: string;
+  readonly kind: string;
+  readonly label: string;
+  readonly guidance: string;
+}
+
+export interface BalanceAccountSummary {
+  readonly assetId: string;
+  readonly kind: string;
+  readonly label: string;
+  readonly institutionName?: string;
+  readonly accountRef?: string;
+  readonly openingBalance: Money;
+  readonly openedOn: string;
+  readonly annualRatePct?: string;
+  readonly compounding?: string;
+  readonly monthlyContribution?: Money;
+  readonly employerContribution?: Money;
+  readonly maturityDate?: string;
+  readonly maturityValue?: Money;
+  readonly lastDrawnMonthly?: Money;
+  readonly closedOn?: string;
+  readonly notes?: string;
+}
+
+export interface BalanceView {
+  readonly account: BalanceAccountSummary;
+  readonly asOf: string;
+  readonly value: Money;
+  readonly contributed: Money;
+  readonly accruedInterest: Money;
+  readonly instalmentsPaid?: number;
+  readonly completedYears?: number;
+  readonly matured: boolean;
+  readonly closed: boolean;
+  readonly flatReason?: string;
+}
+
+export interface BalanceRegister {
+  readonly asOf: string;
+  readonly accounts: readonly BalanceView[];
+  readonly totals: {
+    readonly accountCount: number;
+    readonly openCount: number;
+    readonly totalValue: Money;
+    readonly totalContributed: Money;
+    readonly totalAccruedInterest: Money;
+  };
+}
+
+export interface RecordBalanceBody {
+  readonly assetClass: string;
+  readonly label: string;
+  readonly openingBalance: string;
+  readonly openedOn: string;
+  readonly institutionName?: string;
+  readonly accountNumber?: string;
+  readonly annualRatePct?: string;
+  readonly compounding?: string;
+  readonly monthlyContribution?: string;
+  readonly employerContribution?: string;
+  readonly maturityDate?: string;
+  readonly maturityValue?: string;
+  readonly lastDrawnMonthly?: string;
+  readonly notes?: string;
+}
+
+export interface RestoreReport {
+  readonly restoredInto: string;
+  readonly supersededCopy?: string;
+  readonly replacedExistingVault: boolean;
+}
+
+/**
+ * A binary response, which `request` cannot carry — it parses every body as
+ * JSON, and a vault archive put through that returns an empty object.
+ *
+ * The file name comes from the server's `content-disposition` rather than being
+ * built here, so the archive is named by the clock that stamped it.
+ */
+async function downloadBinary(
+  path: string,
+  init: RequestInit,
+): Promise<ApiResult<{ blob: Blob; fileName: string }>> {
+  try {
+    const response = await fetch(`/api${path}`, init);
+    if (!response.ok) {
+      const body: unknown = await response.json().catch(() => ({}));
+      const failure = (body as { error?: ApiError }).error;
+      return {
+        ok: false,
+        error:
+          failure ?? { code: 'HTTP_ERROR', message: `request failed (${String(response.status)})` },
+      };
+    }
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const named = /filename="([^"]+)"/.exec(disposition);
+    return {
+      ok: true,
+      value: { blob: await response.blob(), fileName: named?.[1] ?? 'portTrack-backup.ptb' },
+    };
+  } catch {
+    return { ok: false, error: { code: 'UNREACHABLE', message: 'the portTrack API is not responding' } };
+  }
 }
 
 export const api = {
@@ -821,6 +992,78 @@ export const api = {
       body: JSON.stringify({ passphrase }),
     }),
   disableEditMode: () => request<EditModeState>('/edit-mode/disable', { method: 'POST' }),
+
+  /** The whole vault, encrypted, as a file the browser saves. */
+  backup: () => downloadBinary('/vault/backup', { method: 'POST' }),
+  restoreBackup: (archiveBase64: string) =>
+    request<RestoreReport>('/vault/restore', {
+      method: 'POST',
+      body: JSON.stringify({ archive: archiveBase64 }),
+      // Argon2id runs twice on this path — the lock and the re-open — on top of
+      // writing the whole database.
+    }, 120_000),
+
+  faReadiness: (calendarYear: number) =>
+    request<FaReadiness>(`/compliance/foreign/readiness?cy=${String(calendarYear)}`),
+  recordForeignDetail: (input: {
+    assetId: string;
+    countryCode: string;
+    entityName: string;
+    entityAddress: string;
+    natureOfEntity: string;
+  }) =>
+    request<{ assetId: string }>('/compliance/foreign/holdings', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  foreignAccounts: (calendarYear: number) =>
+    request<{ accounts: readonly ForeignAccount[] }>(
+      `/compliance/foreign/accounts?cy=${String(calendarYear)}`,
+    ),
+  recordForeignAccount: (input: {
+    countryCode: string;
+    institutionName: string;
+    accountNumber: string;
+    accountOpenDate: string;
+    currency: string;
+    peakBalance: string;
+    closingBalance: string;
+    calendarYear: number;
+  }) =>
+    request<ForeignAccount>('/compliance/foreign/accounts', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  deleteForeignAccount: (accountId: string) =>
+    request<{ deleted: boolean }>(
+      `/compliance/foreign/accounts/${encodeURIComponent(accountId)}`,
+      { method: 'DELETE' },
+    ),
+  syncMarks: () =>
+    request<{ currencyMarks: number; assetMarks: number }>('/compliance/marks/sync', {
+      method: 'POST',
+    }),
+
+  balanceClasses: () => request<{ classes: readonly BalanceClassOption[] }>('/balances/classes'),
+  balances: (asOf?: string) =>
+    request<BalanceRegister>(
+      asOf === undefined ? '/balances' : `/balances?asOf=${encodeURIComponent(asOf)}`,
+    ),
+  recordBalance: (input: RecordBalanceBody) =>
+    request<{ assetId: string; replaced: boolean }>('/balances', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  restateBalance: (assetId: string, input: { openingBalance: string; asOf: string }) =>
+    request<BalanceView>(`/balances/${encodeURIComponent(assetId)}/restate`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  closeBalance: (assetId: string, closedOn: string) =>
+    request<BalanceView>(`/balances/${encodeURIComponent(assetId)}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ closedOn }),
+    }),
 
   ledger: () => request<Ledger>('/ledger/assets'),
   deleteAsset: (assetId: string) =>
@@ -976,6 +1219,22 @@ export const api = {
   /** Direct hrefs — the browser downloads them, carrying the current filters. */
   loanCsvUrl: (query: LoanQuery = {}) => `/api/loans/export.csv${loanQueryString(query)}`,
   loanPdfUrl: (query: LoanQuery = {}) => `/api/loans/export.pdf${loanQueryString(query)}`,
+
+  /**
+   * Every other register (Phase 7). `pii` is always sent explicitly rather than
+   * defaulted at either end: a file the user will email must not have its
+   * masking decided by a default nobody saw.
+   */
+  exportUrl: (
+    register: 'chits' | 'holdings' | 'property' | 'balances',
+    format: 'csv' | 'pdf',
+    options: { includePii?: boolean; financialYear?: string; filterNote?: string } = {},
+  ) => {
+    const params = new URLSearchParams({ pii: options.includePii === true ? 'include' : 'mask' });
+    if (options.financialYear !== undefined) params.set('fy', options.financialYear);
+    if (options.filterNote !== undefined) params.set('filter', options.filterNote);
+    return `/api/exports/${register}.${format}?${params.toString()}`;
+  },
 
   templates: () => request<{ templates: readonly TemplateSummary[] }>('/templates'),
   /** Direct href — the browser downloads it, no JSON round trip. */
