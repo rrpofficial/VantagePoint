@@ -7,8 +7,13 @@
  * what keeps every use case free of hidden global state except this.
  */
 import { Money, type Clock } from '@porttrack/shared-kernel';
-import type { Asset, FxSource, Liability, PriceSource } from '@porttrack/core-domain';
-import { AssetRepository, LiabilityRepository, vaultPriceSource } from '@porttrack/persistence';
+import { liabilityOf, type Asset, type FxSource, type Liability, type PriceSource } from '@porttrack/core-domain';
+import {
+  AssetRepository,
+  BorrowedLoanRepository,
+  LiabilityRepository,
+  vaultPriceSource,
+} from '@porttrack/persistence';
 import { createLogger, type Logger } from '@porttrack/platform';
 import { vaultFxSource } from './fx-source.js';
 
@@ -57,7 +62,31 @@ function vaultBackedPorts(): Ports {
     clock: systemClock,
     logger: createLogger({ sink: NO_SINK, now: () => systemClock.now() }),
     assets: () => AssetRepository.all(),
-    liabilities: () => LiabilityRepository.all(),
+    /*
+     * Borrowings projected to `Liability` at TODAY's date, plus any legacy rows
+     * still in the old table (Phase 3).
+     *
+     * `valuation.ts` and `al-items.ts` read five fields and know nothing about
+     * EMIs; `liabilityOf` supplies exactly those five with the balance reduced
+     * by every payment made. Before this, a liability carried a principal figure
+     * that never moved — so six months of EMIs left net worth unchanged, and
+     * there was no way to create a row in the first place.
+     */
+    liabilities: async () => {
+      const [legacy, borrowed] = await Promise.all([
+        LiabilityRepository.all(),
+        BorrowedLoanRepository.all(),
+      ]);
+      const today = systemClock.today();
+      const projected = borrowed
+        .filter((loan) => loan.status === 'ACTIVE')
+        .map((loan) => liabilityOf(loan, today));
+
+      // A migrated row exists in BOTH tables — the same id. The borrowing is
+      // authoritative, because it is the one that can be updated.
+      const ids = new Set(projected.map((liability) => liability.liabilityId));
+      return [...projected, ...legacy.filter((row) => !ids.has(row.liabilityId))];
+    },
     /*
      * Wired at last. This port existed from the start and nothing ever supplied
      * it, so `marketValueOf` looked for a quote, found none, and fell back to

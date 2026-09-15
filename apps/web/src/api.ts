@@ -580,6 +580,8 @@ export interface SnapshotSummary {
 
 export interface PositionDelta {
   readonly assetId: string;
+  /** Lets a comparison be scoped to one sleeve without a ledger join. */
+  readonly assetClass: string;
   readonly bucket: string;
   readonly quantityBefore: string;
   readonly quantityAfter: string;
@@ -607,6 +609,65 @@ export interface VarianceReport {
   readonly newAdditions: readonly PositionDelta[];
   readonly liquidations: readonly PositionDelta[];
   readonly allocation: readonly AllocationRow[];
+}
+
+/** A borrowing, as the API returns it. */
+export interface BorrowedLoan {
+  readonly loanId: string;
+  readonly kind: string;
+  readonly lenderName?: string;
+  readonly lenderRef: string;
+  readonly principal: Money;
+  readonly interestRatePct: string;
+  readonly tenureMonths: number;
+  readonly startDate: string;
+  readonly status: string;
+  readonly closedDate?: string;
+  readonly notes?: string;
+}
+
+export interface ScheduledInstalment {
+  readonly number: number;
+  readonly dueDate: string;
+  readonly openingBalance: Money;
+  readonly payment: Money;
+  readonly interest: Money;
+  readonly principal: Money;
+  readonly closingBalance: Money;
+}
+
+/** A borrowing with its schedule and its progress against it. */
+export interface BorrowedView extends BorrowedLoan {
+  readonly emi: Money;
+  readonly totalPayable: Money;
+  readonly totalInterest: Money;
+  readonly paidToDate: Money;
+  readonly principalRepaid: Money;
+  readonly interestPaid: Money;
+  readonly prepaid: Money;
+  readonly outstanding: Money;
+  readonly instalmentsPaid: number;
+  readonly instalmentsRemaining: number;
+  readonly percentRepaid: string;
+  readonly nextDueDate?: string;
+  readonly isClosed: boolean;
+  readonly schedule: readonly ScheduledInstalment[];
+}
+
+export interface BorrowedRegister {
+  readonly loans: readonly BorrowedView[];
+  readonly totals: {
+    readonly loanCount: number;
+    readonly activeCount: number;
+    readonly closedCount: number;
+    readonly totalBorrowed: Money;
+    readonly totalOutstanding: Money;
+    readonly totalPrincipalRepaid: Money;
+    readonly totalInterestPaid: Money;
+    readonly monthlyCommitment: Money;
+  };
+  readonly lenders: readonly string[];
+  readonly asOf: string;
 }
 
 export interface AdvanceTaxInstallment {
@@ -924,6 +985,55 @@ export const api = {
     }),
   compareToLive: (snapshotId: string) =>
     request<VarianceReport>(`/snapshots/${encodeURIComponent(snapshotId)}/compare?target=live`),
+
+  /**
+   * Two frozen snapshots, rather than one against the live portfolio.
+   *
+   * The use case and the route have both existed since the snapshot work; this
+   * method is what was missing, so the SPA could only ever ask "how has it moved
+   * since?" and never "how did it move between these two dates?" — which is the
+   * whole of objective 2.
+   */
+  liabilityKinds: () => request<{ kinds: readonly string[] }>('/liabilities/kinds'),
+  liabilities: (query: { status?: string; kind?: string } = {}) => {
+    const params = new URLSearchParams();
+    if (query.status !== undefined && query.status.length > 0) params.set('status', query.status);
+    if (query.kind !== undefined && query.kind.length > 0) params.set('kind', query.kind);
+    const qs = params.toString();
+    return request<BorrowedRegister>(`/liabilities${qs.length > 0 ? `?${qs}` : ''}`);
+  },
+  recordLiability: (input: {
+    lenderName: string;
+    kind: string;
+    principal: string;
+    interestRatePct: string;
+    tenureMonths: string;
+    startDate: string;
+    statedEmi?: string;
+    notes?: string;
+  }) => request<BorrowedLoan>('/liabilities', { method: 'POST', body: JSON.stringify(input) }),
+  recordLiabilityPayment: (
+    loanId: string,
+    input: { date: string; amount: string; isPrepayment?: boolean; notes?: string },
+  ) =>
+    request<BorrowedLoan>(`/liabilities/${encodeURIComponent(loanId)}/payments`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  closeLiability: (loanId: string, closedDate: string) =>
+    request<BorrowedLoan>(`/liabilities/${encodeURIComponent(loanId)}/close`, {
+      method: 'POST',
+      body: JSON.stringify({ closedDate }),
+    }),
+  deleteLiability: (loanId: string) =>
+    request<{ deleted: boolean }>(`/liabilities/${encodeURIComponent(loanId)}`, {
+      method: 'DELETE',
+    }),
+
+  compareSnapshots: (beforeId: string, afterId: string) =>
+    request<VarianceReport>(
+      `/snapshots/${encodeURIComponent(beforeId)}/compare?target=${encodeURIComponent(afterId)}`,
+    ),
 
   advanceTax: (fy: string, quarter: string) =>
     request<AdvanceTaxInstallment>(

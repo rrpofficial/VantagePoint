@@ -27,8 +27,14 @@ import {
   type LoanQuery,
   ReferenceUC,
   TemplateUC,
+  IncomeUC,
+  LiabilityUC,
   PropertyUC,
   TradeUC,
+  type RecordIncomeInput,
+  type RecordBorrowedLoanInput,
+  type RecordBorrowedPaymentInput,
+  type BorrowedQuery,
   type RecordPropertyInput,
   ValuePortfolioUC,
   VaultUC,
@@ -415,6 +421,152 @@ export function registerRoutes(app: FastifyInstance): void {
       });
     }
     return reply.code(422).send(failure(result.error.code, result.error.message));
+  });
+
+  /* -------------------------------------------------------- borrowings */
+
+  app.get('/api/liabilities/kinds', async (_request, reply) => {
+    const result = await LiabilityUC.kinds();
+    return result.ok
+      ? reply.send({ kinds: result.value })
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.get('/api/liabilities', async (request, reply) => {
+    const raw = request.query as {
+      status?: string;
+      kind?: string;
+      lender?: string;
+      sortBy?: string;
+      direction?: string;
+      asOf?: string;
+    };
+    const list = (value: string | undefined) =>
+      value === undefined || value.length === 0 ? undefined : value.split(',').filter(Boolean);
+
+    const statuses = list(raw.status) as BorrowedQuery['statuses'];
+    const kinds = list(raw.kind) as BorrowedQuery['kinds'];
+    const lenders = list(raw.lender);
+
+    const result = await LiabilityUC.register({
+      ...(statuses === undefined ? {} : { statuses }),
+      ...(kinds === undefined ? {} : { kinds }),
+      ...(lenders === undefined ? {} : { lenders }),
+      ...(raw.sortBy === undefined
+        ? {}
+        : { sortBy: raw.sortBy as NonNullable<BorrowedQuery['sortBy']> }),
+      ...(raw.direction === undefined
+        ? {}
+        : { direction: raw.direction as NonNullable<BorrowedQuery['direction']> }),
+      ...(raw.asOf === undefined ? {} : { asOf: raw.asOf }),
+    });
+    return result.ok
+      ? reply.send(result.value)
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post('/api/liabilities', async (request, reply) => {
+    const body = request.body as Partial<RecordBorrowedLoanInput>;
+
+    const result = await LiabilityUC.record({
+      lenderName: body.lenderName ?? '',
+      kind: body.kind ?? 'OTHER',
+      principal: body.principal ?? '0',
+      interestRatePct: body.interestRatePct ?? '0',
+      tenureMonths: body.tenureMonths ?? 0,
+      startDate: body.startDate ?? '',
+      ...(body.statedEmi === undefined ? {} : { statedEmi: body.statedEmi }),
+      ...(body.securedAgainstAssetId === undefined
+        ? {}
+        : { securedAgainstAssetId: body.securedAgainstAssetId }),
+      ...(body.accountRef === undefined ? {} : { accountRef: body.accountRef }),
+      ...(body.notes === undefined ? {} : { notes: body.notes }),
+    });
+
+    if (result.ok) return reply.code(201).send(result.value);
+    if (result.error instanceof DuplicateLoanError) {
+      return reply.code(409).send({
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+          duplicates: result.error.loanIds,
+        },
+      });
+    }
+    const { status, body: failureBody } = refusal(result.error, 422);
+    return reply.code(status).send(failureBody);
+  });
+
+  app.post<{ Params: { id: string } }>(
+    '/api/liabilities/:id/payments',
+    async (request, reply) => {
+      const body = request.body as Partial<RecordBorrowedPaymentInput>;
+
+      const result = await LiabilityUC.recordPayment({
+        loanId: request.params.id,
+        date: body.date ?? '',
+        amount: body.amount ?? '0',
+        ...(body.isPrepayment === undefined ? {} : { isPrepayment: body.isPrepayment }),
+        ...(body.mode === undefined ? {} : { mode: body.mode }),
+        ...(body.notes === undefined ? {} : { notes: body.notes }),
+      });
+
+      if (result.ok) return reply.code(201).send(result.value);
+      const { status, body: failureBody } = refusal(result.error, 422);
+      return reply.code(status).send(failureBody);
+    },
+  );
+
+  app.post<{ Params: { id: string } }>('/api/liabilities/:id/close', async (request, reply) => {
+    const body = request.body as { closedDate?: string };
+    const result = await LiabilityUC.close(request.params.id, body.closedDate ?? '');
+    if (result.ok) return reply.send(result.value);
+    const { status, body: failureBody } = refusal(result.error, 422);
+    return reply.code(status).send(failureBody);
+  });
+
+  app.post<{ Params: { id: string } }>('/api/liabilities/:id/reopen', async (request, reply) => {
+    const result = await LiabilityUC.reopen(request.params.id);
+    if (result.ok) return reply.send(result.value);
+    const { status, body: failureBody } = refusal(result.error, 422);
+    return reply.code(status).send(failureBody);
+  });
+
+  app.delete<{ Params: { id: string } }>('/api/liabilities/:id', async (request, reply) => {
+    const result = await LiabilityUC.delete(request.params.id);
+    if (result.ok) return reply.send({ deleted: true });
+    const { status, body: failureBody } = refusal(result.error, 422);
+    return reply.code(status).send(failureBody);
+  });
+
+  /* ------------------------------------------------------- other income */
+
+  app.get('/api/income', async (request, reply) => {
+    const fy = (request.query as { fy?: string }).fy ?? '2025-26';
+    const result = await IncomeUC.forYear(fy);
+    return result.ok
+      ? reply.send(result.value)
+      : reply.code(409).send(failure(result.error.code, result.error.message));
+  });
+
+  app.post('/api/income', async (request, reply) => {
+    const body = request.body as Partial<RecordIncomeInput>;
+
+    const result = await IncomeUC.record({
+      assetId: body.assetId ?? '',
+      kind: body.kind === 'INTEREST' ? 'INTEREST' : 'DIVIDEND',
+      date: body.date ?? '',
+      grossAmount: body.grossAmount ?? '0',
+      ...(body.currency === undefined ? {} : { currency: body.currency }),
+      ...(body.taxWithheld === undefined ? {} : { taxWithheld: body.taxWithheld }),
+      ...(body.withholdingRatePct === undefined
+        ? {}
+        : { withholdingRatePct: body.withholdingRatePct }),
+    });
+
+    if (result.ok) return reply.code(201).send(result.value);
+    const { status, body: failureBody } = refusal(result.error, 422);
+    return reply.code(status).send(failureBody);
   });
 
   /* --------------------------------------------------- immovable property */

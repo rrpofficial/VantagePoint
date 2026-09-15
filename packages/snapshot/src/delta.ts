@@ -87,6 +87,17 @@ export function compare(before: Side, after: Side): VarianceReport {
 
     deltas.push({
       assetId,
+      /*
+       * Carried onto the delta so a comparison can be READ by asset class
+       * (Phase 4). Both snapshots hold it, and without it the only way to scope
+       * "how did the equity sleeve move" was to join every row back against the
+       * live ledger — which answers a different question, because an asset sold
+       * since the snapshot is no longer there to classify.
+       *
+       * The AFTER side wins where both have it; a liquidated position keeps the
+       * class it had when it existed.
+       */
+      assetClass: to?.assetClass ?? from?.assetClass ?? 'OTHER',
       bucket: bucketFor(from, to),
       quantityBefore: from?.quantity ?? '0',
       quantityAfter: to?.quantity ?? '0',

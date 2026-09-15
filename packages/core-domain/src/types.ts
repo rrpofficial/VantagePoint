@@ -400,12 +400,84 @@ export interface AdvanceTaxPayment {
   readonly notes?: string;
 }
 
+export type LiabilityKind =
+  | 'HOME_LOAN'
+  | 'PERSONAL_LOAN'
+  | 'MORTGAGE'
+  | 'VEHICLE_LOAN'
+  | 'EDUCATION_LOAN'
+  | 'LOAN_AGAINST_PROPERTY'
+  | 'LOAN_AGAINST_SECURITIES'
+  | 'GOLD_LOAN'
+  | 'CREDIT_CARD'
+  | 'OTHER';
+
+/**
+ * What net worth is reduced BY (ADR-009).
+ *
+ * Deliberately UNCHANGED in shape. `valuation.ts` and `al-items.ts` read exactly
+ * these five fields, and Phase 3 added the schedule beside this rather than
+ * through it — a borrowing now lives in `BorrowedLoan`, and `liabilityOf`
+ * projects one of these from it at whatever date is being valued.
+ *
+ * Keeping the projection means the reducing balance reaches net worth without
+ * either consumer learning what an EMI is.
+ */
 export interface Liability {
   readonly liabilityId: string;
-  readonly kind: 'HOME_LOAN' | 'PERSONAL_LOAN' | 'MORTGAGE' | 'OTHER';
+  readonly kind: LiabilityKind;
   readonly principalOutstanding: Money;
   readonly interestRatePct: Percentage;
   readonly asOf: IsoDate;
+}
+
+export type BorrowedLoanStatus = 'ACTIVE' | 'CLOSED';
+
+/**
+ * Money BORROWED, with its contractual schedule and what was actually paid
+ * against it (Phase 3, objectives 3 and 10).
+ *
+ * The mirror of `HandLoan`, and named so it can never be confused with one. The
+ * two sit on opposite sides of net worth and in different Schedule AL sections,
+ * and a sign error between them is the failure this separation exists to
+ * prevent — a borrowing counted as an asset moves net worth by twice the loan.
+ */
+export interface BorrowedLoan {
+  readonly loanId: string;
+  readonly kind: LiabilityKind;
+  /** Opaque handle; the lender's name never appears in an AI payload. */
+  readonly lenderRef: string;
+  /** The lender's actual name, held ONLY in the encrypted vault. */
+  readonly lenderName?: string;
+  readonly principal: Money;
+  readonly interestRatePct: Percentage;
+  readonly tenureMonths: number;
+  readonly startDate: IsoDate;
+  /** The lender's own EMI, where the borrower knows it. Preferred over computed. */
+  readonly statedEmi?: Money;
+  readonly payments: readonly LoanInstalment[];
+  readonly status: BorrowedLoanStatus;
+  readonly closedDate?: IsoDate;
+  /** The asset this borrowing financed, where there is one. */
+  readonly securedAgainstAssetId?: string;
+  readonly accountRef?: string;
+  readonly notes?: string;
+}
+
+/** One payment made against a borrowing. */
+export interface LoanInstalment {
+  readonly paymentId: string;
+  readonly date: IsoDate;
+  readonly amount: Money;
+  /**
+   * A lump sum against principal, outside the EMI schedule.
+   *
+   * Distinct because it behaves differently: an EMI is split between interest
+   * and principal, a prepayment is principal in full.
+   */
+  readonly isPrepayment?: boolean;
+  readonly mode?: PaymentMode;
+  readonly notes?: string;
 }
 
 /** How a payment reached the lender. Recorded because it is what a dispute turns on. */
