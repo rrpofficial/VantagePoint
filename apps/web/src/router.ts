@@ -19,13 +19,18 @@
  */
 import { useEffect, useState } from 'react';
 
+/*
+ * Nav order follows how often a section is opened, not the order work happens
+ * in. Import sits late beside Settings because it is where you go to LOAD data,
+ * which is occasional; Dashboard, Assets and Tax are where you go to read it.
+ */
 export const SECTIONS = [
   'Dashboard',
   'Assets',
-  'Import',
   'Snapshots',
   'Tax',
   'Compliance',
+  'Import',
   'Settings',
 ] as const;
 
