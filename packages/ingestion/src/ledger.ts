@@ -369,6 +369,20 @@ export function projectToLedger(input: {
     const assetId = assetIdFor(transaction, assetClass);
     if (!touched.includes(assetId)) touched.push(assetId);
 
+    /*
+     * The property's own facts — name, type, area, location — belong to the
+     * asset, not to the purchase, and arrive on whichever row mentions them.
+     * Applied on a SELL as well as a BUY: a sale can be the first row that
+     * names the property when only the disposal is being recorded.
+     */
+    if (transaction.propertyDetail !== undefined) {
+      const draft = draftFor(drafts, assetId, assetClass, transaction);
+      draft.asset = {
+        ...draft.asset,
+        property: { ...transaction.propertyDetail, assetId },
+      };
+    }
+
     if (ACQUISITION_KINDS.has(transaction.kind)) {
       const draft = draftFor(drafts, assetId, assetClass, transaction);
 
@@ -420,6 +434,7 @@ export function projectToLedger(input: {
         ...(transaction.perquisiteValue === undefined
           ? {}
           : { perquisiteValue: transaction.perquisiteValue }),
+        ...(transaction.property === undefined ? {} : { property: transaction.property }),
       });
       if (!lot.ok) {
         reject(transaction, lot.error.message);
@@ -603,6 +618,7 @@ export function projectToLedger(input: {
           ? {}
           : { disposalKind: transaction.disposalKind }),
         ...(transaction.orderRef === undefined ? {} : { orderRef: transaction.orderRef }),
+        ...(transaction.property === undefined ? {} : { property: transaction.property }),
         lotMatching,
       });
       continue;

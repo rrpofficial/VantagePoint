@@ -89,6 +89,7 @@ export function recordAcquisition(input: RecordAcquisitionInput): Result<Acquisi
     ...(input.fx ? { fx: input.fx } : {}),
     ...(input.grandfatheredFmv ? { grandfatheredFmv: input.grandfatheredFmv } : {}),
     ...(perquisiteValue ? { perquisiteValue } : {}),
+    ...(input.property ? { property: input.property } : {}),
   };
   return Ok(lot);
 }

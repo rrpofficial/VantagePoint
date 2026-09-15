@@ -27,7 +27,9 @@ import {
   type LoanQuery,
   ReferenceUC,
   TemplateUC,
+  PropertyUC,
   TradeUC,
+  type RecordPropertyInput,
   ValuePortfolioUC,
   VaultUC,
   enabledInclusionLabels,
@@ -413,6 +415,74 @@ export function registerRoutes(app: FastifyInstance): void {
       });
     }
     return reply.code(422).send(failure(result.error.code, result.error.message));
+  });
+
+  /* --------------------------------------------------- immovable property */
+
+  app.get('/api/property/reference', async (_request, reply) => {
+    const [kinds, units] = await Promise.all([PropertyUC.kinds(), PropertyUC.areaUnits()]);
+    return kinds.ok && units.ok
+      ? reply.send({ kinds: kinds.value, areaUnits: units.value })
+      : reply.code(409).send(failure('REFERENCE_UNAVAILABLE', 'property reference data'));
+  });
+
+  app.post('/api/property', async (request, reply) => {
+    const body = request.body as Partial<RecordPropertyInput>;
+
+    const result = await PropertyUC.record({
+      side: body.side === 'SELL' ? 'SELL' : 'BUY',
+      transactionDate: body.transactionDate ?? '',
+      propertyName: body.propertyName ?? '',
+      kind: body.kind ?? 'OTHER',
+      consideration: body.consideration ?? '0',
+      /*
+       * Spread rather than defaulted, under `exactOptionalPropertyTypes`: an
+       * absent duty and a duty of zero are the same figure, but an absent AREA
+       * and an area of zero are not, and passing `undefined` explicitly would
+       * fail the "both or neither" check the use case makes.
+       */
+      ...(body.currency === undefined ? {} : { currency: body.currency }),
+      ...(body.areaValue === undefined ? {} : { areaValue: body.areaValue }),
+      ...(body.areaUnit === undefined ? {} : { areaUnit: body.areaUnit }),
+      ...(body.pricePerAreaUnit === undefined
+        ? {}
+        : { pricePerAreaUnit: body.pricePerAreaUnit }),
+      ...(body.stampDuty === undefined ? {} : { stampDuty: body.stampDuty }),
+      ...(body.registrationFee === undefined ? {} : { registrationFee: body.registrationFee }),
+      ...(body.gst === undefined ? {} : { gst: body.gst }),
+      ...(body.otherTaxes === undefined ? {} : { otherTaxes: body.otherTaxes }),
+      ...(body.brokerage === undefined ? {} : { brokerage: body.brokerage }),
+      ...(body.stampDutyValue === undefined ? {} : { stampDutyValue: body.stampDutyValue }),
+      ...(body.address === undefined ? {} : { address: body.address }),
+      ...(body.city === undefined ? {} : { city: body.city }),
+      ...(body.state === undefined ? {} : { state: body.state }),
+      ...(body.pincode === undefined ? {} : { pincode: body.pincode }),
+      ...(body.country === undefined ? {} : { country: body.country }),
+      ...(body.registrationNumber === undefined
+        ? {}
+        : { registrationNumber: body.registrationNumber }),
+      ...(body.surveyNumber === undefined ? {} : { surveyNumber: body.surveyNumber }),
+      ...(body.documentRef === undefined ? {} : { documentRef: body.documentRef }),
+      ...(body.notes === undefined ? {} : { notes: body.notes }),
+      ...(body.currentValue === undefined ? {} : { currentValue: body.currentValue }),
+      ...(body.confirmDuplicate === undefined
+        ? {}
+        : { confirmDuplicate: body.confirmDuplicate }),
+    });
+
+    if (result.ok) return reply.code(201).send(result.value);
+
+    if (result.error instanceof DuplicateTradeError) {
+      return reply.code(409).send({
+        error: {
+          code: result.error.code,
+          message: result.error.message,
+          duplicates: result.error.identifiers,
+        },
+      });
+    }
+    const { status, body: failureBody } = refusal(result.error, 422);
+    return reply.code(status).send(failureBody);
   });
 
   /* -------------------------------------------------------------- loans */

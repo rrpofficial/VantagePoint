@@ -25,6 +25,7 @@ import {
 import type {
   AcquisitionLot,
   AdvanceTaxPayment,
+  AreaUnit,
   Asset,
   AssetClass,
   ChitFund,
@@ -33,6 +34,7 @@ import type {
   EquityAward,
   ExitTransaction,
   HandLoan,
+  ImmovableProperty,
   IncomeEvent,
   Jurisdiction,
   Liability,
@@ -40,7 +42,10 @@ import type {
   LotAllocation,
   MfSchemeCategory,
   PaymentMode,
+  PropertyLocation,
+  PropertyTransaction,
   RateSource,
+  ValuationBasis,
 } from '@porttrack/core-domain';
 import { Vault } from './vault.js';
 
@@ -88,6 +93,153 @@ interface LotRow {
   readonly discount_per_unit: string | null;
   readonly fmv_at_acquisition: string | null;
   readonly stated_remaining_quantity: string | null;
+  readonly prop_area_value: string | null;
+  readonly prop_area_unit: string | null;
+  readonly prop_price_per_area: string | null;
+  readonly prop_consideration: string | null;
+  readonly prop_stamp_duty: string | null;
+  readonly prop_registration_fee: string | null;
+  readonly prop_gst: string | null;
+  readonly prop_other_taxes: string | null;
+  readonly prop_brokerage: string | null;
+  readonly prop_stamp_duty_value: string | null;
+  readonly prop_document_ref: string | null;
+}
+
+/** The property columns a lot and an exit share, so one reader serves both. */
+interface PropertyTxnRow {
+  readonly prop_area_value: string | null;
+  readonly prop_area_unit: string | null;
+  readonly prop_price_per_area: string | null;
+  readonly prop_consideration: string | null;
+  readonly prop_stamp_duty: string | null;
+  readonly prop_registration_fee: string | null;
+  readonly prop_gst: string | null;
+  readonly prop_other_taxes: string | null;
+  readonly prop_brokerage: string | null;
+  readonly prop_stamp_duty_value: string | null;
+  readonly prop_document_ref: string | null;
+}
+
+interface PropertyRow {
+  readonly asset_id: string;
+  readonly property_name: string;
+  readonly kind: string;
+  readonly address_ref: string | null;
+  readonly address: string | null;
+  readonly city: string | null;
+  readonly state: string | null;
+  readonly pincode: string | null;
+  readonly country: string | null;
+  readonly area_value: string | null;
+  readonly area_unit: string | null;
+  readonly current_value: string | null;
+  readonly current_value_ccy: string | null;
+  readonly current_value_as_of: string | null;
+  readonly current_value_basis: string | null;
+  readonly registration_number: string | null;
+  readonly survey_number: string | null;
+  readonly notes: string | null;
+}
+
+/**
+ * `consideration` is the presence test: it is the one figure a property
+ * transaction cannot lack, so a row without it has no property detail rather
+ * than an all-zero one. The duties default to zero because "not stated" and
+ * "nil" are the same thing for a charge.
+ */
+function toPropertyTxn(row: PropertyTxnRow, currency: string): PropertyTransaction | undefined {
+  if (row.prop_consideration === null) return undefined;
+
+  const amount = (value: string | null): MoneyValue => money(value ?? '0', currency);
+
+  return {
+    ...(row.prop_area_value === null || row.prop_area_unit === null
+      ? {}
+      : { area: { value: row.prop_area_value, unit: row.prop_area_unit as AreaUnit } }),
+    ...(row.prop_price_per_area === null
+      ? {}
+      : { pricePerAreaUnit: money(row.prop_price_per_area, currency) }),
+    consideration: money(row.prop_consideration, currency),
+    stampDuty: amount(row.prop_stamp_duty),
+    registrationFee: amount(row.prop_registration_fee),
+    gst: amount(row.prop_gst),
+    otherTaxes: amount(row.prop_other_taxes),
+    ...(row.prop_brokerage === null ? {} : { brokerage: money(row.prop_brokerage, currency) }),
+    ...(row.prop_stamp_duty_value === null
+      ? {}
+      : { stampDutyValue: money(row.prop_stamp_duty_value, currency) }),
+    ...(row.prop_document_ref === null ? {} : { documentRef: row.prop_document_ref }),
+  };
+}
+
+/**
+ * The eleven property columns, in the order both INSERT statements declare them.
+ *
+ * One function because the lot and the exit take the identical tail; two copies
+ * of an eleven-placeholder argument list is a silent column-shift waiting to
+ * happen, and a shifted TEXT column would store stamp duty as a GST figure
+ * without any error.
+ */
+function propertyTxnArgs(txn: PropertyTransaction | undefined): readonly (string | null)[] {
+  if (txn === undefined) return [null, null, null, null, null, null, null, null, null, null, null];
+  return [
+    txn.area?.value ?? null,
+    txn.area?.unit ?? null,
+    txn.pricePerAreaUnit?.amount ?? null,
+    txn.consideration.amount,
+    txn.stampDuty.amount,
+    txn.registrationFee.amount,
+    txn.gst.amount,
+    txn.otherTaxes.amount,
+    txn.brokerage?.amount ?? null,
+    txn.stampDutyValue?.amount ?? null,
+    txn.documentRef ?? null,
+  ];
+}
+
+function toProperty(row: PropertyRow): ImmovableProperty {
+  const location: PropertyLocation | undefined =
+    row.address_ref === null &&
+    row.address === null &&
+    row.city === null &&
+    row.state === null &&
+    row.pincode === null
+      ? undefined
+      : {
+          addressRef: row.address_ref ?? '',
+          ...(row.address === null ? {} : { address: row.address }),
+          ...(row.city === null ? {} : { city: row.city }),
+          ...(row.state === null ? {} : { state: row.state }),
+          ...(row.pincode === null ? {} : { pincode: row.pincode }),
+          ...(row.country === null ? {} : { country: row.country }),
+        };
+
+  return {
+    assetId: row.asset_id,
+    propertyName: row.property_name,
+    kind: row.kind as ImmovableProperty['kind'],
+    ...(location === undefined ? {} : { location }),
+    ...(row.area_value === null || row.area_unit === null
+      ? {}
+      : { area: { value: row.area_value, unit: row.area_unit as AreaUnit } }),
+    // All four written together or not at all, so a value can never appear
+    // without the basis and date that qualify it.
+    ...(row.current_value === null ||
+    row.current_value_as_of === null ||
+    row.current_value_basis === null
+      ? {}
+      : {
+          currentValue: {
+            amount: money(row.current_value, row.current_value_ccy ?? 'INR'),
+            asOf: row.current_value_as_of,
+            basis: row.current_value_basis as ValuationBasis,
+          },
+        }),
+    ...(row.registration_number === null ? {} : { registrationNumber: row.registration_number }),
+    ...(row.survey_number === null ? {} : { surveyNumber: row.survey_number }),
+    ...(row.notes === null ? {} : { notes: row.notes }),
+  };
 }
 
 interface IncomeRow {
@@ -276,6 +428,10 @@ function toLot(row: LotRow): AcquisitionLot {
       ? {}
       : { statedRemainingQuantity: row.stated_remaining_quantity }),
     ...(row.is_bonus === 1 ? { isBonus: true } : {}),
+    ...(() => {
+      const property = toPropertyTxn(row, row.cost_currency);
+      return property === undefined ? {} : { property };
+    })(),
   };
 }
 
@@ -393,6 +549,10 @@ function hydrate(row: AssetRow): Asset {
           )
           .all(row.asset_id) as InterestPaymentRow[]);
 
+  const property = db.prepare('SELECT * FROM properties WHERE asset_id = ?').get(row.asset_id) as
+    | PropertyRow
+    | undefined;
+
   const chit = db.prepare('SELECT * FROM chit_funds WHERE asset_id = ?').get(row.asset_id) as
     | ChitFundRow
     | undefined;
@@ -418,6 +578,7 @@ function hydrate(row: AssetRow): Asset {
     ...(row.position_closed === 1 ? { positionClosed: true } : {}),
     ...(loan === undefined ? {} : { handLoan: toHandLoan(loan, repayments, interestPayments) }),
     ...(chit === undefined ? {} : { chitFund: toChitFund(chit, emis) }),
+    ...(property === undefined ? {} : { property: toProperty(property) }),
     ...(row.scheme_category === null
       ? {}
       : { schemeCategory: row.scheme_category as MfSchemeCategory }),
@@ -476,6 +637,7 @@ function writeAsset(asset: Asset): void {
   }
   db.prepare('DELETE FROM hand_loans WHERE asset_id = ?').run(asset.assetId);
   db.prepare('DELETE FROM chit_funds WHERE asset_id = ?').run(asset.assetId);
+  db.prepare('DELETE FROM properties WHERE asset_id = ?').run(asset.assetId);
 
   const insertLot = db.prepare(
     `INSERT INTO lots
@@ -484,8 +646,12 @@ function writeAsset(asset: Asset): void {
         rate_source, tax_rate_source, fx_is_fallback, fx_fallback_note, grandfathered_fmv,
         perquisite_value, is_bonus, award_kind, grant_ref, grant_date, vest_date,
         purchase_date, purchase_price, discount_per_unit, fmv_at_acquisition,
-        stated_remaining_quantity)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        stated_remaining_quantity,
+        prop_area_value, prop_area_unit, prop_price_per_area, prop_consideration,
+        prop_stamp_duty, prop_registration_fee, prop_gst, prop_other_taxes,
+        prop_brokerage, prop_stamp_duty_value, prop_document_ref)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   for (const lot of asset.lots) {
     insertLot.run(
@@ -518,6 +684,7 @@ function writeAsset(asset: Asset): void {
       lot.equityAward?.discountPerUnit?.amount ?? null,
       lot.equityAward?.fmvAtAcquisition?.amount ?? null,
       lot.statedRemainingQuantity ?? null,
+      ...propertyTxnArgs(lot.property),
     );
   }
 
@@ -656,6 +823,38 @@ function writeAsset(asset: Asset): void {
       );
     }
   }
+
+  if (asset.property !== undefined) {
+    const property = asset.property;
+    db.prepare(
+      `INSERT INTO properties
+         (asset_id, property_name, kind, address_ref, address, city, state, pincode, country,
+          area_value, area_unit, current_value, current_value_ccy, current_value_as_of,
+          current_value_basis, registration_number, survey_number, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      asset.assetId,
+      property.propertyName,
+      property.kind,
+      property.location?.addressRef ?? null,
+      property.location?.address ?? null,
+      property.location?.city ?? null,
+      property.location?.state ?? null,
+      property.location?.pincode ?? null,
+      property.location?.country ?? null,
+      property.area?.value ?? null,
+      property.area?.unit ?? null,
+      // All four together. A value whose basis or date failed to write would be
+      // read back as no value at all, which is the safe direction.
+      property.currentValue?.amount.amount ?? null,
+      property.currentValue?.amount.currency ?? null,
+      property.currentValue?.asOf ?? null,
+      property.currentValue?.basis ?? null,
+      property.registrationNumber ?? null,
+      property.surveyNumber ?? null,
+      property.notes ?? null,
+    );
+  }
 }
 
 export const AssetRepository = {
@@ -745,6 +944,17 @@ interface ExitRow {
   readonly disposal_kind: string | null;
   readonly order_ref: string | null;
   readonly lot_matching: string | null;
+  readonly prop_area_value: string | null;
+  readonly prop_area_unit: string | null;
+  readonly prop_price_per_area: string | null;
+  readonly prop_consideration: string | null;
+  readonly prop_stamp_duty: string | null;
+  readonly prop_registration_fee: string | null;
+  readonly prop_gst: string | null;
+  readonly prop_other_taxes: string | null;
+  readonly prop_brokerage: string | null;
+  readonly prop_stamp_duty_value: string | null;
+  readonly prop_document_ref: string | null;
 }
 
 function toExit(row: ExitRow): ExitTransaction {
@@ -788,6 +998,10 @@ function toExit(row: ExitRow): ExitTransaction {
     // NULL reads as FIFO: every disposal written before the column existed was
     // matched that way, and leaving it absent would make them look unrecorded.
     lotMatching: (row.lot_matching ?? 'FIFO') as NonNullable<ExitTransaction['lotMatching']>,
+    ...(() => {
+      const property = toPropertyTxn(row, row.currency);
+      return property === undefined ? {} : { property };
+    })(),
   };
 }
 
@@ -809,8 +1023,12 @@ export const ExitRepository = {
          (txn_id, asset_id, exit_date, acquisition_date, quantity, price_per_unit, currency,
           fees, stt, allocations, valuation_rate, tax_rate, rate_source, tax_rate_source,
           fx_is_fallback, fx_fallback_note, valuation_inr, proceeds_tax_inr,
-          cost_basis_tax_inr, taxable_gain_inr, disposal_kind, order_ref, lot_matching)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          cost_basis_tax_inr, taxable_gain_inr, disposal_kind, order_ref, lot_matching,
+          prop_area_value, prop_area_unit, prop_price_per_area, prop_consideration,
+          prop_stamp_duty, prop_registration_fee, prop_gst, prop_other_taxes,
+          prop_brokerage, prop_stamp_duty_value, prop_document_ref)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(txn_id) DO NOTHING`,
     );
 
@@ -840,6 +1058,7 @@ export const ExitRepository = {
           exit.disposalKind ?? null,
           exit.orderRef ?? null,
           exit.lotMatching ?? null,
+          ...propertyTxnArgs(exit.property),
         );
       }
     })();

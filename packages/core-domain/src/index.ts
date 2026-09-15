@@ -87,6 +87,21 @@ export {
 } from './mf-tax-character.js';
 export { HOLDING_BUCKETS, bucketOf, type AssetBucket } from './asset-bucket.js';
 
+/** Immovable property — area units, duty breakdown, and the lot mapping. */
+export {
+  AREA_UNITS,
+  PROPERTY_KINDS,
+  areaUnitLabel,
+  considerationMismatch,
+  formatArea,
+  isApproximateUnit,
+  propertyChargesOf,
+  stampDutyShortfall,
+  toSquareFeet,
+  totalOutlayOf,
+  totalTaxOf,
+} from './property.js';
+
 /**
  * US-4.5c — grant → tranche → disposal identity for equity compensation.
  *

@@ -586,6 +586,95 @@ export const MIGRATIONS: readonly Migration[] = [
       DELETE FROM assets WHERE asset_class IN ('RSU','ESPP');
     `,
   },
+  {
+    version: 16,
+    name: 'immovable-property-detail',
+    up: `
+      -- Property stops being an instrument with one unit and a ticker.
+      --
+      -- It was recorded as quantity '1' at a cost_per_unit holding the entire
+      -- price, its name in assets.symbol — a ticker column — and its duties
+      -- split across fees and other_charges with nothing saying which was which.
+      -- There was no type, no area, no location and no way to record a sale.
+      --
+      -- Nothing here rewrites an existing lot. The canonical money columns keep
+      -- their meaning and their values, so every cost basis, gain and Schedule AL
+      -- figure already computed stays exactly as it was; this adds the detail
+      -- beside them.
+
+      CREATE TABLE properties (
+        asset_id            TEXT PRIMARY KEY REFERENCES assets(asset_id) ON DELETE CASCADE,
+        property_name       TEXT NOT NULL,
+        kind                TEXT NOT NULL,
+        -- Address is PII and follows the borrower-name rule (ADR-013): the real
+        -- value stays in the encrypted vault, address_ref is what leaves.
+        address_ref         TEXT,
+        address             TEXT,
+        city                TEXT,
+        state               TEXT,
+        pincode             TEXT,
+        country             TEXT,
+        area_value          TEXT,
+        area_unit           TEXT,
+        -- Optional and never summed into net worth. A value with no basis and no
+        -- date is the figure this column exists to keep out of a total, so all
+        -- three are written together or not at all.
+        current_value       TEXT,
+        current_value_ccy   TEXT,
+        current_value_as_of TEXT,
+        current_value_basis TEXT,
+        registration_number TEXT,
+        survey_number       TEXT,
+        notes               TEXT
+      );
+
+      -- Per-transaction detail. Added to both sides: a purchase and a sale each
+      -- carry duties, and a sale without them could not be recorded at all.
+      ALTER TABLE lots ADD COLUMN prop_area_value TEXT;
+      ALTER TABLE lots ADD COLUMN prop_area_unit TEXT;
+      ALTER TABLE lots ADD COLUMN prop_price_per_area TEXT;
+      ALTER TABLE lots ADD COLUMN prop_consideration TEXT;
+      ALTER TABLE lots ADD COLUMN prop_stamp_duty TEXT;
+      ALTER TABLE lots ADD COLUMN prop_registration_fee TEXT;
+      ALTER TABLE lots ADD COLUMN prop_gst TEXT;
+      ALTER TABLE lots ADD COLUMN prop_other_taxes TEXT;
+      ALTER TABLE lots ADD COLUMN prop_brokerage TEXT;
+      ALTER TABLE lots ADD COLUMN prop_stamp_duty_value TEXT;
+      ALTER TABLE lots ADD COLUMN prop_document_ref TEXT;
+
+      ALTER TABLE exits ADD COLUMN prop_area_value TEXT;
+      ALTER TABLE exits ADD COLUMN prop_area_unit TEXT;
+      ALTER TABLE exits ADD COLUMN prop_price_per_area TEXT;
+      ALTER TABLE exits ADD COLUMN prop_consideration TEXT;
+      ALTER TABLE exits ADD COLUMN prop_stamp_duty TEXT;
+      ALTER TABLE exits ADD COLUMN prop_registration_fee TEXT;
+      ALTER TABLE exits ADD COLUMN prop_gst TEXT;
+      ALTER TABLE exits ADD COLUMN prop_other_taxes TEXT;
+      ALTER TABLE exits ADD COLUMN prop_brokerage TEXT;
+      ALTER TABLE exits ADD COLUMN prop_stamp_duty_value TEXT;
+      ALTER TABLE exits ADD COLUMN prop_document_ref TEXT;
+
+      -- Give every existing property a row, so the screen has a name and a type
+      -- to show rather than a raw asset id. The name is whatever the import put
+      -- in symbol; OTHER is honest, because the kind was never captured and
+      -- guessing "FLAT" from a label would invent a tax characteristic.
+      INSERT INTO properties (asset_id, property_name, kind)
+      SELECT asset_id, COALESCE(symbol, asset_id), 'OTHER'
+        FROM assets
+       WHERE asset_class = 'REAL_ESTATE';
+
+      -- Recover what the old importer DID record. It wrote the registration fee
+      -- to fees and stamp duty to other_charges; that mapping is knowable, so
+      -- the breakdown is restored rather than left blank.
+      UPDATE lots
+         SET prop_consideration    = CAST(CAST(quantity AS REAL) * CAST(cost_per_unit AS REAL) AS TEXT),
+             prop_stamp_duty       = other_charges,
+             prop_registration_fee = fees,
+             prop_gst              = '0',
+             prop_other_taxes      = '0'
+       WHERE asset_id IN (SELECT asset_id FROM assets WHERE asset_class = 'REAL_ESTATE');
+    `,
+  },
 ];
 
 const SCHEMA_TABLE = `

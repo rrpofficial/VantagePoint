@@ -197,6 +197,8 @@ export interface AcquisitionLot {
    */
   readonly statedRemainingQuantity?: Quantity;
   readonly isBonus?: boolean;
+  /** Present on REAL_ESTATE lots: the duty and area detail of the purchase. */
+  readonly property?: PropertyTransaction;
 }
 
 export interface LotAllocation {
@@ -303,6 +305,16 @@ export interface ExitTransaction {
    * value for the profit, and the resulting number looks entirely ordinary.
    */
   readonly taxableGainInr?: Money;
+
+  /**
+   * Present on a REAL_ESTATE disposal: the duty and area detail of the sale.
+   *
+   * A sale carries duties too — the buyer usually pays stamp duty, but the
+   * seller's brokerage and any TDS deducted under s.194-IA belong to this
+   * transaction, and `stampDutyValue` on a sale is what s.50C substitutes for
+   * the consideration when it is higher.
+   */
+  readonly property?: PropertyTransaction;
 }
 
 export type IncomeEventKind =
@@ -354,6 +366,8 @@ export interface Asset {
   readonly handLoan?: HandLoan;
   /** Present only for CHIT_FUND assets. */
   readonly chitFund?: ChitFund;
+  /** Present only for REAL_ESTATE assets. */
+  readonly property?: ImmovableProperty;
   /** Present only for DOMESTIC_MUTUAL_FUND assets. */
   readonly schemeCategory?: MfSchemeCategory;
   /** Equity allocation, required to place a HYBRID scheme. */
@@ -396,6 +410,183 @@ export interface Liability {
 
 /** How a payment reached the lender. Recorded because it is what a dispute turns on. */
 export type PaymentMode = 'CASH' | 'BANK_TRANSFER' | 'UPI' | 'CHEQUE' | 'OTHER';
+
+/* ------------------------------------------------------ immovable property */
+
+/**
+ * Units land and buildings are actually measured in here.
+ *
+ * Not a tidy SI subset: a Chennai sale deed says "ground", a Punjab one says
+ * "kanal and marla", a Bengal one "katha", and an agricultural record "guntha" or
+ * "bigha". Storing everything as square feet would mean converting at import —
+ * and the regional units are not exact across states (a bigha is not one size),
+ * so a conversion would be a guess baked into the stored figure.
+ *
+ * The unit is therefore recorded AS STATED and converted only for display, where
+ * a wrong conversion is visible rather than permanent.
+ */
+export type AreaUnit =
+  | 'SQ_FT'
+  | 'SQ_M'
+  | 'SQ_YARD'
+  | 'SQ_KM'
+  | 'ACRE'
+  | 'HECTARE'
+  | 'ARE'
+  | 'CENT'
+  | 'GUNTHA'
+  | 'GROUND'
+  | 'AANKADAM'
+  | 'BIGHA'
+  | 'BISWA'
+  | 'KATHA'
+  | 'DECIMAL'
+  | 'KANAL'
+  | 'MARLA'
+  | 'ROOD'
+  | 'PERCH';
+
+/**
+ * What the property is.
+ *
+ * Recorded because it changes the tax treatment, not for tidiness: agricultural
+ * land outside the s.2(14) limits is not a capital asset at all, and a let-out
+ * building produces house property income where a plot produces none.
+ */
+export type PropertyKind =
+  | 'LAND'
+  | 'PLOT'
+  | 'AGRICULTURAL_LAND'
+  | 'FLAT'
+  | 'APARTMENT'
+  | 'INDEPENDENT_HOUSE'
+  | 'VILLA'
+  | 'COMMERCIAL'
+  | 'SHOP'
+  | 'OFFICE'
+  | 'WAREHOUSE'
+  | 'INDUSTRIAL'
+  | 'PARKING'
+  | 'OTHER';
+
+export interface Area {
+  readonly value: Quantity;
+  readonly unit: AreaUnit;
+}
+
+/**
+ * Where the property is.
+ *
+ * A street address identifies a household, so it follows the same rule as a
+ * borrower's name (ADR-013): the full address lives ONLY in the encrypted vault
+ * and `addressRef` is what leaves this machine. City and state are kept in the
+ * clear because Schedule AL asks for them and they do not identify anyone.
+ */
+export interface PropertyLocation {
+  /** Masked reference; resolving it requires the local vault. */
+  readonly addressRef: string;
+  /** The real address, held only in the vault. Never substitute it for the ref. */
+  readonly address?: string;
+  readonly city?: string;
+  readonly state?: string;
+  readonly pincode?: string;
+  readonly country?: string;
+}
+
+/**
+ * How a current value was arrived at.
+ *
+ * REQUIRED whenever a current value is recorded. A valuation with no stated
+ * basis is the figure this module exists to keep out of net worth: "someone said
+ * it's worth ₹2 crore" and a registered valuer's report are not the same fact,
+ * and once stored as a bare number they become indistinguishable.
+ */
+export type ValuationBasis =
+  | 'CIRCLE_RATE'
+  | 'REGISTERED_VALUER'
+  | 'BROKER_ESTIMATE'
+  | 'RECENT_COMPARABLE'
+  | 'OWNER_ESTIMATE';
+
+export interface PropertyValuation {
+  readonly amount: Money;
+  readonly asOf: IsoDate;
+  readonly basis: ValuationBasis;
+  readonly notes?: string;
+}
+
+/**
+ * The property itself — the facts that do not change when it is bought or sold.
+ *
+ * Present only on REAL_ESTATE assets, following `handLoan` and `chitFund`: an
+ * asset class whose shape differs from an instrument gets a block of its own
+ * rather than having its fields smuggled into `symbol` and `otherCharges`, which
+ * is what happened here before.
+ */
+export interface ImmovableProperty {
+  readonly assetId: string;
+  readonly propertyName: string;
+  readonly kind: PropertyKind;
+  readonly location?: PropertyLocation;
+  /** Total extent of the property, as the deed states it. */
+  readonly area?: Area;
+  /**
+   * An optional current value, for when one is genuinely known.
+   *
+   * Deliberately NOT what the asset is carried at. Schedule AL asks for cost,
+   * and `ValuationEngine` values property at cost for the reason the Immovable
+   * screen states: a valuation nobody performed is not an asset figure. This is
+   * shown beside the cost, labelled with its basis and date, and is never summed
+   * into net worth silently.
+   */
+  readonly currentValue?: PropertyValuation;
+  /** Sub-registrar document number, as on the deed. */
+  readonly registrationNumber?: string;
+  readonly surveyNumber?: string;
+  readonly notes?: string;
+}
+
+/**
+ * The property-specific detail of ONE purchase or sale.
+ *
+ * Sits beside the canonical money fields rather than replacing them. The lot's
+ * `quantity`, `costPerUnit`, `fees`, `stt` and `otherCharges` remain what the
+ * tax engine and valuation read — this block is the BREAKDOWN, so a screen can
+ * show stamp duty as stamp duty instead of as an undifferentiated charge.
+ *
+ * The mapping onto those fields is fixed and enforced by `propertyChargesOf`:
+ *
+ *   quantity      = area.value, or '1' when no area is stated
+ *   costPerUnit   = pricePerAreaUnit, or the whole consideration when quantity is 1
+ *   fees          = registrationFee + brokerage
+ *   stt           = 0, ALWAYS — securities transaction tax cannot arise on land,
+ *                   and the importer previously wrote stamp duty here
+ *   otherCharges  = stampDuty + gst + otherTaxes
+ */
+export interface PropertyTransaction {
+  /** Area transacted, which can be less than the property's total extent. */
+  readonly area?: Area;
+  /** Price per unit of area — the "rate" a deed quotes. */
+  readonly pricePerAreaUnit?: Money;
+  /** Total price for this transaction, before duties and fees. */
+  readonly consideration: Money;
+  readonly stampDuty: Money;
+  readonly registrationFee: Money;
+  /** GST, which arises on an under-construction purchase and not on resale. */
+  readonly gst: Money;
+  /** Cess, local body tax, TDS under s.194-IA — anything not named above. */
+  readonly otherTaxes: Money;
+  readonly brokerage?: Money;
+  /**
+   * The value the sub-registrar assessed, where it differs from the price paid.
+   *
+   * Recorded because the difference is itself taxable: s.50C substitutes the
+   * stamp duty value for the seller's consideration, and s.56(2)(x) charges the
+   * shortfall in the buyer's hands. Both are invisible without this number.
+   */
+  readonly stampDutyValue?: Money;
+  readonly documentRef?: string;
+}
 
 export interface LoanPayment {
   readonly paymentId: string;
@@ -493,6 +684,8 @@ export interface RecordAcquisitionInput {
   readonly fmvPerUnit?: Money;
   /** Grant and tranche detail, for an RSU or ESPP lot. */
   readonly equityAward?: EquityAward;
+  /** Area and duty detail, for a REAL_ESTATE lot. */
+  readonly property?: PropertyTransaction;
   readonly lotId?: string;
 }
 

@@ -1,6 +1,10 @@
 /** Ingestion types. Types only — no runtime behaviour. */
 import type { IsoDate, IsoDateTime, Money, Quantity } from '@porttrack/shared-kernel';
-import type { EquityAward } from '@porttrack/core-domain';
+import type {
+  EquityAward,
+  ImmovableProperty,
+  PropertyTransaction,
+} from '@porttrack/core-domain';
 
 /**
  * `MANUAL` is not a file format — it is a trade typed into the app by hand.
@@ -150,6 +154,17 @@ export interface ParsedTransaction {
    * product, and without it every holding is valued at cost.
    */
   readonly marketPricePerUnit?: Money;
+  /**
+   * Immovable property detail, where the row describes one.
+   *
+   * Carried through the pipeline so a manual entry and a template import reach
+   * the ledger by the same route. The projector writes it onto the lot or the
+   * exit; the canonical money fields on this transaction still decide the cost
+   * basis, and `propertyChargesOf` is what keeps the two in step.
+   */
+  readonly property?: PropertyTransaction;
+  /** The property itself, on a row that creates or updates one. */
+  readonly propertyDetail?: ImmovableProperty;
   /** Set on a SELL. Flags the block sold on vest day to fund withholding. */
   readonly disposalKind?: 'SALE' | 'SELL_TO_COVER';
   /** The broker's order identifier, where the source states one. */

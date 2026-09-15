@@ -111,6 +111,106 @@ export interface AcquisitionLot {
   readonly fees?: Money;
   readonly stt?: Money;
   readonly otherCharges?: Money;
+  /** Present on a REAL_ESTATE lot: the deed's own breakdown. */
+  readonly property?: PropertyTransaction;
+}
+
+export type AreaUnit = string;
+export type PropertyKind = string;
+export type ValuationBasis =
+  | 'CIRCLE_RATE'
+  | 'REGISTERED_VALUER'
+  | 'BROKER_ESTIMATE'
+  | 'RECENT_COMPARABLE'
+  | 'OWNER_ESTIMATE';
+
+export interface Area {
+  readonly value: string;
+  readonly unit: AreaUnit;
+}
+
+/**
+ * The duty breakdown of one purchase or sale.
+ *
+ * Read, never derived here. The screen previously displayed `stt` as "Stamp
+ * duty" — a field nothing sets for property — so every property showed ₹0 duty
+ * while the real figure sat in an "other" column.
+ */
+export interface PropertyTransaction {
+  readonly area?: Area;
+  readonly pricePerAreaUnit?: Money;
+  readonly consideration: Money;
+  readonly stampDuty: Money;
+  readonly registrationFee: Money;
+  readonly gst: Money;
+  readonly otherTaxes: Money;
+  readonly brokerage?: Money;
+  readonly stampDutyValue?: Money;
+  readonly documentRef?: string;
+}
+
+export interface PropertyLocation {
+  readonly addressRef: string;
+  readonly address?: string;
+  readonly city?: string;
+  readonly state?: string;
+  readonly pincode?: string;
+  readonly country?: string;
+}
+
+export interface ImmovableProperty {
+  readonly assetId: string;
+  readonly propertyName: string;
+  readonly kind: PropertyKind;
+  readonly location?: PropertyLocation;
+  readonly area?: Area;
+  readonly currentValue?: {
+    readonly amount: Money;
+    readonly asOf: string;
+    readonly basis: ValuationBasis;
+    readonly notes?: string;
+  };
+  readonly registrationNumber?: string;
+  readonly surveyNumber?: string;
+  readonly notes?: string;
+}
+
+/**
+ * What the property form posts. Every money field is a STRING, not a `Money`:
+ * the server parses Indian digit grouping (`1,00,00,000`), which is exactly how
+ * a deed figure gets typed, and pre-parsing it here would be a second parser.
+ */
+export interface RecordPropertyBody {
+  side: 'BUY' | 'SELL';
+  transactionDate: string;
+  propertyName: string;
+  kind: PropertyKind;
+  consideration: string;
+  areaValue?: string;
+  areaUnit?: AreaUnit;
+  pricePerAreaUnit?: string;
+  stampDuty?: string;
+  registrationFee?: string;
+  gst?: string;
+  otherTaxes?: string;
+  brokerage?: string;
+  stampDutyValue?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  registrationNumber?: string;
+  surveyNumber?: string;
+  documentRef?: string;
+  notes?: string;
+  currentValue?: { amount: string; asOf: string; basis: ValuationBasis };
+  confirmDuplicate?: boolean;
+}
+
+/** Non-blocking findings the server reports after a property is recorded. */
+export interface PropertyAdvisory {
+  readonly code: 'CONSIDERATION_MISMATCH' | 'STAMP_DUTY_SHORTFALL';
+  readonly message: string;
 }
 
 export interface IncomeEvent {
@@ -165,6 +265,8 @@ export interface LedgerAsset {
    * copy of the rule, free to drift from the engine's.
    */
   readonly bucket: AssetBucket;
+  /** Present only on REAL_ESTATE: name, type, area, location, current value. */
+  readonly property?: ImmovableProperty;
 }
 
 /** Mirrors core-domain's AssetBucket. The SPA never derives it, only reads it. */
@@ -730,6 +832,16 @@ export const api = {
     otherCharges?: Money;
     confirmDuplicate?: boolean;
   }) => request<RecordedTrade>('/trades', { method: 'POST', body: JSON.stringify(input) }),
+
+  propertyReference: () =>
+    request<{ kinds: readonly PropertyKind[]; areaUnits: readonly AreaUnit[] }>(
+      '/property/reference',
+    ),
+  recordProperty: (input: RecordPropertyBody) =>
+    request<{ assetId: string; advisories: readonly PropertyAdvisory[] }>('/property', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 
   loans: (query: LoanQuery = {}) => request<LoanRegister>(`/loans${loanQueryString(query)}`),
   recordLoan: (input: {

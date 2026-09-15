@@ -22,6 +22,12 @@ import {
   type Money as MoneyValue,
   type Result,
 } from '@porttrack/shared-kernel';
+import {
+  propertyChargesOf,
+  type AreaUnit,
+  type PropertyKind,
+  type PropertyTransaction,
+} from '@porttrack/core-domain';
 import { normaliseDate, parseCsv, type CsvRow, type CsvTable } from './csv.js';
 import { borrowerRef, deterministicImportedAt, provenanceFor } from './provenance.js';
 import type { ParsedLoanPayment, ParsedTransaction, RowError } from './types.js';
@@ -29,6 +35,17 @@ import type { ParsedLoanPayment, ParsedTransaction, RowError } from './types.js'
 export interface TemplateDefinition {
   readonly name: string;
   readonly columns: readonly string[];
+  /**
+   * Columns a file MAY carry but need not.
+   *
+   * Exists so a template can gain detail without invalidating the files people
+   * already filled in. `Custom_RealEstate` grew from six columns to seventeen
+   * when property stopped being an instrument with one unit; requiring all
+   * eleven new ones would have rejected every sheet already on disk with a
+   * header mismatch, which is a poor trade for information the deed may not even
+   * state.
+   */
+  readonly optionalColumns?: readonly string[];
   readonly description: string;
   /** What a row in this template becomes. Stated, never inferred. */
   readonly assetClass: string;
@@ -87,17 +104,53 @@ export const TEMPLATES: readonly TemplateDefinition[] = [
     name: 'Custom_RealEstate',
     columns: [
       'property_name',
+      'property_type',
       'purchase_date',
+      'area',
+      'area_unit',
+      'price_per_area_unit',
       'purchase_price',
       'stamp_duty',
       'registration_fee',
+      'gst',
+      'other_taxes',
+      'brokerage',
+      'stamp_duty_value',
+      'city',
+      'state',
+      'registration_number',
       'currency',
+    ],
+    /*
+     * Everything the six-column original did not have. A sheet filled in before
+     * this template grew still imports, and a deed that states no GST simply
+     * leaves the column out.
+     */
+    optionalColumns: [
+      'property_type',
+      'area',
+      'area_unit',
+      'price_per_area_unit',
+      'gst',
+      'other_taxes',
+      'brokerage',
+      'stamp_duty_value',
+      'city',
+      'state',
+      'registration_number',
     ],
     description: 'Land and buildings, at cost of acquisition',
     assetClass: 'REAL_ESTATE',
     guidance:
-      'Stamp duty and registration fee are added to the cost of acquisition, which is what ' +
-      'Schedule AL reports. Enter the purchase price, not a current valuation.',
+      'Every duty is added to the cost of acquisition, which is what Schedule AL reports. ' +
+      'Enter the purchase price, not a current valuation. property_type is one of FLAT, ' +
+      'APARTMENT, INDEPENDENT_HOUSE, VILLA, PLOT, LAND, AGRICULTURAL_LAND, COMMERCIAL, SHOP, ' +
+      'OFFICE, WAREHOUSE, INDUSTRIAL, PARKING or OTHER. area_unit is the unit the DEED uses — ' +
+      'SQ_FT, SQ_M, SQ_YARD, ACRE, HECTARE, CENT, GUNTHA, GROUND, BIGHA, KATHA, KANAL, MARLA ' +
+      'and others; it is stored as stated and converted only for display, because the regional ' +
+      'units are not the same size everywhere. stamp_duty_value is the sub-registrar\'s assessed ' +
+      'value where it exceeds the price paid — s.50C and s.56(2)(x) turn on that difference. ' +
+      'Leave any column blank if the deed does not state it.',
   },
   {
     name: 'Custom_Cash',
@@ -186,7 +239,10 @@ export function validateHeaders(csv: string, templateName: string): Result<void>
   }
 
   const { header } = parseCsv(csv);
-  const missing = template.columns.filter((column) => !header.includes(column));
+  const optional = new Set(template.optionalColumns ?? []);
+  const missing = template.columns.filter(
+    (column) => !optional.has(column) && !header.includes(column),
+  );
   const unexpected = header.filter((column) => !template.columns.includes(column));
 
   if (missing.length > 0 || unexpected.length > 0) {
@@ -207,18 +263,24 @@ export function validateHeaders(csv: string, templateName: string): Result<void>
 /**
  * Which template this file is, decided by its header alone.
  *
- * Exact set match, not a subset: a file with the hand-loan columns plus an extra
- * one is not a hand-loan template, and importing it as one would silently ignore
- * whatever the user added.
+ * Every REQUIRED column present and nothing unexpected. Not a subset match: a
+ * file with the hand-loan columns plus an extra one is not a hand-loan template,
+ * and importing it as one would silently ignore whatever the user added.
+ *
+ * Optional columns may be present or absent, which is what lets a template gain
+ * detail without orphaning the sheets already filled in against it.
  */
 export function detectTemplate(csv: string): TemplateDefinition | undefined {
   const { header } = parseCsv(csv);
   const found = new Set(header);
-  return TEMPLATES.find(
-    (template) =>
-      template.columns.length === found.size &&
-      template.columns.every((column) => found.has(column)),
-  );
+  return TEMPLATES.find((template) => {
+    const optional = new Set(template.optionalColumns ?? []);
+    const requiredPresent = template.columns.every(
+      (column) => optional.has(column) || found.has(column),
+    );
+    const nothingUnexpected = header.every((column) => template.columns.includes(column));
+    return requiredPresent && nothingUnexpected;
+  });
 }
 
 /* ------------------------------------------------------------------ parsing */
@@ -342,6 +404,24 @@ function optionalMoney(reader: Reader, column: string, currency: string): MoneyV
   return Money.of(NUMBER.test(raw) ? raw : '0', currency as Parameters<typeof Money.of>[1]);
 }
 
+/**
+ * A missing column as ABSENT rather than as zero.
+ *
+ * `optionalMoney` collapses the two, which is right for a charge — a duty the
+ * deed does not state was not paid. It is wrong for a figure that means
+ * something by being absent: a blank `price_per_area_unit` read as ₹0 became the
+ * lot's cost per unit and zeroed the price of the property.
+ */
+function optionalMoneyOrAbsent(
+  reader: Reader,
+  column: string,
+  currency: string,
+): MoneyValue | undefined {
+  const raw = reader.cell(column);
+  if (!NUMBER.test(raw)) return undefined;
+  return Money.of(raw, currency as Parameters<typeof Money.of>[1]);
+}
+
 function currencyOf(reader: Reader): Parameters<typeof Money.of>[1] {
   const raw = reader.cell('currency').toUpperCase();
   return (raw.length === 0 ? 'INR' : raw) as Parameters<typeof Money.of>[1];
@@ -438,18 +518,71 @@ function mapRow(
         return invalid(reader, 'property_name', '', 'a property name is required', 'a label');
       }
 
+      const areaValue = reader.cell('area');
+      const areaUnit = reader.cell('area_unit');
+      // Absent, not zero: see `optionalMoneyOrAbsent`. A blank rate read as ₹0
+      // became the cost per unit and zeroed the price of the property.
+      const rate = optionalMoneyOrAbsent(reader, 'price_per_area_unit', currency);
+      const stampDutyValue = optionalMoneyOrAbsent(reader, 'stamp_duty_value', currency);
+      const brokerage = optionalMoneyOrAbsent(reader, 'brokerage', currency);
+
+      /*
+       * The deed's breakdown, carried whole. `propertyChargesOf` is what maps it
+       * onto the lot's cost columns — this parser must not decide that mapping,
+       * or the manual form and the template would place stamp duty differently.
+       */
+      const property: PropertyTransaction = {
+        ...(areaValue.length === 0 || areaUnit.length === 0
+          ? {}
+          : { area: { value: areaValue, unit: areaUnit.toUpperCase() as AreaUnit } }),
+        ...(rate === undefined ? {} : { pricePerAreaUnit: rate }),
+        consideration: Money.of(price, currency),
+        // A duty the deed does not state was not paid, so zero is right here.
+        stampDuty: optionalMoney(reader, 'stamp_duty', currency),
+        registrationFee: optionalMoney(reader, 'registration_fee', currency),
+        gst: optionalMoney(reader, 'gst', currency),
+        otherTaxes: optionalMoney(reader, 'other_taxes', currency),
+        ...(brokerage === undefined ? {} : { brokerage }),
+        ...(stampDutyValue === undefined ? {} : { stampDutyValue }),
+      };
+
+      const charges = propertyChargesOf(property);
+      const kind = reader.cell('property_type');
+      const city = reader.cell('city');
+      const state = reader.cell('state');
+      const registrationNumber = reader.cell('registration_number');
+
       return {
         txn: {
           ...base,
           kind: 'BUY',
           date,
           symbol: name,
-          quantity: '1',
-          pricePerUnit: Money.of(price, currency),
-          // Both are part of the cost of acquisition, which is what Schedule AL
-          // reports — omitting them would understate the disclosed cost.
-          fees: optionalMoney(reader, 'registration_fee', currency),
-          otherCharges: optionalMoney(reader, 'stamp_duty', currency),
+          quantity: charges.quantity,
+          pricePerUnit: charges.costPerUnit,
+          fees: charges.fees,
+          otherCharges: charges.otherCharges,
+          property,
+          propertyDetail: {
+            // The projector owns asset identity and fills this in.
+            assetId: '',
+            propertyName: name,
+            // OTHER when the sheet says nothing: guessing a type from a label
+            // would invent a tax characteristic, since agricultural land outside
+            // the s.2(14) limits is not a capital asset at all.
+            kind: kind.length === 0 ? 'OTHER' : (kind.toUpperCase() as PropertyKind),
+            ...(city.length === 0 && state.length === 0
+              ? {}
+              : {
+                  location: {
+                    addressRef: '',
+                    ...(city.length === 0 ? {} : { city }),
+                    ...(state.length === 0 ? {} : { state }),
+                  },
+                }),
+            ...(property.area === undefined ? {} : { area: property.area }),
+            ...(registrationNumber.length === 0 ? {} : { registrationNumber }),
+          },
         },
       };
     }

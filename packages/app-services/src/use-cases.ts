@@ -27,6 +27,8 @@ import {
 } from '@porttrack/shared-kernel';
 import { createHash } from 'node:crypto';
 import {
+  AREA_UNITS,
+  PROPERTY_KINDS,
   ChitLedger,
   FifoAllocator,
   HandLoanLedger,
@@ -36,6 +38,8 @@ import {
   bucketOf,
   reconcileHoldings,
   type AdvanceTaxPayment,
+  type AreaUnit,
+  type PropertyKind,
   type AssetClass,
   type HoldingsReconciliation,
   type TaxSubject,
@@ -122,6 +126,14 @@ import {
 } from './income-inclusions.js';
 import { stampForeignRates } from './foreign-rates.js';
 import { useMemoryRateStore, useVaultRateStore } from './vault-rate-store.js';
+import {
+  buildPropertyEntry,
+  type PropertyAdvisory,
+  type RecordPropertyInput,
+  type RecordPropertyResult,
+} from './property-entry.js';
+
+export type { PropertyAdvisory, RecordPropertyInput, RecordPropertyResult };
 
 /* ------------------------------------------------------------------- vault */
 
@@ -1364,6 +1376,123 @@ export const TradeUC = {
       unapplied: projected.value.unapplied.map((row) => ({ reason: row.reason })),
     });
   },
+};
+
+/* ------------------------------------------------------ immovable property */
+
+export const PropertyUC = {
+  /**
+   * A property purchase or sale typed in by hand.
+   *
+   * Through the projector, like every other manual entry: a sale must deplete
+   * its lot and reach the capital-gains engine as an ordinary disposal. What is
+   * different is only the INPUT — a deed states area, a rate and four separate
+   * duties where a contract note states quantity and price — and
+   * `buildPropertyEntry` is what turns one into the other.
+   */
+  async record(input: RecordPropertyInput): Promise<Result<RecordPropertyResult>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+    // A sale changes what is held and what is taxable, so it is gated like every
+    // other figure-changing write.
+    const permitted = requireEditMode('recording an immovable property transaction');
+    if (!permitted.ok) return permitted;
+
+    const built = buildPropertyEntry(input);
+    if (!built.ok) return built;
+    const { property, transaction, charges, advisories } = built.value;
+
+    const [existing, existingExits] = await Promise.all([
+      AssetRepository.all(),
+      ExitRepository.all(),
+    ]);
+
+    /*
+     * Two purchases of one property on one day for one price is not a thing that
+     * happens, but the same entry typed twice is — and unlike a share trade
+     * there is no order id to tell them apart, so the check is on the deed's
+     * identity rather than on a natural key the projector builds.
+     */
+    const naturalKey = [
+      input.side,
+      input.transactionDate,
+      property.propertyName,
+      transaction.consideration.amount,
+    ].join('|');
+    const duplicate = existing.some(
+      (asset) =>
+        asset.property?.propertyName === property.propertyName &&
+        (input.side === 'BUY'
+          ? asset.lots.some(
+              (lot) =>
+                lot.acquisitionDate === input.transactionDate &&
+                lot.property?.consideration.amount === transaction.consideration.amount,
+            )
+          : existingExits.some(
+              (exit) =>
+                exit.assetId === asset.assetId &&
+                exit.exitDate === input.transactionDate &&
+                exit.property?.consideration.amount === transaction.consideration.amount,
+            )),
+    );
+
+    if (duplicate && input.confirmDuplicate !== true) {
+      return Err(
+        new DuplicateTradeError(
+          `a ${input.side.toLowerCase()} of ${property.propertyName} on ${input.transactionDate} ` +
+            'for this amount is already recorded',
+          [property.propertyName],
+        ),
+      );
+    }
+
+    const token = createHash('sha256')
+      .update([naturalKey, duplicate ? '1' : '0'].join('|'))
+      .digest('hex')
+      .slice(0, 16);
+
+    const projected = LedgerProjector.project({
+      transactions: [
+        {
+          kind: input.side,
+          date: input.transactionDate,
+          // The property's name is its identity on the ledger, the way a symbol
+          // is a share's. `propertyDetail` carries everything a symbol cannot.
+          symbol: property.propertyName,
+          assetClass: 'REAL_ESTATE',
+          quantity: charges.quantity,
+          pricePerUnit: charges.costPerUnit,
+          fees: charges.fees,
+          otherCharges: charges.otherCharges,
+          property: transaction,
+          propertyDetail: property,
+          provenance: {
+            sourceFile: 'manual entry',
+            sourceRow: 1,
+            parserName: 'MANUAL' as const,
+            importedAt: `manual:${token}`,
+          },
+        },
+      ],
+      parser: 'MANUAL',
+      existing,
+      existingExits,
+    });
+    if (!projected.ok) return projected;
+
+    const saved = await AssetRepository.saveAll(projected.value.assets);
+    if (!saved.ok) return saved;
+    const savedExits = await ExitRepository.saveAll(projected.value.exits);
+    if (!savedExits.ok) return savedExits;
+
+    return Ok({
+      assetId: projected.value.touched[0] ?? '',
+      advisories,
+    });
+  },
+
+  kinds: (): Promise<Result<readonly PropertyKind[]>> => Promise.resolve(Ok(PROPERTY_KINDS)),
+  areaUnits: (): Promise<Result<readonly AreaUnit[]>> => Promise.resolve(Ok(AREA_UNITS)),
 };
 
 /* -------------------------------------------------------------- hand loans */

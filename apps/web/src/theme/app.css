@@ -288,6 +288,15 @@ body {
 /* Spans the grid: a free-text reason needs the room a date field does not. */
 .pt-form__wide { grid-column: 1 / -1; }
 
+/*
+ * Two controls that are one measurement — an area and its unit. Splitting them
+ * across grid cells reads as two unrelated questions, and a unit on its own line
+ * looks optional when it is not.
+ */
+.pt-field-row { display: flex; gap: var(--pt-space-2); }
+.pt-field-row input { flex: 1 1 auto; min-width: 0; }
+.pt-field-row select { flex: 0 0 auto; }
+
 .pt-actions {
   display: flex;
   flex-wrap: wrap;

@@ -339,7 +339,8 @@ describe('US-4.6 Scenario: Template rows become the right assets on the ledger',
       const header = TemplateRegistry.generate(template.name);
       const sample: Readonly<Record<string, string>> = {
         Custom_HandLoans: handLoanRow('A Borrower,,2025-04-01,,100000,8,INR,Active'),
-        Custom_RealEstate: 'A flat,2024-06-10,9500000,570000,30000,INR',
+        Custom_RealEstate:
+          'A flat,FLAT,2024-06-10,1450,SQ_FT,,9500000,570000,30000,,,,,Bengaluru,Karnataka,,INR',
         Custom_Cash: 'An account,2026-03-31,412500,INR',
         Custom_ChitFunds: 'A chit,2025-04-01,10000,24,INR',
         Custom_UnlistedShares: 'A company,2025-01-15,1000,250,INR',
