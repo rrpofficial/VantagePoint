@@ -1,6 +1,7 @@
 /** Tax engine types. Types only — no runtime behaviour. */
 import type {
   AssessmentYear,
+  Currency,
   FinancialYear,
   IsoDate,
   Money,
@@ -105,6 +106,22 @@ export interface ClassifiedGain {
   readonly ratePct: Percentage;
 }
 
+/**
+ * A disposal whose INR value could not be established, and is therefore ABSENT
+ * from every total below.
+ *
+ * Reported rather than approximated. Rule 115 needs the TT buy rate for a
+ * specific month-end, and if no rate is available for it there is no honest
+ * figure to produce — the previous behaviour passed the foreign-currency amount
+ * through, which the totals then summed as rupees.
+ */
+export interface UnconvertibleGain {
+  readonly txnId: string;
+  readonly currency: Currency;
+  readonly exitDate: IsoDate;
+  readonly reason: string;
+}
+
 export interface CapitalGainsResult {
   readonly gains: readonly ClassifiedGain[];
   readonly ltcgBeforeExemption: Money;
@@ -112,6 +129,11 @@ export interface CapitalGainsResult {
   readonly taxableLtcg: Money;
   readonly taxableStcg: Money;
   readonly tax: Money;
+  /**
+   * Non-empty means the totals are INCOMPLETE. Callers must surface this beside
+   * the figure; a filing artifact must refuse outright.
+   */
+  readonly unconvertible: readonly UnconvertibleGain[];
 }
 
 export interface AdvanceTaxInstallment {

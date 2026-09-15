@@ -12,7 +12,14 @@
  *   • Foreign gains are measured in INR at the Rule 115 rate, never the trade-date
  *     valuation rate (ADR-003) — using the latter taxes currency movement.
  */
-import { Money, type Currency, type IsoDate, type Money as MoneyValue } from '@porttrack/shared-kernel';
+import {
+  Money,
+  Ok,
+  type Currency,
+  type IsoDate,
+  type Money as MoneyValue,
+  type Result,
+} from '@porttrack/shared-kernel';
 import { Decimal } from 'decimal.js';
 import {
   days30360,
@@ -22,7 +29,13 @@ import {
   type TaxSubject,
 } from '@porttrack/core-domain';
 import { DualRateConverter } from '@porttrack/fx-itbr';
-import type { CapitalGainsResult, ClassifiedGain, GainKind, TaxRuleSet } from './types.js';
+import type {
+  CapitalGainsResult,
+  ClassifiedGain,
+  GainKind,
+  TaxRuleSet,
+  UnconvertibleGain,
+} from './types.js';
 
 const INR = 'INR' as const;
 const money = (value: Decimal, currency: Currency = INR): MoneyValue =>
@@ -128,15 +141,79 @@ function realisedGain(exit: ExitTransaction): MoneyValue {
   return money(total, exit.pricePerUnit.currency);
 }
 
-/** Converts a realised gain to INR at the Rule 115 rate — never the trade-date rate. */
-function toTaxableInr(exit: ExitTransaction, gain: MoneyValue): MoneyValue {
-  if (gain.currency === INR) return gain;
-  // Recorded at exit time, already Rule 115 based (ADR-003).
-  if (exit.taxableInr !== undefined) return exit.taxableInr;
+/**
+ * One leg converted to INR at the Rule 115 rate for ITS OWN date.
+ *
+ * `DualRateConverter.ratesFor` derives the tax rate from the last day of the
+ * month preceding the date it is handed — so passing a vest date yields the
+ * basis for the vest month, and passing a sale date yields the basis for the
+ * sale month. That is the whole mechanism of the two-date conversion.
+ */
+function legToInr(amount: MoneyValue, onDate: IsoDate): Result<MoneyValue> {
+  if (amount.currency === INR) return Ok(amount);
+  const rates = DualRateConverter.ratesFor(amount.currency, onDate);
+  if (!rates.ok) return rates;
+  return Ok(DualRateConverter.convert(amount, rates.value).taxableInr);
+}
 
-  const rates = DualRateConverter.ratesFor(gain.currency, exit.exitDate);
-  if (!rates.ok) return gain;
-  return DualRateConverter.convert(gain, rates.value).taxableInr;
+/**
+ * The taxable gain in INR, converting EACH LEG at its own Rule 115 basis date.
+ *
+ * Cost is converted at the last day of the month preceding acquisition; proceeds
+ * at the last day of the month preceding transfer. The difference is the gain.
+ *
+ * This replaces converting a foreign-currency gain once, at the sale's rate. The
+ * two are not the same, and the difference is real money: a lot vested when the
+ * dollar bought ₹74 and sold when it bought ₹95 carries rupee appreciation that
+ * a single conversion erases entirely. For an RSU the two-date figure is also
+ * the one that reconciles with the salary already taxed — the perquisite was
+ * assessed in rupees at vest, so measuring the gain from any other rupee cost
+ * taxes the same money twice.
+ *
+ * Granular per ALLOCATION, not per exit: one sale order routinely consumes lots
+ * from several vests, each with its own basis month. Converting the whole cost
+ * at the oldest lot's rate would misprice every other lot in the order.
+ */
+function taxableGainInr(exit: ExitTransaction): Result<MoneyValue> {
+  // An explicitly recorded figure wins. Nothing in the projector sets this today,
+  // but a correction applied upstream must not be silently recomputed away.
+  if (exit.taxableInr !== undefined) return Ok(exit.taxableInr);
+
+  if (exit.allocations.length === 0) {
+    // Net-gain shape: there are no legs to convert separately.
+    return legToInr(realisedGain(exit), exit.exitDate);
+  }
+
+  const proceedsCurrency = exit.pricePerUnit.currency;
+  let proceeds = new Decimal(0);
+  let costInr = new Decimal(0);
+
+  for (const allocation of exit.allocations) {
+    proceeds = proceeds.plus(new Decimal(exit.pricePerUnit.amount).times(allocation.quantity));
+
+    const perUnit = grandfatheredCost(
+      allocation.costPerUnit,
+      allocation.grandfatheredFmv,
+      exit.pricePerUnit,
+    );
+    const cost = money(new Decimal(perUnit.amount).times(allocation.quantity), perUnit.currency);
+
+    /*
+     * Falls back to the exit's own acquisition date, then to the exit date. A lot
+     * with no acquisition date cannot state its own basis month, and converting
+     * it at the SALE's rate is the conservative reading — it reproduces the old
+     * single-rate behaviour for that leg rather than inventing a date.
+     */
+    const acquiredOn = allocation.acquisitionDate ?? exit.acquisitionDate ?? exit.exitDate;
+    const converted = legToInr(cost, acquiredOn);
+    if (!converted.ok) return converted;
+    costInr = costInr.plus(converted.value.amount);
+  }
+
+  const proceedsInr = legToInr(money(proceeds, proceedsCurrency), exit.exitDate);
+  if (!proceedsInr.ok) return proceedsInr;
+
+  return Ok(money(new Decimal(proceedsInr.value.amount).minus(costInr)));
 }
 
 export function compute(
@@ -145,6 +222,7 @@ export function compute(
   rules: TaxRuleSet,
 ): CapitalGainsResult {
   const gains: ClassifiedGain[] = [];
+  const unconvertible: UnconvertibleGain[] = [];
 
   for (const exit of exits) {
     // Keyed by transaction first: one asset can hold lots of differing character.
@@ -152,7 +230,27 @@ export function compute(
     if (subject === undefined) continue;
 
     const classified = classify(exit, subject, rules);
-    gains.push({ ...classified, gain: toTaxableInr(exit, realisedGain(exit)) });
+    const gain = taxableGainInr(exit);
+
+    /*
+     * EXCLUDED from the totals and reported, never passed through.
+     *
+     * This path previously returned the foreign-currency figure unchanged, which
+     * the sums below then added as though it were rupees — a USD 1,000 gain
+     * became ₹1,000 and understated the tax by about 99%. A missing rate must
+     * make the total visibly incomplete, not quietly wrong.
+     */
+    if (!gain.ok) {
+      unconvertible.push({
+        txnId: exit.txnId,
+        currency: exit.pricePerUnit.currency,
+        exitDate: exit.exitDate,
+        reason: gain.error.message,
+      });
+      continue;
+    }
+
+    gains.push({ ...classified, gain: gain.value });
   }
 
   const sumOf = (kind: GainKind): Decimal =>
@@ -182,5 +280,6 @@ export function compute(
     taxableLtcg: money(taxableLtcg),
     taxableStcg: money(taxableStcg),
     tax: money(tax),
+    unconvertible,
   };
 }

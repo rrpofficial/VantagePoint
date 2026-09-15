@@ -101,6 +101,16 @@ export interface AcquisitionLot {
   readonly quantity: string;
   readonly remainingQuantity: string;
   readonly costPerUnit: Money;
+  /**
+   * Charges are part of the cost of acquisition, not decoration. For property
+   * they are the stamp duty and registration a purchase price alone omits, and
+   * they are deductible — so the Immovable screen reports them separately.
+   *
+   * The API has always sent these; the client type simply never declared them.
+   */
+  readonly fees?: Money;
+  readonly stt?: Money;
+  readonly otherCharges?: Money;
 }
 
 export interface IncomeEvent {
@@ -122,7 +132,19 @@ export interface LedgerAsset {
   readonly folioRef?: string;
   readonly lots: readonly AcquisitionLot[];
   readonly incomeEvents: readonly IncomeEvent[];
+  /**
+   * Which tab this holding belongs in, decided by the SERVER.
+   *
+   * Equity and Non-Equity are split by tax character where one exists, not by
+   * asset class — a debt-oriented fund and an equity-oriented one share a class
+   * and are taxed differently (ADR-016). Recomputing that here would be a second
+   * copy of the rule, free to drift from the engine's.
+   */
+  readonly bucket: AssetBucket;
 }
+
+/** Mirrors core-domain's AssetBucket. The SPA never derives it, only reads it. */
+export type AssetBucket = 'EQUITY' | 'NON_EQUITY' | 'IMMOVABLE' | 'LOAN' | 'CHIT';
 
 export interface LedgerLiability {
   readonly liabilityId: string;

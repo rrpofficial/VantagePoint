@@ -18,16 +18,19 @@ import { readFileSync } from 'node:fs';
 
 const PASSPHRASE = process.env.PORTTRACK_TEST_PASSPHRASE ?? 'correct horse battery staple';
 
+/** Top-level sections. The five asset kinds are a second level under Assets. */
 const SECTIONS = [
   'Dashboard',
-  'Ledger',
-  'Loans',
+  'Assets',
   'Import',
   'Snapshots',
   'Tax',
   'Compliance',
   'Settings',
 ] as const;
+
+/** The secondary row, visible throughout the Assets area. */
+const ASSET_TABS = ['Overview', 'Equity', 'Non-Equity', 'Immovable', 'Loans', 'Chits'] as const;
 
 async function unlock(page: Page): Promise<void> {
   await page.goto('/');
@@ -48,7 +51,24 @@ async function unlock(page: Page): Promise<void> {
   await expect(nav).toBeVisible();
 }
 
+/**
+ * Navigates by name at either level.
+ *
+ * An asset kind needs the Assets tab opened first, so the helper does it rather
+ * than making every call site know about the nesting. The sub-nav stays visible
+ * inside the area, so a second asset kind is a single click from the first.
+ */
 async function goToSection(page: Page, section: string): Promise<void> {
+  const isAssetTab = (ASSET_TABS as readonly string[]).includes(section);
+  if (isAssetTab) {
+    const subnav = page.getByTestId('asset-subnav');
+    if ((await subnav.count()) === 0) {
+      await page.getByRole('link', { name: 'Assets', exact: true }).click();
+      await expect(subnav).toBeVisible();
+    }
+    await subnav.getByRole('link', { name: section, exact: true }).click();
+    return;
+  }
   await page.getByRole('link', { name: section, exact: true }).click();
 }
 
@@ -106,10 +126,10 @@ test.describe('US-8.5 Scenario: Core navigation exists', () => {
   });
 
   test('the back button returns to the previous section', async ({ page }) => {
-    await goToSection(page, 'Ledger');
+    await goToSection(page, 'Equity');
     await goToSection(page, 'Settings');
     await page.goBack();
-    await expect(page).toHaveURL(/#\/ledger$/);
+    await expect(page).toHaveURL(/#\/assets\/equity$/);
   });
 });
 
@@ -148,13 +168,14 @@ test.describe('US-9.7 Scenario: End-to-end journey against the containerized sta
     // time this vault sees them.
     await expect(summary).toContainText('65');
 
-    /* ------------------------------------------------------------- ledger */
-    await goToSection(page, 'Ledger');
-    const ledger = page.getByTestId('ledger-table');
-    await expect(ledger).toBeVisible();
-    await expect(ledger.getByRole('row')).not.toHaveCount(1);
-    // The disposals table only renders when sells were actually applied.
-    await expect(page.getByTestId('exit-table')).toBeVisible();
+    /* ------------------------------------------------------------ holdings */
+    await goToSection(page, 'Equity');
+    const holdings = page.getByTestId('holdings-table-equity');
+    await expect(holdings).toBeVisible();
+    await expect(holdings.getByRole('row')).not.toHaveCount(1);
+    // Disposals sit beside the holdings they came from, and render only when
+    // sells were actually applied.
+    await expect(page.getByTestId('exit-table-equity')).toBeVisible();
 
     /* ---------------------------------------------------------- dashboard */
     await goToSection(page, 'Dashboard');
@@ -468,8 +489,10 @@ test.describe('US-4.6 Scenario: CSV templates are obtainable from the app', () =
     // Nothing may land in "parsed but not applied" — that was the old behaviour.
     await expect(page.getByTestId('import-unapplied')).toHaveCount(0);
 
-    await goToSection(page, 'Ledger');
-    await expect(page.getByTestId('ledger-table')).toContainText('bank balance');
+    // A bank balance is non-equity, so this also pins that the server-side
+    // bucketing routes an imported holding to the right tab.
+    await goToSection(page, 'Non-Equity');
+    await expect(page.getByTestId('holdings-table-non_equity')).toContainText('bank balance');
   });
 });
 
@@ -623,24 +646,32 @@ test.describe('US-1.11 Scenario: The hand-loan register, end to end', () => {
     await expect(page.getByTestId('borrower-chips')).toHaveCount(0);
   });
 
-  test('shows loans in the Ledger as receivables, not as empty holdings', async ({ page }) => {
+  /*
+   * The Ledger's receivables table is gone with the Ledger, but the guarantee it
+   * protected is now stronger: `bucketOf` returns LOAN for a hand loan, so a loan
+   * must appear in NO holdings tab at all. Every column there is meaningless for
+   * a receivable — 0 lots, 0 held, ₹0 cost.
+   */
+  test('keeps loans out of every holdings tab', async ({ page }) => {
     await unlock(page);
     await goToSection(page, 'Loans');
     await lend(page, BORROWERS.journey, '1200000');
 
-    await goToSection(page, 'Ledger');
-    const receivables = page.getByTestId('loans-receivable-table');
-    await expect(receivables).toBeVisible();
-
     // The borrower's name, not the raw asset id it used to fall back to.
-    await expect(receivables).toContainText(BORROWERS.journey);
-    await expect(receivables).not.toContainText('ast_hand_loan_');
+    const register = page.getByTestId('loan-table');
+    await expect(register).toContainText(BORROWERS.journey);
+    await expect(register).not.toContainText('ast_hand_loan_');
 
-    // And a loan must never appear in Holdings, where every column is
-    // meaningless for a receivable: 0 lots, 0 held, ₹0 cost.
-    const holdings = page.getByTestId('ledger-table');
-    if ((await holdings.count()) > 0) {
-      await expect(holdings).not.toContainText(BORROWERS.journey);
+    for (const [section, testId] of [
+      ['Equity', 'holdings-table-equity'],
+      ['Non-Equity', 'holdings-table-non_equity'],
+      ['Immovable', 'immovable-table'],
+    ] as const) {
+      await goToSection(page, section);
+      const table = page.getByTestId(testId);
+      if ((await table.count()) > 0) {
+        await expect(table, section).not.toContainText(BORROWERS.journey);
+      }
     }
   });
 
@@ -845,9 +876,14 @@ test.describe('US-4.6 Scenario: The hand-loan template carries the full register
 });
 
 test.describe('US-4.8 Scenario: A trade is typed in rather than imported', () => {
+  /*
+   * Trade entry moved out of the retired Ledger onto the tab that owns the
+   * classes it can record. Equity offers listed shares, funds, ETFs and unlisted
+   * shares; Non-Equity offers SGB.
+   */
   async function openTradeForm(page: Page) {
     await unlock(page);
-    await goToSection(page, 'Ledger');
+    await goToSection(page, 'Equity');
     await page.getByRole('button', { name: 'Record a trade', exact: true }).click();
     return page.getByTestId('trade-form');
   }
@@ -882,7 +918,7 @@ test.describe('US-4.8 Scenario: A trade is typed in rather than imported', () =>
     await form.getByLabel('Symbol or ticker').fill('E2ETRADE');
     await form.getByRole('button', { name: 'Record purchase' }).click();
 
-    const holdings = page.getByTestId('ledger-table');
+    const holdings = page.getByTestId('holdings-table-equity');
     await expect(holdings).toContainText('E2ETRADE');
     await expect(holdings).toContainText('100');
   });
@@ -909,7 +945,7 @@ test.describe('US-4.8 Scenario: A trade is typed in rather than imported', () =>
     await form.getByLabel('Folio number').fill('E2E-FOLIO-1');
     await form.getByRole('button', { name: 'Record purchase' }).click();
 
-    await expect(page.getByTestId('ledger-table')).toContainText('E2E-FOLIO-1');
+    await expect(page.getByTestId('holdings-table-equity')).toContainText('E2E-FOLIO-1');
   });
 
   test('asks before recording the same trade twice, then keeps both fills', async ({ page }) => {
@@ -931,11 +967,11 @@ test.describe('US-4.8 Scenario: A trade is typed in rather than imported', () =>
         await expect(warning).toBeVisible();
         await page.getByTestId('confirm-duplicate-trade').click();
       }
-      await expect(page.getByTestId('ledger-table')).toContainText('E2EFILL');
+      await expect(page.getByTestId('holdings-table-equity')).toContainText('E2EFILL');
     }
 
     // Two fills of 25 — the holding must read 50, not 25.
-    await expect(page.getByTestId('ledger-table')).toContainText('50');
+    await expect(page.getByTestId('holdings-table-equity')).toContainText('50');
   });
 
   test('explains a sale with nothing to sell instead of inventing a position', async ({ page }) => {
@@ -1265,7 +1301,7 @@ test.describe('Scenario: Edit mode gates changing and deleting across every tab'
     await expect(chit.locator('[data-testid^="chit-edit-toggle-"]')).toBeVisible();
     await expect(chit.locator('[data-testid^="delete-chit-"]')).toBeVisible();
 
-    await goToSection(page, 'Ledger');
+    await goToSection(page, 'Equity');
     await expect(page.locator('[data-testid^="delete-asset-"]').first()).toBeVisible();
   });
 
@@ -1275,7 +1311,7 @@ test.describe('Scenario: Edit mode gates changing and deleting across every tab'
 
     await goToSection(page, 'Dashboard');
     await expect(page.getByTestId('edit-mode-flag')).toBeVisible();
-    await goToSection(page, 'Ledger');
+    await goToSection(page, 'Equity');
     await expect(page.getByTestId('edit-mode-flag')).toBeVisible();
   });
 
@@ -1328,7 +1364,93 @@ test.describe('Scenario: Edit mode gates changing and deleting across every tab'
     await page.getByTestId('disable-edit-mode').click();
     await expect(page.getByTestId('edit-mode-flag')).toHaveCount(0);
 
-    await goToSection(page, 'Ledger');
+    await goToSection(page, 'Equity');
     await expect(page.locator('[data-testid^="delete-asset-"]')).toHaveCount(0);
+  });
+});
+
+/**
+ * The Assets grouping.
+ *
+ * Two conditions make the extra level worth its click, and both are asserted
+ * here: the landing screen shows something rather than forwarding, and the
+ * sub-nav stays put so lateral movement inside the area is a single click.
+ */
+test.describe('Scenario: Assets groups the five asset kinds behind one tab', () => {
+  test('opens on an overview rather than forwarding to a holdings tab', async ({ page }) => {
+    await unlock(page);
+
+    await page.getByRole('link', { name: 'Assets', exact: true }).click();
+
+    await expect(page).toHaveURL(/#\/assets$/);
+    // A grouping level that only forwards is dead weight; this one answers the
+    // question the grouping implies.
+    await expect(page.getByTestId('assets-breakdown')).toBeVisible();
+    await expect(page.getByTestId('assets-total')).toBeVisible();
+  });
+
+  test('lists every asset kind on the overview', async ({ page }) => {
+    await unlock(page);
+    await page.getByRole('link', { name: 'Assets', exact: true }).click();
+
+    const breakdown = page.getByTestId('assets-breakdown');
+    for (const kind of ['Equity', 'Non-equity', 'Immovable property', 'Loans receivable', 'Chit funds']) {
+      await expect(breakdown, kind).toContainText(kind);
+    }
+  });
+
+  /* The condition that stops the extra level being resented. */
+  test('keeps the sub-nav visible so moving between kinds is one click', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Equity');
+
+    const subnav = page.getByTestId('asset-subnav');
+    await expect(subnav).toBeVisible();
+
+    // One click from Equity to Chits, without returning to Assets first.
+    await subnav.getByRole('link', { name: 'Chits', exact: true }).click();
+    await expect(page).toHaveURL(/#\/assets\/chits$/);
+    await expect(subnav).toBeVisible();
+  });
+
+  test('marks the current asset kind, not just the Assets tab', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Non-Equity');
+
+    await expect(
+      page.getByTestId('asset-subnav').getByRole('link', { name: 'Non-Equity', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
+    await expect(page.getByRole('link', { name: 'Assets', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
+
+  test('hides the sub-nav outside the Assets area', async ({ page }) => {
+    await unlock(page);
+    await goToSection(page, 'Settings');
+
+    await expect(page.getByTestId('asset-subnav')).toHaveCount(0);
+  });
+
+  /*
+   * Bookmarks outlive refactors. A link made before the grouping must still
+   * land where it did, rather than silently falling through to the Dashboard.
+   */
+  test('still resolves a pre-grouping deep link', async ({ page }) => {
+    await unlock(page);
+    await page.goto('/#/loans');
+
+    await expect(page.getByTestId('asset-subnav')).toBeVisible();
+    await expect(
+      page.getByTestId('asset-subnav').getByRole('link', { name: 'Loans', exact: true }),
+    ).toHaveAttribute('aria-current', 'page');
+  });
+
+  test('opens a nested deep link directly', async ({ page }) => {
+    await unlock(page);
+    await page.goto('/#/assets/immovable');
+
+    await expect(page.getByRole('heading', { name: /Immovable/i }).first()).toBeVisible();
   });
 });

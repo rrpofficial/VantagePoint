@@ -136,6 +136,9 @@ importers:
       '@porttrack/core-domain':
         specifier: workspace:*
         version: link:../core-domain
+      '@porttrack/fx-itbr':
+        specifier: workspace:*
+        version: link:../fx-itbr
       '@porttrack/ingestion':
         specifier: workspace:*
         version: link:../ingestion

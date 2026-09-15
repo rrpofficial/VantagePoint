@@ -84,6 +84,7 @@ export {
   taxCharacterOf,
   type EquityBands,
 } from './mf-tax-character.js';
+export { HOLDING_BUCKETS, bucketOf, type AssetBucket } from './asset-bucket.js';
 
 let assetCounter = 0;
 

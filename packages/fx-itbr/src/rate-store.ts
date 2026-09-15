@@ -60,5 +60,49 @@ export class InMemoryRateStore {
   }
 }
 
-/** Process-wide store. Single-tenant, single-process by design (ADR-011). */
-export const rateStore = new InMemoryRateStore();
+/**
+ * What a rate store must do, so the vault can back one without this package
+ * ever importing persistence.
+ *
+ * SYNCHRONOUS on purpose. Resolution sits inside `DualRateConverter.convert`,
+ * which pure valuation and capital-gains code calls per position and per
+ * disposal; an async port would make all three packages async for what is a
+ * primary-key read against a local file.
+ */
+export interface RateStorePort {
+  put(record: RateRecord): Result<void>;
+  get(currency: Currency, date: IsoDate, source: RateSource): RateRecord | undefined;
+  latestOnOrBefore(currency: Currency, date: IsoDate, source: RateSource): RateRecord | undefined;
+  clear(): void;
+}
+
+/**
+ * Defaults to memory so this package stays usable — and testable — with no vault
+ * open at all. Production swaps in the vault-backed implementation at startup;
+ * see `useRateStore`.
+ */
+let active: RateStorePort = new InMemoryRateStore();
+
+/** Installs the backing store. Called once, during application wiring. */
+export function useRateStore(store: RateStorePort): void {
+  active = store;
+}
+
+/** Test seam: restores the in-memory default between scenarios. */
+export function resetRateStore(): void {
+  active = new InMemoryRateStore();
+}
+
+/**
+ * Process-wide façade. A stable binding that forwards to whatever is installed,
+ * so `resolvers.ts` and every caller keep importing one thing and none of them
+ * need to know whether rates are in memory or in the vault.
+ */
+export const rateStore: RateStorePort = {
+  put: (record) => active.put(record),
+  get: (currency, date, source) => active.get(currency, date, source),
+  latestOnOrBefore: (currency, date, source) => active.latestOnOrBefore(currency, date, source),
+  clear: () => {
+    active.clear();
+  },
+};

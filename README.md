@@ -12,9 +12,9 @@ local-first, privacy-first, containerized.
 ## Current status — all milestones complete
 
 ```
-unit + functional   914 passing   0 failing   0 skipped
+unit + functional   992 passing   0 failing   0 skipped
 container (Docker)   38 passing   0 failing
-E2E (Playwright)     63 passing   0 failing
+E2E (Playwright)     69 passing   0 failing
 typecheck  clean     docker compose up ✓
 ```
 
@@ -80,9 +80,13 @@ pnpm test:e2e:fresh        # ...after recreating its vault from empty
 ```
 
 `pnpm test:e2e` reads `.env.test` in preference to `.env`, so a test run has to be pointed at
-production deliberately (`PORTTRACK_BASE_URL=...`) rather than landing there by accident. The E2E
-suite is cumulative and assumes a vault it has not seen before, so use `test:e2e:fresh` when a
-previous run's records get in its way. `pnpm test:container` is separate again: it builds its own
+production deliberately (`PORTTRACK_BASE_URL=...`) rather than landing there by accident.
+
+**The suite needs a vault it has not seen before.** It asserts that figures *changed* — net worth
+after recording a loan, a chit carrying exactly the instalments just paid — which is false the
+second time around. A re-run used to produce half a dozen failures scattered across three describe
+blocks, none of which named the cause. It now refuses to start against a populated vault and points
+at `pnpm test:e2e:fresh`, which resets and runs in one step. `pnpm test:container` is separate again: it builds its own
 project, tag and port, and leaves both instances untouched.
 
 To promote a tested build to production, rebuild production's tag and restart it:
@@ -238,6 +242,71 @@ Deleting is honest about what goes with it:
   the figure that chit was showing.
 
 There is no undo. The way back is your own backup of the data directory.
+
+### Where FX rates come from
+
+Every INR figure derived from a foreign holding passes through an exchange rate, and for tax the
+rate is not a matter of choice. **Rule 115 of the Income-tax Rules, 1962** mandates the *telegraphic
+transfer buying rate of the State Bank of India*, and for capital gains it names a specific date:
+
+> *"the last day of the month immediately preceding the month in which the capital asset is
+> transferred"*
+
+The Income Tax Department publishes no rates itself — it specifies SBI's and leaves sourcing to you.
+That is the whole problem: **SBI publishes today's card and does not serve history**, so a rate not
+captured when it was available cannot be recovered. A share vesting in 2020 and sold in 2026 needs
+the 2020 rate, and no amount of asking SBI in 2026 will produce it.
+
+#### The archive
+
+Historical TT Buy rates are imported from **[sahilgupta/sbi-fx-ratekeeper](https://github.com/sahilgupta/sbi-fx-ratekeeper)**,
+specifically:
+
+```
+https://github.com/sahilgupta/sbi-fx-ratekeeper/blob/main/csv_files/SBI_REFERENCE_RATES_USD.csv
+```
+
+It is a daily scrape of SBI's own published PDF rate cards, and **every row links to the PDF it was
+read from** — so a rate is traceable to SBI's document rather than to the scraper. That link is what
+portTrack stores as the rate's provenance, not the archive's name.
+
+It is still a third party's transcription, so the parser is built around not trusting it:
+
+| Guard | Catches |
+|---|---|
+| Card rate must fall in 10–1000 | A slipped decimal point |
+| Day-over-day move ≤ 25% within a 7-day window | A slipped decimal the band admits — `7.132` beside `71.65` |
+| `TT BUY = 0` skipped **and counted** | The 54 days SBI published no transfer rate, so the gap is known rather than assumed |
+| Same-day republished cards reported | The 12 days SBI issued two cards, 9 of which changed the rate |
+| Any bad row rejects the whole file | A half-imported archive, whose missing days silently resolve as if SBI never published |
+
+Verified against the real 1,641-row file: **1,575 rates, 2020-01-06 → 2026-09-11**, no false positives.
+
+```bash
+# download the CSV from the link above, then:
+pnpm vault:rates:import ./SBI_REFERENCE_RATES_USD.csv USD
+```
+
+Importing rates requires **edit mode**. Every other import adds records you can see and correct; this
+one writes the denominators every foreign figure is computed through, where a wrong value is
+invisible in the output.
+
+#### Two bases, both recorded
+
+ADR-003 stores **two** rates per foreign transaction, and risk R4 records why:
+
+- **Transaction-date rate** — what an RSU's cost basis uses, because the perquisite was already taxed
+  in rupees at the rate on the day it vested. Measuring the gain from any other INR figure taxes the
+  same rupees twice.
+- **Rule 115 rate** — the last day of the preceding month, which is what the rule names for capital
+  gains.
+
+They differ, and which applies is genuinely contested. portTrack computes and stores both, records
+which was applied to each figure, and **does not decide for you** — confirm the basis with your CA.
+
+> SBI does not publish on Sundays or holidays, so a month-end frequently has no card. The resolver
+> walks back to the last published day and flags that it did. 31 May 2026 was a Sunday; a June
+> transfer resolves to the card of 30 May.
 
 ### Where your data lives
 

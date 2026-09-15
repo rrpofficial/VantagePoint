@@ -174,8 +174,8 @@ function EditModeCard() {
       {editMode.enabled ? (
         <>
           <p className="pt-callout pt-callout--warn" role="status" data-testid="edit-mode-on">
-            <strong>Edit mode is on.</strong> Edit and delete controls are visible on the Ledger,
-            Loans and Chits tabs. It turns itself off when the vault is locked or the API restarts
+            <strong>Edit mode is on.</strong> Edit and delete controls are visible on the Equity,
+            Non-Equity, Immovable, Loans and Chits tabs. It turns itself off when the vault is locked or the API restarts
             — it is never remembered between sessions.
           </p>
           <div className="pt-actions">

@@ -318,6 +318,45 @@ export const MIGRATIONS: readonly Migration[] = [
       );
     `,
   },
+  {
+    version: 8,
+    name: 'fx-rate-store',
+    up: `
+      -- FX rates, in the vault rather than in memory (US-2.1, FR-2.1).
+      --
+      -- The store was a process-level Map, which meant every rate was lost on
+      -- restart. That is survivable for a display figure and not for a tax one:
+      -- a capital gain on a foreign share is computed from the rate on the day
+      -- the shares vested, which may be six years before the sale, and re-deriving
+      -- it later from a source that no longer publishes that far back is not
+      -- possible. A rate used in a filed figure has to be kept.
+      --
+      -- WRITE-ONCE per (currency, rate_date, source), enforced by the primary key
+      -- and by the repository refusing a differing value. A corrected rate is an
+      -- amendment (US-2.6), never an overwrite — silently changing a stored rate
+      -- would retroactively alter a frozen snapshot with no trace.
+      CREATE TABLE fx_rates (
+        currency            TEXT NOT NULL,
+        rate_date           TEXT NOT NULL,
+        source              TEXT NOT NULL,
+        -- Decimal string, never REAL (ADR-002). A float here reintroduces drift
+        -- into the multiplication that produces a taxable amount.
+        rate                TEXT NOT NULL,
+        rate_type           TEXT NOT NULL CHECK (rate_type IN ('TTBR','TTSR','REFERENCE')),
+        retrieved_at        TEXT NOT NULL,
+        -- Which document this came from, so a figure can be traced to its source
+        -- years later. Required, not nullable: a rate with no provenance cannot
+        -- be defended to an assessing officer.
+        source_document_ref TEXT NOT NULL,
+        PRIMARY KEY (currency, rate_date, source)
+      );
+
+      -- The resolver walks BACKWARDS from a date over non-publishing days, one
+      -- source at a time, so the index leads with the columns it filters on and
+      -- ends with the one it ranges over.
+      CREATE INDEX idx_fx_rates_lookup ON fx_rates(currency, source, rate_date);
+    `,
+  },
 ];
 
 const SCHEMA_TABLE = `

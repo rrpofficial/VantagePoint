@@ -54,6 +54,15 @@ export {
 } from './edit-mode.js';
 
 export {
+  RatesUC,
+  type ImportRatesInput,
+  type ImportRatesReport,
+  type RateCoverage,
+} from './rates.js';
+
+export { useVaultRateStore, useMemoryRateStore, vaultRateStore } from './vault-rate-store.js';
+
+export {
   configure,
   currentPorts,
   resetPorts,

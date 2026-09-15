@@ -13,6 +13,11 @@ import {
 } from './resolvers.js';
 import { parseSbiSheet, type SbiParseOptions } from './sbi-sheet.js';
 import {
+  parseSbiArchive,
+  type ArchiveParseOptions,
+  type ArchiveParseResult,
+} from './sbi-archive.js';
+import {
   amendmentLog,
   amendmentsForDate,
   clearAmendments,
@@ -24,7 +29,13 @@ import {
 import type { RateRecord } from './types.js';
 
 export * from './types.js';
-export { InMemoryRateStore, rateStore } from './rate-store.js';
+export {
+  InMemoryRateStore,
+  rateStore,
+  resetRateStore,
+  useRateStore,
+  type RateStorePort,
+} from './rate-store.js';
 export { FALLBACK_ORDER, FALLBACK_FLAG } from './resolvers.js';
 
 /** US-2.1 — rate storage with provenance. */
@@ -51,6 +62,25 @@ export const SbiSheetParser = {
   parse: (sheet: string, options?: SbiParseOptions): Result<readonly RateRecord[]> =>
     parseSbiSheet(sheet, options),
 };
+
+/**
+ * US-2.2 — historical TT Buy archive, for dates SBI no longer publishes.
+ *
+ * A separate parser from the daily sheet because it is a separate trust level:
+ * the daily sheet comes from SBI, the archive is someone's transcription of it.
+ */
+export const SbiArchiveParser = {
+  parse: (csv: string, options: ArchiveParseOptions): Result<ArchiveParseResult> =>
+    parseSbiArchive(csv, options),
+};
+export {
+  ArchiveFormatError,
+  type ArchiveParseOptions,
+  type ArchiveParseResult,
+  type IntradayPolicy,
+  type IntradayRevision,
+  type SkippedDay,
+} from './sbi-archive.js';
 
 /** US-2.6 — retroactive finalisation of provisional rates. */
 export const RateAmendment = {

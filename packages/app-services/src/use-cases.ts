@@ -30,6 +30,8 @@ import {
   LoanExporter,
   ValuationEngine,
   applyLoanEdit,
+  bucketOf,
+  type AssetBucket,
   loanDuplicatesOf,
   type Asset,
   type ChitEmiType,
@@ -99,6 +101,7 @@ import {
 } from '@porttrack/persistence';
 import { currentPorts } from './context.js';
 import { requireEditMode, resetEditMode } from './edit-mode.js';
+import { useMemoryRateStore, useVaultRateStore } from './vault-rate-store.js';
 
 /* ------------------------------------------------------------------- vault */
 
@@ -108,6 +111,13 @@ export const VaultUC = {
     if (!result.ok) return result;
     // Vault-backed state can only be read once the key exists.
     await loadIncomeProfile();
+    /*
+     * Rate resolution moves to the vault here, and only here. Before this point
+     * `fx-itbr` resolves against an empty in-memory store, which is correct: a
+     * locked vault has no rates to offer, and a lookup must fail as unavailable
+     * rather than throw out of pure valuation code.
+     */
+    useVaultRateStore();
     currentPorts().logger.info('vault unlocked');
     return Ok({ dataDir: '', unlocked: true });
   },
@@ -120,6 +130,8 @@ export const VaultUC = {
     // mode on across a lock would hand the next person who unlocks a permission
     // they never asked for.
     resetEditMode();
+    // Back to memory, so nothing reads rates through a closed connection.
+    useMemoryRateStore();
   },
   /** Exposed so the API can answer readiness without importing persistence. */
   isUnlocked(): boolean {
@@ -1701,9 +1713,22 @@ export const TemplateUC = {
 
 /* ------------------------------------------------------------------ ledger */
 
+/**
+ * A holding plus the tab it belongs in.
+ *
+ * Computed HERE rather than in the browser. The SPA holds no domain logic by
+ * design, and the equity/non-equity split turns on tax character (ADR-016) — a
+ * second copy of that rule in the browser would drift from the engine's, and the
+ * screen would start disagreeing with the tax figure beside it.
+ */
+export interface BucketedAsset extends Asset {
+  readonly bucket: AssetBucket;
+}
+
 export const LedgerUC = {
-  assets(): Promise<readonly Asset[]> {
-    return AssetRepository.all();
+  async assets(): Promise<readonly BucketedAsset[]> {
+    const assets = await AssetRepository.all();
+    return assets.map((asset) => ({ ...asset, bucket: bucketOf(asset) }));
   },
   liabilities(): Promise<readonly Liability[]> {
     return LiabilityRepository.all();

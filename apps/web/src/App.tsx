@@ -5,25 +5,46 @@
  * logic. Everything shown here is computed server-side by the engines, so the
  * browser cannot disagree with a snapshot or a tax figure.
  *
- * The nav used to set a `section` state that nothing read, so every link
- * highlighted and rendered the dashboard regardless. Sections are now real
- * routes; `useSection` is the single source of truth and the address bar stays
- * in step, so a deep link and the back button both work.
+ * Sections are real routes and the address bar stays in step, so a deep link and
+ * the back button both work. The Assets area is two levels deep — see router.ts
+ * for why, and for how pre-grouping links like `#/equity` still resolve.
  */
 import { useCallback, useEffect, useState, type SyntheticEvent } from 'react';
 import { api, type Valuation } from './api.js';
 import { Card } from './components/primitives.js';
 import { EditModeProvider, useEditMode } from './edit-mode.js';
-import { SECTIONS, hrefFor, useSection } from './router.js';
+import { ASSET_TABS, SECTIONS, assetHrefFor, hrefFor, useRoute } from './router.js';
+import { AssetsOverview } from './views/AssetsOverview.js';
+import { Chits } from './views/Chits.js';
 import { Compliance } from './views/Compliance.js';
 import { Dashboard } from './views/Dashboard.js';
+import { Holdings } from './views/Holdings.js';
+import { Immovable } from './views/Immovable.js';
 import { Import } from './views/Import.js';
-import { Ledger } from './views/Ledger.js';
 import { Loans } from './views/Loans.js';
-import { Chits } from './views/Chits.js';
 import { Settings } from './views/Settings.js';
 import { Snapshots } from './views/Snapshots.js';
 import { Tax } from './views/Tax.js';
+
+/**
+ * Which manual trade classes each holdings tab offers.
+ *
+ * Split rather than shared because `SGB` is a tradeable class that belongs under
+ * Non-Equity — offering the full list on both tabs would let a user record a gold
+ * bond from the Equity screen and then not find it there.
+ *
+ * A fund is the one case that can cross: it is entered by asset class, and lands
+ * under Non-Equity if its scheme turns out to be debt-oriented.
+ */
+const EQUITY_TRADE_CLASSES = [
+  'DOMESTIC_EQUITY',
+  'DOMESTIC_ETF',
+  'DOMESTIC_MUTUAL_FUND',
+  'FOREIGN_EQUITY',
+  'FOREIGN_ETF',
+  'UNLISTED_SHARES',
+];
+const NON_EQUITY_TRADE_CLASSES = ['SGB'];
 
 /**
  * The provider sits OUTSIDE the unlock gate so the mode is read once and stays
@@ -46,7 +67,7 @@ function AppShell() {
   const [valuation, setValuation] = useState<Valuation | undefined>();
   const [valuedAt, setValuedAt] = useState<string | undefined>();
   const [valuing, setValuing] = useState(false);
-  const section = useSection();
+  const { section, assetTab } = useRoute();
   const editMode = useEditMode();
 
   const refresh = useCallback(async () => {
@@ -64,9 +85,9 @@ function AppShell() {
    *
    * The valuation was fetched a single time and then held for the session, so
    * anything recorded afterwards — a loan, an import, a payment — left the
-   * Dashboard showing ₹0 while the Ledger and Loans tabs showed the money. Two
-   * screens disagreeing about net worth is worse than either being briefly
-   * stale, and the tab change is the natural moment to reconcile them.
+   * Dashboard showing ₹0 while the asset tabs showed the money. Two screens
+   * disagreeing about net worth is worse than either being briefly stale, and
+   * the tab change is the natural moment to reconcile them.
    */
   useEffect(() => {
     if (unlocked && section === 'Dashboard') void refresh();
@@ -168,7 +189,7 @@ function AppShell() {
           <span className="pt-brand__mark" aria-hidden="true" />
           portTrack
         </div>
-        <nav>
+        <nav aria-label="Sections">
           {SECTIONS.map((name) => (
             <a
               key={name}
@@ -192,6 +213,27 @@ function AppShell() {
         )}
       </header>
 
+      {/*
+        The asset tabs stay on screen throughout the Assets area, so the extra
+        level is paid once on entry and lateral movement between the five costs
+        nothing. Hiding them behind the Assets tab would make every switch two
+        clicks, which is the usual reason a grouping level gets resented.
+      */}
+      {section === 'Assets' && (
+        <nav className="pt-subnav" aria-label="Asset kinds" data-testid="asset-subnav">
+          {ASSET_TABS.map((tab) => (
+            <a
+              key={tab}
+              href={assetHrefFor(tab)}
+              className={tab === assetTab ? 'is-active' : ''}
+              aria-current={tab === assetTab ? 'page' : undefined}
+            >
+              {tab}
+            </a>
+          ))}
+        </nav>
+      )}
+
       <main>
         {section === 'Dashboard' && (
           <Dashboard
@@ -201,9 +243,37 @@ function AppShell() {
             onRefresh={() => void refresh()}
           />
         )}
-        {section === 'Ledger' && <Ledger />}
-        {section === 'Loans' && <Loans />}
-        {section === 'Chits' && <Chits />}
+
+        {section === 'Assets' && (
+          <>
+            {assetTab === 'Overview' && <AssetsOverview />}
+            {/*
+              Two tabs, one component. They differ in what they contain, not in
+              how they read, and the bucket each filters on is decided by the
+              SERVER — equity versus debt turns on tax character (ADR-016).
+            */}
+            {assetTab === 'Equity' && (
+              <Holdings
+                bucket="EQUITY"
+                title="Equity"
+                blurb="Listed shares, equity funds and ETFs, unlisted shares, and your RSUs and ESPP. A fund appears here when its scheme is equity-oriented."
+                tradeClasses={EQUITY_TRADE_CLASSES}
+              />
+            )}
+            {assetTab === 'Non-Equity' && (
+              <Holdings
+                bucket="NON_EQUITY"
+                title="Non-equity"
+                blurb="Deposits, retirement schemes, bullion and sovereign gold bonds, crypto, cash and bank balances — and any debt-oriented fund."
+                tradeClasses={NON_EQUITY_TRADE_CLASSES}
+              />
+            )}
+            {assetTab === 'Immovable' && <Immovable />}
+            {assetTab === 'Loans' && <Loans />}
+            {assetTab === 'Chits' && <Chits />}
+          </>
+        )}
+
         {/* Also re-valued after an import, so the Dashboard is already correct
             by the time the user navigates back to it. */}
         {section === 'Import' && <Import onImported={() => void refresh()} />}
