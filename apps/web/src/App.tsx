@@ -18,6 +18,7 @@ import { AssetsOverview } from './views/AssetsOverview.js';
 import { Chits } from './views/Chits.js';
 import { Compliance } from './views/Compliance.js';
 import { Dashboard } from './views/Dashboard.js';
+import { Liabilities } from './views/Liabilities.js';
 import { Holdings } from './views/Holdings.js';
 import { Immovable } from './views/Immovable.js';
 import { Import } from './views/Import.js';
@@ -257,6 +258,8 @@ function AppShell() {
             onRefresh={() => void refresh()}
           />
         )}
+
+        {section === 'Liabilities' && <Liabilities />}
 
         {section === 'Assets' && (
           <>

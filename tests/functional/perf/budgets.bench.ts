@@ -12,7 +12,7 @@ import { anAsset, fixedClock, inr, manyLots } from '@porttrack/test-kit';
 const CLOCK = fixedClock('2026-03-31T23:59:59.999+05:30');
 
 const portfolio = Array.from({ length: 8 }, (_, i) =>
-  anAsset({ assetId: `ast_${i}`, lots: manyLots(125) }),
+  anAsset({ assetId: `ast_${String(i)}`, lots: manyLots(125) }),
 );
 
 const snapshotOf = (id: string): Snapshot =>
@@ -22,7 +22,7 @@ const snapshotOf = (id: string): Snapshot =>
     scope: 'ALL',
     asOf: '2026-03-31T23:59:59.999+05:30',
     positions: Array.from({ length: 1000 }, (_, i) => ({
-      assetId: `ast_${i}`,
+      assetId: `ast_${String(i)}`,
       assetClass: 'DOMESTIC_EQUITY',
       jurisdiction: 'DOMESTIC',
       quantity: '100',
@@ -38,7 +38,7 @@ const snapshotOf = (id: string): Snapshot =>
     contentHash: `sha256:${id}`,
     createdAt: '2026-04-01T00:00:00+05:30',
     frozen: true,
-  }) as Snapshot;
+  });
 
 describe('NFR-2 budgets', () => {
   bench(

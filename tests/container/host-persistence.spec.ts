@@ -272,8 +272,8 @@ describe('@container US-9.5 — host UID/GID ownership (FR-8.3)', () => {
           'true',
         ]);
       } catch (error) {
-        output = String((error as { stderr?: string; stdout?: string }).stderr ?? '') +
-          String((error as { stdout?: string }).stdout ?? '');
+        output = ((error as { stderr?: string }).stderr ?? '') +
+          ((error as { stdout?: string }).stdout ?? '');
       }
       expect(output).toContain('/var/lib/porttrack');
       expect(output).toMatch(/chown/);

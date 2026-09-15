@@ -675,6 +675,77 @@ export const MIGRATIONS: readonly Migration[] = [
        WHERE asset_id IN (SELECT asset_id FROM assets WHERE asset_class = 'REAL_ESTATE');
     `,
   },
+  {
+    version: 17,
+    name: 'borrowed-loans-and-emi',
+    up: `
+      -- Money BORROWED gets a schedule (Phase 3, objectives 3 and 10).
+      --
+      -- ADR-009 made liabilities first class and the decision was never honoured:
+      -- \`liabilities\` held one frozen principal figure with no way to create a
+      -- row, so net worth equalled gross assets in every vault, and six months of
+      -- EMIs would have moved nothing even if a row had existed.
+      --
+      -- The old table is KEPT rather than dropped. It is the projection
+      -- \`valuation.ts\` and \`al-items.ts\` read, and both stay untouched; what
+      -- changes is that a row in it is now derived from a borrowing's reducing
+      -- balance instead of being a number nobody could update.
+
+      CREATE TABLE borrowed_loans (
+        loan_id             TEXT PRIMARY KEY,
+        kind                TEXT NOT NULL,
+        -- The lender's name follows the borrower-name rule (ADR-013): the plain
+        -- value stays in the vault and lender_ref is what leaves.
+        lender_ref          TEXT NOT NULL,
+        lender_name         TEXT,
+        principal           TEXT NOT NULL,
+        currency            TEXT NOT NULL,
+        interest_rate_pct   TEXT NOT NULL,
+        tenure_months       INTEGER NOT NULL,
+        start_date          TEXT NOT NULL,
+        -- The lender's own EMI where the borrower knows it. Preferred over the
+        -- computed one: a lender rounds to the rupee, and a schedule three
+        -- rupees off the borrower's statement is one they cannot reconcile.
+        stated_emi          TEXT,
+        status              TEXT NOT NULL DEFAULT 'ACTIVE',
+        closed_date         TEXT,
+        secured_against     TEXT,
+        account_ref         TEXT,
+        notes               TEXT
+      );
+      CREATE INDEX idx_borrowed_loans_status ON borrowed_loans(status);
+
+      CREATE TABLE borrowed_loan_payments (
+        payment_id     TEXT PRIMARY KEY,
+        loan_id        TEXT NOT NULL REFERENCES borrowed_loans(loan_id) ON DELETE CASCADE,
+        date           TEXT NOT NULL,
+        amount         TEXT NOT NULL,
+        currency       TEXT NOT NULL,
+        -- An EMI is split between interest and principal; a prepayment is
+        -- principal in full. Treating one as the other either overstates the
+        -- interest paid or understates the balance.
+        is_prepayment  INTEGER NOT NULL DEFAULT 0,
+        mode           TEXT,
+        notes          TEXT
+      );
+      CREATE INDEX idx_borrowed_payments_loan ON borrowed_loan_payments(loan_id);
+
+      -- Carry any existing liabilities row forward as a borrowing, so nothing is
+      -- lost. The tenure and rate a bare liability never carried are unknowable,
+      -- so the loan is recorded as a single-instalment obligation at its stated
+      -- balance: the figure net worth uses is preserved exactly, and the user can
+      -- supply real terms afterwards. Inventing a 240-month schedule from a
+      -- balance would fabricate an EMI and an interest total.
+      INSERT INTO borrowed_loans
+        (loan_id, kind, lender_ref, principal, currency, interest_rate_pct,
+         tenure_months, start_date, status, notes)
+      SELECT liability_id, kind, 'lender_migrated', principal_outstanding, currency,
+             interest_rate_pct, 1, as_of, 'ACTIVE',
+             'Migrated from a liabilities row that carried no tenure or schedule. '
+             || 'Edit it to add the real terms.'
+        FROM liabilities;
+    `,
+  },
 ];
 
 const SCHEMA_TABLE = `

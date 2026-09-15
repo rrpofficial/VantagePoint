@@ -87,6 +87,32 @@ export {
 } from './mf-tax-character.js';
 export { HOLDING_BUCKETS, bucketOf, type AssetBucket } from './asset-bucket.js';
 
+/** Borrowed money — amortisation, and the register that reads it (Phase 3). */
+export {
+  addMonths,
+  emiFor,
+  outstandingAsOf,
+  progressOf,
+  scheduleFor,
+  type AmortisationTerms,
+  type LoanInstalmentPaid,
+  type LoanProgress,
+  type ScheduledInstalment,
+} from './amortisation.js';
+export {
+  liabilityOf,
+  register as borrowedRegister,
+  sortViews as sortBorrowedViews,
+  termsOf as borrowedTermsOf,
+  totalsOf as borrowedTotalsOf,
+  viewOf as borrowedViewOf,
+  type BorrowedFilter,
+  type BorrowedRegister,
+  type BorrowedSortKey,
+  type BorrowedTotals,
+  type BorrowedView,
+} from './borrowed-book.js';
+
 /** Immovable property — area units, duty breakdown, and the lot mapping. */
 export {
   AREA_UNITS,

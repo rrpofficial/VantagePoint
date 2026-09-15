@@ -22,6 +22,7 @@ const PASSPHRASE = process.env.PORTTRACK_TEST_PASSPHRASE ?? 'correct horse batte
 const SECTIONS = [
   'Dashboard',
   'Assets',
+  'Liabilities',
   'Snapshots',
   'Tax',
   'Compliance',

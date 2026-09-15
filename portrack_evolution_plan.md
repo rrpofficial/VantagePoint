@@ -12,26 +12,37 @@
 
 ## 0. Executive summary
 
-Ten objectives. Four met, two partial, four unmet.
+Ten objectives. **Eight met** after Phases 1-4 (2026-09-15); two remain — asset
+coverage (Phase 5) and Schedule FA (Phase 6).
 
-The dominant finding is not that features are missing — it is that **three
-complete, unit-tested engines have no callers**. The advance-tax calculator, the
-other-sources income aggregator, and the liability model are all built and
-correct. They are handed empty arrays by the use-case layer, or have no write
-path at all. The cheapest large win in this codebase is wiring, not building.
+The dominant finding was not that features were missing — it was that **three
+complete, unit-tested engines had no callers**. The advance-tax calculator, the
+other-sources income aggregator, and the liability model were all built and
+correct, and were handed empty arrays by the use-case layer or had no write path
+at all. The cheapest large win in this codebase was wiring, not building.
+
+**All three are now connected** (Phases 1-4). The same pattern recurred twice
+more while doing it: `ValuationInput.fx` and `ValuationInput.prices` were ports
+nothing ever supplied, and `IncomeLedger` had no write path into `income_events`.
+When something here looks broken, check first whether it is merely unreachable.
 
 | # | Objective | Verdict | Phase |
 |---|---|---|---|
 | 1 | All assets in one place, with details | 🟡 7 of 25 classes enterable | 5 |
-| 2 | Snapshot, and compare across time | 🟡 compare-to-live only | 4 |
-| 3 | Assets **and liabilities** in one place | 🔴 no way to create a liability | 3 |
+| 2 | Snapshot, and compare across time | 🟢 met (Phase 4) | 4 |
+| 3 | Assets **and liabilities** in one place | 🟢 met (Phase 3) | 3 |
 | 4 | Add individual transactions/trades | 🟢 met (same 7-class limit) | 5 |
 | 5 | Foreign Assets + HNI filing view | 🟡 Schedule AL works, FA always fails | 6 |
-| 6 | Quarterly advance tax | 🔴 engine correct, ledger not connected | 1 |
-| 7 | Tax on non-salary income | 🔴 aggregator has zero callers | 2 |
+| 6 | Quarterly advance tax | 🟢 met (Phase 1) | 1 |
+| 7 | Tax on non-salary income | 🟢 met (Phase 2) | 2 |
 | 8 | Hand loans + interest accrual | 🟢 met | — |
 | 9 | Chit fund progress | 🟢 met | — |
-| 10 | EMI progress on loans availed | 🔴 not implemented | 3 |
+| 10 | EMI progress on loans availed | 🟢 met (Phase 3) | 3 |
+
+**Added 2026-09-15, outside the original ten:** get the data out — CSV and PDF
+exports per register, and a wired, tested vault backup. Hand loans already export
+both formats; chits, equity and property export neither, and `Backup` is built
+and unwired. See Phase 7.
 
 ---
 
@@ -298,7 +309,7 @@ smaller number.
 
 ---
 
-### Phase 2 — Derive income from the ledger · objective 7, part of 5
+### Phase 2 — Derive income from the ledger · objective 7, part of 5 — ✅ DONE
 
 1. `POST /api/income` — record a dividend or interest receipt, routed through the
    existing `recordDividend` / `recordInterest` in `core-domain/src/income.ts`.
@@ -326,7 +337,7 @@ income rather than salary alone.
 
 ---
 
-### Phase 3 — Borrowed loans and EMI · objectives 3, 10
+### Phase 3 — Borrowed loans and EMI · objectives 3, 10 — ✅ DONE
 
 The largest phase. Build it behind the same register shape as `Loans.tsx`, which
 already solves filtering, sorting and totals for the mirror-image problem.
@@ -355,7 +366,7 @@ in production, and the schedule shows the interest/principal crossover.
 
 ---
 
-### Phase 4 — Snapshot comparison across time · objective 2
+### Phase 4 — Snapshot comparison across time · objective 2 — ✅ DONE
 
 1. Add `compareSnapshots(a, b)` to `apps/web/src/api.ts` — the API and use case
    already exist; this is one method and a second selector in `Snapshots.tsx`.
@@ -414,6 +425,92 @@ exceeds the 31-Dec closing value. With a gap, it still refuses.
 
 ---
 
+### Phase 7 — Export and backup · requested 2026-09-15
+
+Get the data OUT: as CSV and PDF per asset register, and as a restorable backup
+of the whole vault.
+
+Two different needs that are easy to conflate, and must not be:
+
+- **Export** is a readable extract of one register — hand loans, chits, equity,
+  property — for a CA, a bank, a family member, or a spreadsheet. It is
+  *lossy and human-facing* by design.
+- **Backup** is a byte-exact, restorable copy of the vault. It is *complete and
+  machine-facing*, and it stays encrypted.
+
+An export is not a backup. A CSV of holdings cannot reconstruct a vault — it has
+no lots, no provenance, no rates, no disposals — and offering one under a
+"Backup" label would be the kind of mistake a user discovers only when they have
+lost the original.
+
+#### 7.1 Where this already stands
+
+| Register | CSV | PDF | Notes |
+|---|---|---|---|
+| Hand loans | ✅ | ✅ | `LoanExporter` (`core-domain/src/loan-export.ts`), routes `/api/loans/export.csv` and `.pdf`, links in `Loans.tsx:300-303`. **Filter-aware** — it exports what the screen is showing. |
+| Chits | ❌ | ❌ | Nothing. |
+| Equity / holdings | ❌ | ❌ | Nothing. |
+| Immovable property | ❌ | ❌ | Nothing. |
+| Whole-vault backup | ⚠️ | — | `Backup` exists in `packages/persistence/src/backup.ts` and correctly archives the KDF metadata alongside the database — **but no use case, route or button reaches it.** Same defect class as the `prices` and `fx` ports: built, correct, unwired. |
+
+The hand-loan exporter is the template to follow, not a thing to generalise
+prematurely. It already solves the parts that are easy to get wrong: Indian digit
+grouping, decimal-string money that never becomes a float, pagination, and a
+generated-on stamp.
+
+#### 7.2 What to build
+
+1. **Wire `Backup`.** A `BackupUC` plus `POST /api/vault/backup` and a Settings
+   button. The archive must keep carrying `vault.db.meta.json` — a backup of the
+   database alone restores to a vault nobody can open, and that failure surfaces
+   only when the backup is needed. Add a **restore** path and a functional test
+   that round-trips backup → fresh directory → unlock → same figures; an untested
+   restore is not a backup.
+2. **Chit register export**, CSV and PDF: scheme, organisation, status, start and
+   end, instalments paid to date, agreed withdrawal where a schedule covers it.
+   Filter-aware like the loan one, so it exports what the screen shows.
+3. **Equity / holdings export**, CSV and PDF: per holding and per LOT — a
+   holdings summary without lots cannot support a capital-gains conversation,
+   which is most of why it would be exported. Include acquisition date, quantity,
+   cost per unit, charges, source currency **and** the INR figure with the rate
+   used, plus realised disposals for the selected FY.
+4. **Property export**, CSV and PDF, now that the schema carries the detail:
+   area and unit, rate, consideration, each duty separately, total tax, and the
+   current value with its basis and date.
+5. **One export surface**, not four ad-hoc ones. A shared
+   `packages/exporters` (or a widened `loan-export.ts`) owning the CSV quoting,
+   the PDF table layout and the money formatting, with each register supplying
+   columns and rows.
+
+#### 7.3 Constraints this must respect
+
+- **PII (ADR-013).** A borrower's name and a property's street address are in the
+  vault in the clear and are replaced by `brw_…` / `addr_…` in anything that
+  leaves. An export is a file the user will email. Decide per register, and make
+  it an explicit, visible choice at export time — **not a default that leaks.**
+  The existing loan CSV is the precedent to check first.
+- **ADR-002.** Money stays a decimal string all the way to the byte. A CSV cell
+  that went through a float is a corrupted figure that still looks fine.
+- **ADR-010.** No egress. These are downloads from the local API; nothing is
+  uploaded anywhere, and no export path may acquire a network call.
+- **Provisional rates.** Any export carrying a TAX figure must inherit
+  `assertFilingReady` — a PDF that looks like a filing document and rests on a
+  provisional rule set is exactly the artifact that gate exists to prevent. A
+  holdings or register export carries no tax figure and is unaffected.
+- **A PDF is a record.** Stamp every one with the generated-on date and the
+  vault it came from, as the loan PDF already does.
+
+**Acceptance:** each of loans, chits, equity and property exports to CSV and PDF
+from its own tab, carrying the filters on screen; a backup taken from Settings
+restores into an empty directory and unlocks with the same passphrase to the same
+net worth; and no export of a tax figure is producible from a PROVISIONAL year.
+
+**Open question for the user:** should exports mask PII by default and offer to
+include it, or include it by default and offer to mask it? The answer differs by
+audience — a CA needs the borrower's name, a spreadsheet for analysis does not.
+
+---
+
 ## 4. Sequencing and risk
 
 ```
@@ -425,10 +522,18 @@ parser
 Phase 3 (independent — largest)
 Phase 4 (independent — smallest)
 Phase 5 ── Phase 6 (marks store benefits from the valuer registry)
+
+Phase 7 (independent — exports read what exists; backup depends on nothing)
 ```
 
 Phases 3 and 4 depend on nothing and can run in any order. Phase 2 depends on
 Phase 1's wiring being in place. Phase 6 is last by value, not by difficulty.
+
+Phase 7 depends on no other phase: each exporter reads a register that already
+exists, and every later phase simply gives it more to export. Its **backup half
+is the one piece of this plan that protects against total loss**, and is worth
+pulling forward out of order — it is small, and a vault with no tested restore
+path is one disk failure from zero.
 
 **Risk register**
 
@@ -439,6 +544,9 @@ Phase 1's wiring being in place. Phase 6 is last by value, not by difficulty.
 | Migration v10 loses existing `liabilities` rows | 3 | Forward-migrate explicitly; the table is empty in production today, which makes this the cheapest possible moment to change it |
 | Peak value computed from closing value | 6 | Keep the loud failure; never approximate |
 | Valuer registry changes a net-worth figure | 5 | Golden-value test on the existing fixture before and after |
+| A backup restores to a vault nobody can open | 7 | Archive the KDF metadata with the database — `backup.ts` already does; pin it with a round-trip restore test, because an untested restore is not a backup |
+| An export leaks a borrower's name or a street address into a file the user emails | 7 | Masking is an explicit choice at export time, never a silent default (ADR-013) |
+| A CSV cell round-trips through a float | 7 | Decimal strings to the byte (ADR-002); no `Number()` in an exporter |
 
 **Standing constraint:** no fabricated exchange rates, ever. Every rate that
 reaches a tax figure carries its own source document reference — the discipline
@@ -459,6 +567,10 @@ figure flowing into a filing is the worst failure mode available in this codebas
    artifact of its own? §3 Phase 4 recommends the former.
 4. **Liabilities placement** (Phase 3) — top-level tab, as recommended, or a
    sub-tab under Assets?
+5. **Export masking default** (Phase 7) — should an export mask the borrower name
+   and the property address by default and offer to include them, or the reverse?
+   A CA needs the names; a spreadsheet for analysis does not, and it is the file
+   most likely to be emailed.
 
 ---
 
@@ -472,6 +584,10 @@ All ten objectives green, and specifically:
 - Any two snapshots can be compared, filtered to an asset class.
 - A fixed deposit grows without a trade.
 - Schedule FA either generates from a real daily series, or refuses — never approximates.
+- Every register — loans, chits, equity, property — exports to CSV and PDF from
+  its own tab, carrying the filters on screen.
+- A backup taken from Settings restores into an empty directory, unlocks with the
+  same passphrase, and reports the same net worth. **Tested, not assumed.**
 
 ---
 

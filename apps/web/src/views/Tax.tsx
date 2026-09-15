@@ -16,6 +16,7 @@ import {
   type AdvanceTaxInstallment,
   type AdvanceTaxPayment,
   type RegimeComparison,
+  type DerivedOtherSources,
 } from '../api.js';
 import { Amount, Card, Chip, ProvisionalBanner } from '../components/primitives.js';
 import { DeleteControl } from '../components/DeleteControl.js';
@@ -275,6 +276,14 @@ export function Tax() {
           </>
         )}
       </Card>
+
+      {/*
+        Where the "other sources" figure came from (Phase 2).
+        Without this the composition is invisible: a dividend both typed into the
+        profile AND recorded against a holding is counted twice, and the only
+        defence is that the user can SEE both lines and remove one.
+      */}
+      <OtherSourcesPanel financialYear={financialYear} />
 
       {/* Recomputes the instalment above: it is stated net of what is paid. */}
       <AdvanceTaxPayments financialYear={financialYear} onRecorded={() => void compute()} />
@@ -558,6 +567,119 @@ function AdvanceTaxPayments({
           </p>
         )}
       </form>
+    </Card>
+  );
+}
+
+/**
+ * Other-sources income, and where each rupee of it came from.
+ *
+ * Exists because the derivation COMPOSES the typed figure with the ledger's
+ * rather than replacing it — which is right (the user has income this ledger
+ * does not know about) but means a dividend entered in both places is counted
+ * twice. That is not detectable from here, so the defence is that every
+ * component is named and the user can remove the duplicate. A defence nobody
+ * can see is not a defence, which is what this panel fixes.
+ *
+ * It also shows what was EXCLUDED. Hand-loan interest and chit returns default
+ * to off; a user who recorded a loan and finds no interest in the figure needs
+ * to know it is a setting, and how large the choice is.
+ */
+function OtherSourcesPanel({ financialYear }: { financialYear: string }) {
+  const [income, setIncome] = useState<DerivedOtherSources | undefined>();
+
+  useEffect(() => {
+    if (financialYear.length === 0) return;
+    void (async () => {
+      const result = await api.derivedIncome(financialYear);
+      setIncome(result.ok ? result.value : undefined);
+    })();
+  }, [financialYear]);
+
+  if (income === undefined) return null;
+  if (income.items.length === 0 && income.excluded.length === 0) return null;
+
+  return (
+    <Card title="Income from other sources" action={<Chip>{`FY ${financialYear}`}</Chip>}>
+      <dl className="pt-stats">
+        <div>
+          <dt>From the ledger</dt>
+          <dd data-testid="other-sources-derived">
+            <Amount value={income.derived} />
+          </dd>
+        </div>
+        <div>
+          <dt>Entered by hand</dt>
+          <dd>
+            <Amount value={income.manual} />
+          </dd>
+        </div>
+        <div>
+          <dt>Counted as income</dt>
+          <dd data-testid="other-sources-total">
+            <Amount value={income.total} />
+          </dd>
+        </div>
+      </dl>
+
+      {income.items.length > 0 && (
+        <div className="pt-table-scroll">
+          <table className="pt-table" data-testid="other-sources-table">
+            <thead>
+              <tr>
+                <th scope="col">Source</th>
+                <th scope="col" className="pt-align-end">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {income.items.map((item, index) => (
+                <tr key={`${item.label}-${String(index)}`}>
+                  <td>{item.label}</td>
+                  <td className="pt-align-end">
+                    <Amount value={item.amount} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {income.items.length > 1 && (
+        <p className="pt-muted">
+          Each line is counted once. If something here is <strong>also</strong> in the
+          &ldquo;other sources&rdquo; box of your income profile, it is being counted twice —
+          remove it from one of the two.
+        </p>
+      )}
+
+      {income.excluded.length > 0 && (
+        <>
+          <h4>Recorded, but not counted</h4>
+          <div className="pt-table-scroll">
+            <table className="pt-table" data-testid="other-sources-excluded">
+              <thead>
+                <tr>
+                  <th scope="col">Source</th>
+                  <th scope="col" className="pt-align-end">Amount</th>
+                  <th scope="col">Why</th>
+                </tr>
+              </thead>
+              <tbody>
+                {income.excluded.map((row, index) => (
+                  <tr key={`${row.label}-${String(index)}`}>
+                    <td>{row.label}</td>
+                    <td className="pt-align-end">
+                      <Amount value={row.amount} />
+                    </td>
+                    <td className="pt-muted">{row.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </Card>
   );
 }

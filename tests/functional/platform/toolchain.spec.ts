@@ -10,7 +10,14 @@ import { readFileSync, globSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
-const readJson = (rel: string) => JSON.parse(readFileSync(join(ROOT, rel), 'utf8'));
+/*
+ * Typed at the boundary rather than left as `any`. `JSON.parse` returns `any`,
+ * and letting that spread means a typo in a config key reads as `undefined` and
+ * the assertion quietly passes — in a test whose whole job is to assert that
+ * strict settings are on.
+ */
+const readJson = (rel: string): Record<string, unknown> =>
+  JSON.parse(readFileSync(join(ROOT, rel), 'utf8')) as Record<string, unknown>;
 
 const DOMAIN_PACKAGES = [
   'shared-kernel',
@@ -24,7 +31,8 @@ const DOMAIN_PACKAGES = [
 ];
 
 describe('US-8.1 Scenario: Strict TypeScript is enforced', () => {
-  const base = () => readJson('tsconfig.base.json').compilerOptions;
+  const base = () =>
+    readJson('tsconfig.base.json').compilerOptions as Record<string, unknown>;
 
   it.each(['strict', 'noUncheckedIndexedAccess', 'exactOptionalPropertyTypes'])(
     'sets %s to true',
@@ -90,7 +98,9 @@ describe('US-8.1 Scenario: The workspace is coherent', () => {
 
   it('gives every package a @porttrack-scoped name', () => {
     for (const manifest of globSync(`${ROOT}/packages/*/package.json`)) {
-      expect(JSON.parse(readFileSync(manifest, 'utf8')).name).toMatch(/^@porttrack\//);
+      expect((JSON.parse(readFileSync(manifest, 'utf8')) as { name?: string }).name).toMatch(
+        /^@porttrack\//,
+      );
     }
   });
 

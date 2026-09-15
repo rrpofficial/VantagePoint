@@ -56,6 +56,12 @@ export type MovementBucket = 'NEW' | 'LIQUIDATED' | 'INCREASED' | 'DECREASED' | 
 
 export interface PositionDelta {
   readonly assetId: string;
+  /**
+   * The asset class this position had, so a comparison can be scoped to one
+   * sleeve without joining back against the live ledger — where a position sold
+   * since the snapshot no longer exists to classify.
+   */
+  readonly assetClass: string;
   readonly bucket: MovementBucket;
   readonly quantityBefore: Quantity;
   readonly quantityAfter: Quantity;

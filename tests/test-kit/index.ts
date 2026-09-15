@@ -8,7 +8,6 @@ import type {
   Clock,
   Currency,
   IdGenerator,
-  IsoDate,
   IsoDateTime,
   Money,
   Result,
@@ -16,7 +15,6 @@ import type {
 import type {
   AcquisitionLot,
   Asset,
-  AssetClass,
   DualRate,
   ExitTransaction,
   Liability,
@@ -47,7 +45,7 @@ export function expectMoney(actual: Money, expected: Money): void {
 export function fixedClock(instant: IsoDateTime): Clock {
   return {
     now: () => instant,
-    today: () => instant.slice(0, 10) as IsoDate,
+    today: () => instant.slice(0, 10),
   };
 }
 
@@ -80,7 +78,7 @@ export function aLot(overrides: Partial<AcquisitionLot> = {}): AcquisitionLot {
 export function anAsset(overrides: Partial<Asset> = {}): Asset {
   return {
     assetId: 'ast_domestic_equity_0001',
-    assetClass: 'DOMESTIC_EQUITY' as AssetClass,
+    assetClass: 'DOMESTIC_EQUITY',
     jurisdiction: 'DOMESTIC',
     currency: 'INR',
     symbol: 'TCS',
@@ -154,7 +152,7 @@ export function manyLots(count: number): AcquisitionLot[] {
   return Array.from({ length: count }, (_, i) =>
     aLot({
       lotId: `lot_${String(i).padStart(5, '0')}`,
-      acquisitionDate: `20${20 + (i % 6)}-0${(i % 9) + 1}-1${i % 10}`,
+      acquisitionDate: `20${String(20 + (i % 6))}-0${String((i % 9) + 1)}-1${String(i % 10)}`,
       quantity: String(10 + (i % 90)),
       remainingQuantity: String(10 + (i % 90)),
       costPerUnit: inr(String(100 + (i % 500))),

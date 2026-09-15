@@ -27,6 +27,9 @@ import { useEffect, useState } from 'react';
 export const SECTIONS = [
   'Dashboard',
   'Assets',
+  // A borrowing is not an asset, so it gets its own section rather than a tab
+  // under Assets — the same separation Schedule AL makes (Phase 3).
+  'Liabilities',
   'Snapshots',
   'Tax',
   'Compliance',

@@ -6,8 +6,39 @@
  * a user verify that claim rather than take it on trust.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { api, type SnapshotSummary, type VarianceReport } from '../api.js';
+import { api, type AssetBucket, type SnapshotSummary, type VarianceReport } from '../api.js';
 import { Amount, Card, Chip, Delta } from '../components/primitives.js';
+
+/**
+ * Asset class → tab bucket, mirroring `core-domain/src/asset-bucket.ts`.
+ *
+ * A LOCAL map rather than an import: `bucketOf` takes an Asset and decides
+ * Equity vs Non-Equity by tax character (ADR-016), which a frozen position
+ * cannot supply — a debt-oriented fund and an equity-oriented one share a class.
+ * This is the coarser reading, and it is honest about that: a mutual fund lands
+ * under Non-Equity here whatever its allocation was.
+ */
+const BUCKET_OF: Readonly<Record<string, AssetBucket>> = {
+  DOMESTIC_EQUITY: 'EQUITY',
+  DOMESTIC_ETF: 'EQUITY',
+  FOREIGN_EQUITY: 'EQUITY',
+  FOREIGN_ETF: 'EQUITY',
+  UNLISTED_SHARES: 'EQUITY',
+  REAL_ESTATE: 'IMMOVABLE',
+  HAND_LOAN: 'LOAN',
+  CHIT_FUND: 'CHIT',
+};
+
+const bucketFor = (assetClass: string): AssetBucket => BUCKET_OF[assetClass] ?? 'NON_EQUITY';
+
+const BUCKET_LABELS: readonly { value: AssetBucket | 'ALL'; label: string }[] = [
+  { value: 'ALL', label: 'All assets' },
+  { value: 'EQUITY', label: 'Equity' },
+  { value: 'NON_EQUITY', label: 'Non-equity' },
+  { value: 'IMMOVABLE', label: 'Immovable' },
+  { value: 'LOAN', label: 'Loans' },
+  { value: 'CHIT', label: 'Chits' },
+];
 
 /**
  * The most recent fully-elapsed day.
@@ -29,6 +60,18 @@ export function Snapshots() {
   const [snapshots, setSnapshots] = useState<readonly SnapshotSummary[] | undefined>();
   const [variance, setVariance] = useState<VarianceReport | undefined>();
   const [comparing, setComparing] = useState<string | undefined>();
+  /** `'live'` or a second snapshot id — what the comparison ran against. */
+  const [comparedWith, setComparedWith] = useState<string>('live');
+  /**
+   * Which sleeve the variance table is filtered to.
+   *
+   * A CLIENT-side reading of a full snapshot, not a snapshot of its own. "How
+   * did the equity sleeve move between these dates" is a way of looking at the
+   * frozen record, and freezing a class-scoped artifact instead would multiply
+   * the snapshot-per-date count with ADR-006's immutability guarantees then
+   * applying to each one individually. See §3 Phase 4 of the evolution plan.
+   */
+  const [bucket, setBucket] = useState<AssetBucket | 'ALL'>('ALL');
   const [error, setError] = useState<string | undefined>();
   const [busy, setBusy] = useState(false);
 
@@ -54,16 +97,33 @@ export function Snapshots() {
     await load();
   }, [asOf, load]);
 
-  const compare = useCallback(async (snapshotId: string): Promise<void> => {
-    setError(undefined);
-    setComparing(snapshotId);
-    const result = await api.compareToLive(snapshotId);
-    if (result.ok) setVariance(result.value);
-    else {
-      setVariance(undefined);
-      setError(result.error.message);
-    }
-  }, []);
+  /**
+   * `'live'` compares against the current portfolio; any other value is a second
+   * snapshot id.
+   *
+   * Both routes have existed since the snapshot work — only the snapshot-to-live
+   * one was reachable, so the product could answer "how has it moved since?" and
+   * never "how did it move between these two dates?", which is objective 2.
+   */
+  const compare = useCallback(
+    async (beforeId: string, against: string): Promise<void> => {
+      setError(undefined);
+      setComparing(beforeId);
+      setComparedWith(against);
+
+      const result =
+        against === 'live'
+          ? await api.compareToLive(beforeId)
+          : await api.compareSnapshots(beforeId, against);
+
+      if (result.ok) setVariance(result.value);
+      else {
+        setVariance(undefined);
+        setError(result.error.message);
+      }
+    },
+    [],
+  );
 
   return (
     <div className="pt-stack">
@@ -137,13 +197,33 @@ export function Snapshots() {
                   <td>{snapshot.asOf.slice(0, 10)}</td>
                   <td className="pt-numeric pt-hash">{snapshot.contentHash.slice(0, 12)}…</td>
                   <td className="pt-align-end">
-                    <button
-                      type="button"
-                      className="pt-link pt-link--inline"
-                      onClick={() => void compare(snapshot.snapshotId)}
+                    {/*
+                      A select rather than two buttons: "against what" is one
+                      question with several answers, and a row of buttons per
+                      snapshot grows with the snapshot count.
+                    */}
+                    <select
+                      aria-label={`Compare ${snapshot.snapshotId} against`}
+                      defaultValue=""
+                      data-testid={`compare-${snapshot.snapshotId}`}
+                      onChange={(event) => {
+                        const against = event.target.value;
+                        if (against.length === 0) return;
+                        void compare(snapshot.snapshotId, against);
+                        // Reset, so picking the same target twice re-runs it.
+                        event.target.value = '';
+                      }}
                     >
-                      Compare to live
-                    </button>
+                      <option value="">Compare with…</option>
+                      <option value="live">the live portfolio</option>
+                      {snapshots
+                        .filter((other) => other.snapshotId !== snapshot.snapshotId)
+                        .map((other) => (
+                          <option key={other.snapshotId} value={other.snapshotId}>
+                            {other.asOf.slice(0, 10)} · {other.snapshotId}
+                          </option>
+                        ))}
+                    </select>
                   </td>
                 </tr>
               ))}
@@ -154,7 +234,7 @@ export function Snapshots() {
 
       {variance !== undefined && (
         <Card
-          title="Variance against live"
+          title={comparedWith === 'live' ? 'Variance against live' : 'Variance between snapshots'}
           action={comparing === undefined ? undefined : <Chip>{comparing}</Chip>}
         >
           <dl className="pt-stats">
@@ -182,34 +262,73 @@ export function Snapshots() {
             </div>
           </dl>
 
+          <div className="pt-controls">
+            <label htmlFor="variance-bucket">Show</label>
+            <select
+              id="variance-bucket"
+              value={bucket}
+              data-testid="variance-bucket"
+              onChange={(event) => {
+                setBucket(event.target.value as AssetBucket | 'ALL');
+              }}
+            >
+              {BUCKET_LABELS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            {/*
+              The net-worth figures above are the WHOLE portfolio and do not
+              change with this filter. Saying so beats letting a reader assume
+              the ₹ change at the top belongs to the sleeve below it.
+            */}
+            <span className="pt-muted">
+              Filters the rows below. The net worth figures above cover the whole portfolio.
+            </span>
+          </div>
+
           <div className="pt-table-scroll">
             <table className="pt-table" data-testid="variance-table">
               <thead>
                 <tr>
                   <th scope="col">Movement</th>
                   <th scope="col">Asset</th>
+                  <th scope="col">Class</th>
                   <th scope="col" className="pt-align-end">
                     Change
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {variance.positions.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="pt-muted">
-                      Nothing moved between the snapshot and now.
-                    </td>
-                  </tr>
-                )}
-                {variance.positions.map((row) => (
-                  <tr key={row.assetId}>
-                    <td>{row.bucket.replaceAll('_', ' ').toLowerCase()}</td>
-                    <td>{row.assetId}</td>
-                    <td className="pt-align-end">
-                      <Delta value={row.valueDelta} />
-                    </td>
-                  </tr>
-                ))}
+                {(() => {
+                  const rows = variance.positions.filter(
+                    (row) => bucket === 'ALL' || bucketFor(row.assetClass) === bucket,
+                  );
+
+                  if (rows.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={4} className="pt-muted">
+                          {variance.positions.length === 0
+                            ? 'Nothing moved between the two points being compared.'
+                            : 'Nothing in this asset class moved. Widen the filter to see the rest.'}
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return rows.map((row) => (
+                    <tr key={row.assetId}>
+                      <td>{row.bucket.replaceAll('_', ' ').toLowerCase()}</td>
+                      <td>{row.assetId}</td>
+                      <td>{row.assetClass.replaceAll('_', ' ').toLowerCase()}</td>
+                      <td className="pt-align-end">
+                        <Delta value={row.valueDelta} />
+                      </td>
+                    </tr>
+                  ));
+                })()}
               </tbody>
             </table>
           </div>

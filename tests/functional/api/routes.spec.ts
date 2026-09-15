@@ -41,7 +41,12 @@ describe('US-8.11 Scenario: API exposes the use cases the SPA needs', () => {
   it('returns JSON validated against the shared contract schema', async () => {
     const response = await (await app()).inject({ method: 'GET', url: '/api/health/live' });
     expect(response.headers['content-type']).toMatch(/application\/json/);
-    expect(() => JSON.parse(response.body)).not.toThrow();
+    // The arrow must not RETURN the parsed value: `JSON.parse` is `any`, and
+    // returning it leaks that through the assertion. Parsing for the throw is
+    // the whole point here.
+    expect(() => {
+      JSON.parse(response.body);
+    }).not.toThrow();
   });
 });
 

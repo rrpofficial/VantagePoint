@@ -17,6 +17,7 @@ import {
   Ok,
   RateUnavailableError,
   VaultStateError,
+  type Currency,
   type EgressAuditEntry,
   type FinancialYear,
   type IsoDate,
@@ -30,6 +31,8 @@ import {
   AREA_UNITS,
   PROPERTY_KINDS,
   ChitLedger,
+  borrowedRegister,
+  IncomeLedger,
   FifoAllocator,
   HandLoanLedger,
   LoanExporter,
@@ -38,6 +41,13 @@ import {
   bucketOf,
   reconcileHoldings,
   type AdvanceTaxPayment,
+  type BorrowedLoan,
+  type BorrowedLoanStatus,
+  type BorrowedRegister,
+  type BorrowedSortKey,
+  type LiabilityKind,
+  type LoanInstalment,
+  type IncomeEvent,
   type AreaUnit,
   type PropertyKind,
   type AssetClass,
@@ -104,6 +114,7 @@ import {
   type ParserName,
 } from '@porttrack/ingestion';
 import {
+  BorrowedLoanRepository,
   AssetRepository,
   ChitScheduleRepository,
   ExitRepository,
@@ -126,6 +137,9 @@ import {
 } from './income-inclusions.js';
 import { stampForeignRates } from './foreign-rates.js';
 import { useMemoryRateStore, useVaultRateStore } from './vault-rate-store.js';
+import { deriveOtherSources, type DerivedOtherSources } from './income-derivation.js';
+
+export type { DerivedOtherSources };
 import {
   buildPropertyEntry,
   type PropertyAdvisory,
@@ -459,6 +473,28 @@ async function advanceTaxInputsFor(financialYear: FinancialYear): Promise<{
  * guessed at, exactly as it is in the tax computation — so the answer can be
  * understated when rates are missing, never invented.
  */
+/**
+ * The income profile with "other sources" DERIVED from the ledger (Phase 2).
+ *
+ * The stored profile carries a typed `otherSourcesIncome`; this replaces it with
+ * typed **plus** derived — dividends and interest recorded against holdings, and
+ * hand-loan or chit income where the taxpayer has switched those on.
+ *
+ * One seam, so every tax figure in the application rests on the same income.
+ * Two call sites computing "total income" differently is how `hniStatus` came to
+ * disagree with the advance-tax instalment in the first place.
+ */
+async function effectiveProfileFor(
+  financialYear: FinancialYear,
+  profile: IncomeProfile,
+): Promise<{ profile: IncomeProfile; otherSources: DerivedOtherSources }> {
+  const otherSources = await deriveOtherSources(financialYear, profile.otherSourcesIncome);
+  return {
+    profile: { ...profile, otherSourcesIncome: otherSources.total },
+    otherSources,
+  };
+}
+
 async function totalIncomeFor(
   financialYear: FinancialYear,
   income: IncomeProfile,
@@ -469,11 +505,16 @@ async function totalIncomeFor(
     includeSellToCover: incomeInclusionsOf().sellToCoverGains,
   });
 
+  // Derived, not the typed figure alone — otherwise the ₹50 lakh tests ignore a
+  // dividend the ledger knows about, which is the same class of omission the
+  // salary-only basis was.
+  const { profile } = await effectiveProfileFor(financialYear, income);
+
   return Money.sum(
     [
-      income.grossSalary,
-      income.housePropertyIncome,
-      income.otherSourcesIncome,
+      profile.grossSalary,
+      profile.housePropertyIncome,
+      profile.otherSourcesIncome,
       gains.taxableStcg,
       gains.taxableLtcg,
     ],
@@ -496,10 +537,21 @@ export const ComputeAdvanceTaxUC = {
 
     const ledger = await advanceTaxInputsFor(input.financialYear);
 
+    /*
+     * Phase 2. `otherSourcesIncome` was whatever the user typed, so a dividend
+     * recorded against a holding and interest accruing on a hand loan reached
+     * no instalment at all — `OtherSourcesAggregator` was written, tested, and
+     * called by nothing.
+     */
+    const { profile: effective } = await effectiveProfileFor(
+      input.financialYear,
+      profile.value,
+    );
+
     return AdvanceTaxEngine.installment({
       financialYear: input.financialYear,
       quarter: input.quarter,
-      income: profile.value,
+      income: effective,
       exits: ledger.exits,
       assetClasses: ledger.assetClasses,
       alreadyPaid: ledger.alreadyPaid,
@@ -1375,6 +1427,340 @@ export const TradeUC = {
       exits: projected.value.exits.length,
       unapplied: projected.value.unapplied.map((row) => ({ reason: row.reason })),
     });
+  },
+};
+
+/* ------------------------------------------------- borrowings (Phase 3) */
+
+export interface RecordBorrowedLoanInput {
+  readonly lenderName: string;
+  readonly kind: LiabilityKind;
+  readonly principal: string;
+  readonly interestRatePct: string;
+  readonly tenureMonths: number | string;
+  readonly startDate: IsoDate;
+  readonly statedEmi?: string;
+  readonly currency?: Currency;
+  readonly securedAgainstAssetId?: string;
+  readonly accountRef?: string;
+  readonly notes?: string;
+}
+
+export interface RecordBorrowedPaymentInput {
+  readonly loanId: string;
+  readonly date: IsoDate;
+  readonly amount: string;
+  readonly isPrepayment?: boolean;
+  readonly mode?: PaymentMode;
+  readonly notes?: string;
+}
+
+export interface BorrowedQuery {
+  readonly statuses?: readonly BorrowedLoanStatus[];
+  readonly kinds?: readonly LiabilityKind[];
+  readonly lenders?: readonly string[];
+  readonly sortBy?: BorrowedSortKey;
+  readonly direction?: SortDirection;
+  readonly asOf?: IsoDate;
+}
+
+export const LiabilityUC = {
+  /**
+   * A borrowing, with its contractual terms.
+   *
+   * ADR-009 made liabilities first class and the decision was never honoured:
+   * there was no write path at all, so net worth equalled gross assets in every
+   * vault that has ever existed. This is that path.
+   */
+  async record(input: RecordBorrowedLoanInput): Promise<Result<BorrowedLoan>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    if (!ISO_DATE.test(input.startDate)) {
+      return Err(new VaultStateError('a loan needs a start date, as YYYY-MM-DD'));
+    }
+    const lenderName = input.lenderName.trim();
+    if (lenderName.length === 0) {
+      return Err(new VaultStateError('a loan needs the lender’s name'));
+    }
+
+    const currency = input.currency ?? 'INR';
+    const principal = Money.parse(input.principal, currency);
+    if (!principal.ok) return principal;
+    if (Money.compare(principal.value, Money.zero(currency)) <= 0) {
+      return Err(new VaultStateError('the principal must be greater than zero'));
+    }
+
+    const tenure = Number(input.tenureMonths);
+    if (!Number.isInteger(tenure) || tenure <= 0) {
+      return Err(new VaultStateError('the tenure must be a whole number of months'));
+    }
+
+    const rate = Number(input.interestRatePct);
+    if (!Number.isFinite(rate) || rate < 0) {
+      return Err(new VaultStateError('the interest rate must be zero or more'));
+    }
+
+    const statedEmi =
+      input.statedEmi === undefined || input.statedEmi.trim().length === 0
+        ? undefined
+        : Money.parse(input.statedEmi, currency);
+    if (statedEmi !== undefined && !statedEmi.ok) return statedEmi;
+
+    const loan: BorrowedLoan = {
+      loanId: `bwl_${createHash('sha256')
+        .update([lenderName.toLowerCase(), input.startDate, principal.value.amount].join('|'))
+        .digest('hex')
+        .slice(0, 16)}`,
+      kind: input.kind,
+      // Hashed like a borrower's name, and for the same reason (ADR-013).
+      lenderRef: borrowerRef(lenderName),
+      lenderName,
+      principal: principal.value,
+      interestRatePct: String(rate),
+      tenureMonths: tenure,
+      startDate: input.startDate,
+      ...(statedEmi?.ok === true ? { statedEmi: statedEmi.value } : {}),
+      payments: [],
+      status: 'ACTIVE',
+      ...(input.securedAgainstAssetId === undefined
+        ? {}
+        : { securedAgainstAssetId: input.securedAgainstAssetId }),
+      ...(input.accountRef === undefined ? {} : { accountRef: input.accountRef }),
+      ...(input.notes === undefined ? {} : { notes: input.notes }),
+    };
+
+    const existing = await BorrowedLoanRepository.findById(loan.loanId);
+    if (existing !== undefined) {
+      return Err(
+        new DuplicateLoanError(
+          `a loan from ${lenderName} starting ${input.startDate} for this amount is already recorded`,
+          [loan.loanId],
+        ),
+      );
+    }
+
+    const saved = await BorrowedLoanRepository.save(loan);
+    return saved.ok ? Ok(loan) : saved;
+  },
+
+  /** An EMI or a prepayment. An addition, so ungated like every other addition. */
+  async recordPayment(input: RecordBorrowedPaymentInput): Promise<Result<BorrowedLoan>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    if (!ISO_DATE.test(input.date)) {
+      return Err(new VaultStateError('a payment needs a date, as YYYY-MM-DD'));
+    }
+
+    const loan = await BorrowedLoanRepository.findById(input.loanId);
+    if (loan === undefined) {
+      return Err(new VaultStateError(`no borrowing with id ${input.loanId}`));
+    }
+
+    const amount = Money.parse(input.amount, loan.principal.currency);
+    if (!amount.ok) return amount;
+    if (Money.compare(amount.value, Money.zero(loan.principal.currency)) <= 0) {
+      return Err(new VaultStateError('a payment must be greater than zero'));
+    }
+
+    const payment: LoanInstalment = {
+      // Deterministic, so re-posting the same payment resolves to one row rather
+      // than silently doubling what has been repaid.
+      paymentId: `bwp_${createHash('sha256')
+        .update([loan.loanId, input.date, amount.value.amount, String(input.isPrepayment ?? false)].join('|'))
+        .digest('hex')
+        .slice(0, 16)}`,
+      date: input.date,
+      amount: amount.value,
+      ...(input.isPrepayment === true ? { isPrepayment: true } : {}),
+      ...(input.mode === undefined ? {} : { mode: input.mode }),
+      ...(input.notes === undefined ? {} : { notes: input.notes }),
+    };
+
+    const updated: BorrowedLoan = {
+      ...loan,
+      payments: [...loan.payments.filter((existing: LoanInstalment) => existing.paymentId !== payment.paymentId), payment],
+    };
+    const saved = await BorrowedLoanRepository.save(updated);
+    return saved.ok ? Ok(updated) : saved;
+  },
+
+  /** The register: schedule, progress and totals, filtered as the screen is. */
+  async register(query: BorrowedQuery = {}): Promise<Result<BorrowedRegister>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    const loans = await BorrowedLoanRepository.all();
+    return Ok(borrowedRegister(loans, query, currentPorts().clock.today()));
+  },
+
+  /**
+   * Marks a borrowing settled.
+   *
+   * Gated: this REMOVES a liability from net worth, so it changes a figure
+   * rather than adding one. Closing a loan that is not actually settled
+   * overstates net worth by the whole outstanding balance.
+   */
+  async close(loanId: string, closedDate: IsoDate): Promise<Result<BorrowedLoan>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+    const permitted = requireEditMode('closing a borrowing');
+    if (!permitted.ok) return permitted;
+
+    if (!ISO_DATE.test(closedDate)) {
+      return Err(new VaultStateError('a closure needs a date, as YYYY-MM-DD'));
+    }
+
+    const loan = await BorrowedLoanRepository.findById(loanId);
+    if (loan === undefined) {
+      return Err(new VaultStateError(`no borrowing with id ${loanId}`));
+    }
+
+    const updated: BorrowedLoan = { ...loan, status: 'CLOSED', closedDate };
+    const saved = await BorrowedLoanRepository.save(updated);
+    return saved.ok ? Ok(updated) : saved;
+  },
+
+  /** Puts a wrongly-closed borrowing back. Gated for the same reason. */
+  async reopen(loanId: string): Promise<Result<BorrowedLoan>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+    const permitted = requireEditMode('reopening a borrowing');
+    if (!permitted.ok) return permitted;
+
+    const loan = await BorrowedLoanRepository.findById(loanId);
+    if (loan === undefined) {
+      return Err(new VaultStateError(`no borrowing with id ${loanId}`));
+    }
+
+    const { closedDate: _closed, ...rest } = loan;
+    const updated: BorrowedLoan = { ...rest, status: 'ACTIVE' };
+    const saved = await BorrowedLoanRepository.save(updated);
+    return saved.ok ? Ok(updated) : saved;
+  },
+
+  async delete(loanId: string): Promise<Result<void>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+    const permitted = requireEditMode('deleting a borrowing');
+    if (!permitted.ok) return permitted;
+    return BorrowedLoanRepository.delete(loanId);
+  },
+
+  kinds: (): Promise<Result<readonly LiabilityKind[]>> => Promise.resolve(Ok(LIABILITY_KINDS)),
+};
+
+/** Every borrowing kind, for a picker. Ordered as a user would scan them. */
+const LIABILITY_KINDS: readonly LiabilityKind[] = [
+  'HOME_LOAN',
+  'VEHICLE_LOAN',
+  'PERSONAL_LOAN',
+  'EDUCATION_LOAN',
+  'LOAN_AGAINST_PROPERTY',
+  'LOAN_AGAINST_SECURITIES',
+  'GOLD_LOAN',
+  'MORTGAGE',
+  'CREDIT_CARD',
+  'OTHER',
+];
+
+/* --------------------------------------------------------- other income */
+
+export interface RecordIncomeInput {
+  readonly assetId: string;
+  readonly kind: 'DIVIDEND' | 'INTEREST';
+  readonly date: IsoDate;
+  readonly grossAmount: string;
+  readonly currency?: Currency;
+  /** Domestic: absolute TDS deducted. */
+  readonly taxWithheld?: string;
+  /** Foreign dividends: treaty withholding rate. */
+  readonly withholdingRatePct?: string;
+}
+
+export const IncomeUC = {
+  /**
+   * A dividend or interest receipt, recorded against the holding that produced it.
+   *
+   * `IncomeLedger` has existed since the first commit with NO caller — there was
+   * no write path into `income_events` at all, so the other-sources aggregator
+   * was summing an empty list on every computation. This is that path.
+   *
+   * Ungated, like every other addition: edit mode guards a figure CHANGING, and
+   * recording a receipt that happened cannot understate anything.
+   */
+  async record(input: RecordIncomeInput): Promise<Result<IncomeEvent>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    if (!ISO_DATE.test(input.date)) {
+      return Err(new VaultStateError('an income receipt needs a date, as YYYY-MM-DD'));
+    }
+
+    const assets = await AssetRepository.all();
+    const asset = assets.find((candidate) => candidate.assetId === input.assetId);
+    if (asset === undefined) {
+      return Err(
+        new VaultStateError(
+          `no holding with id ${input.assetId}; income is recorded against the asset that produced it`,
+        ),
+      );
+    }
+
+    const currency = input.currency ?? asset.currency;
+    const gross = Money.parse(input.grossAmount, currency);
+    if (!gross.ok) return gross;
+    if (Money.compare(gross.value, Money.zero(currency)) <= 0) {
+      return Err(new VaultStateError('an income amount must be greater than zero'));
+    }
+
+    const withheld =
+      input.taxWithheld === undefined || input.taxWithheld.trim().length === 0
+        ? undefined
+        : Money.parse(input.taxWithheld, currency);
+    if (withheld !== undefined && !withheld.ok) return withheld;
+
+    const event =
+      input.kind === 'DIVIDEND'
+        ? IncomeLedger.recordDividend({
+            assetId: input.assetId,
+            date: input.date,
+            grossAmount: gross.value,
+            ...(withheld?.ok === true ? { taxWithheld: withheld.value } : {}),
+            ...(input.withholdingRatePct === undefined
+              ? {}
+              : { withholdingRatePct: input.withholdingRatePct }),
+          })
+        : IncomeLedger.recordInterest({
+            assetId: input.assetId,
+            date: input.date,
+            grossAmount: gross.value,
+            ...(withheld?.ok === true ? { taxWithheld: withheld.value } : {}),
+          });
+    if (!event.ok) return event;
+
+    /*
+     * Re-saved through the asset aggregate, which replaces its children
+     * wholesale — so the existing events must be carried forward with it. A
+     * bare append would have dropped every earlier receipt.
+     */
+    const updated: Asset = {
+      ...asset,
+      incomeEvents: [...asset.incomeEvents, event.value],
+    };
+    const saved = await AssetRepository.save(updated);
+    return saved.ok ? Ok(event.value) : saved;
+  },
+
+  /** Every receipt in the year, with what the tax computation makes of them. */
+  async forYear(financialYear: FinancialYear): Promise<Result<DerivedOtherSources>> {
+    const guard = requireUnlocked();
+    if (!guard.ok) return guard;
+
+    const profile = profileFor(financialYear);
+    if (!profile.ok) return profile;
+    return Ok(await deriveOtherSources(financialYear, profile.value.otherSourcesIncome));
   },
 };
 

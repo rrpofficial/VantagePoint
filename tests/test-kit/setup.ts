@@ -21,7 +21,7 @@ class NetworkAccessInTestError extends Error {
 beforeEach(() => {
   globalThis.fetch = ((input: unknown) => {
     throw new NetworkAccessInTestError(String(input));
-  }) as typeof fetch;
+  });
 });
 
 afterEach(() => {
