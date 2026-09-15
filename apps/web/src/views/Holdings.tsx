@@ -24,7 +24,7 @@ import {
   type LedgerExit,
   type TradeClass,
 } from '../api.js';
-import { Amount, Card, Chip, GoToImport } from '../components/primitives.js';
+import { Amount, Card, Chip, Delta, GoToImport } from '../components/primitives.js';
 import { DeleteControl } from '../components/DeleteControl.js';
 import { useEditMode } from '../edit-mode.js';
 import { TradeForm } from './TradeForm.js';
@@ -154,7 +154,16 @@ export function Holdings({ bucket, title, blurb, tradeClasses }: HoldingsProps) 
                   <th scope="col">Where</th>
                   <th scope="col" className="pt-align-end">Lots</th>
                   <th scope="col" className="pt-align-end">Held</th>
+                  <th scope="col" className="pt-align-end">Value</th>
+                  {/*
+                    Blank for a rupee holding rather than a repeat of the column
+                    beside it: an Indian equity has no "source currency" distinct
+                    from the one it is reported in, and echoing ₹ twice invites
+                    the reader to look for a difference that cannot exist.
+                  */}
+                  <th scope="col" className="pt-align-end">Cost (source currency)</th>
                   <th scope="col" className="pt-align-end">Cost</th>
+                  <th scope="col" className="pt-align-end">Unrealised</th>
                   {editMode.enabled && <th scope="col" />}
                 </tr>
               </thead>
@@ -229,11 +238,18 @@ function HoldingRow({
   onToggle: () => void;
   onChanged: () => void;
 }) {
-  const held = asset.lots.reduce((sum, lot) => sum + Number(lot.remainingQuantity), 0);
-  const cost = asset.lots.reduce(
-    (sum, lot) => sum + Number(lot.remainingQuantity) * Number(lot.costPerUnit.amount),
-    0,
-  );
+  /*
+   * Both figures come from the SERVER. They used to be summed here out of
+   * `Number(...)` products, which broke twice over: it reintroduced the float
+   * drift ADR-002 forbids, and it ignored currency entirely — a dollar cost
+   * was rendered as a bare number in a column of rupees.
+   */
+  const held = asset.heldQuantity;
+  const cost = asset.costBasis;
+  const costInr = asset.costBasisInr;
+  const value = asset.marketValue;
+  const valueInr = asset.marketValueInr;
+  const unrealised = asset.unrealisedInr;
 
   return (
     <>
@@ -252,8 +268,83 @@ function HoldingRow({
         <td>{asset.jurisdiction.toLowerCase()}</td>
         <td className="pt-align-end pt-numeric">{asset.lots.length}</td>
         <td className="pt-align-end pt-numeric">{held}</td>
+
+        {/*
+          Value first, cost second, difference third — and the value column says
+          when its price was taken. Prices reach this product only inside an
+          imported statement (ADR-010: no outbound network), so "market value"
+          without a date would go quietly stale.
+
+          An unpriced holding shows "at cost" rather than a blank or a zero:
+          property, unlisted shares, loans and chits have no market price and
+          never will, and carrying them at cost is the correct answer, not a
+          missing one.
+        */}
         <td className="pt-align-end">
-          <Amount value={{ amount: String(cost), currency: asset.currency }} />
+          {value === undefined ? (
+            <span className="pt-muted" data-testid={`value-at-cost-${asset.assetId}`}>
+              at cost
+            </span>
+          ) : (
+            <>
+              <Amount value={value} />
+              {valueInr !== undefined && asset.currency !== 'INR' && (
+                <div className="pt-muted pt-numeric" data-testid={`value-inr-${asset.assetId}`}>
+                  <Amount value={valueInr} />
+                </div>
+              )}
+              {asset.priceAsOf !== undefined && (
+                <div className="pt-tile__hint" data-testid={`price-as-of-${asset.assetId}`}>
+                  {asset.marketPricePerUnit !== undefined && (
+                    <>
+                      <Amount value={asset.marketPricePerUnit} /> as at{' '}
+                    </>
+                  )}
+                  {asset.priceAsOf}
+                </div>
+              )}
+            </>
+          )}
+        </td>
+
+        {/*
+          What it cost in the currency it was actually bought in. Empty for a
+          rupee holding, where the next column already says it.
+        */}
+        <td className="pt-align-end">
+          {asset.currency === 'INR' ? (
+            <span className="pt-muted">—</span>
+          ) : (
+            <span data-testid={`cost-source-${asset.assetId}`}>
+              <Amount value={cost} />
+              {asset.conversionRate !== undefined && (
+                <div className="pt-tile__hint">@ {asset.conversionRate}</div>
+              )}
+            </span>
+          )}
+        </td>
+
+        {/* Always rupees, so the column adds up down the page. */}
+        <td className="pt-align-end">
+          {costInr === undefined ? (
+            <span className="pt-muted" data-testid={`cost-inr-missing-${asset.assetId}`}>
+              rate unavailable
+            </span>
+          ) : (
+            <span data-testid={`cost-inr-${asset.assetId}`}>
+              <Amount value={costInr} />
+            </span>
+          )}
+        </td>
+
+        <td className="pt-align-end">
+          {unrealised === undefined ? (
+            <span className="pt-muted">—</span>
+          ) : (
+            <span data-testid={`unrealised-${asset.assetId}`}>
+              <Delta value={unrealised} />
+            </span>
+          )}
         </td>
         {showActions && (
           <td>
@@ -269,7 +360,7 @@ function HoldingRow({
       </tr>
       {expanded && (
         <tr className="pt-table__detail">
-          <td colSpan={showActions ? 7 : 6}>
+          <td colSpan={showActions ? 10 : 9}>
             <table className="pt-table pt-table--nested">
               <thead>
                 <tr>

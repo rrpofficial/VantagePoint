@@ -14,8 +14,6 @@ describe('US-8.5 Scenario: Classes that are equity however they are held', () =>
     'DOMESTIC_EQUITY',
     'FOREIGN_EQUITY',
     'FOREIGN_ETF',
-    'RSU',
-    'ESPP',
     'UNLISTED_SHARES',
   ] as const)('puts %s in Equity', (assetClass) => {
     expect(bucketOf({ assetClass })).toBe('EQUITY');

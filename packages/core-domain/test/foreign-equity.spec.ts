@@ -69,7 +69,8 @@ describe('US-1.4 foreign equity', () => {
     it('creates a lot dated 2025-11-15 at $210.00 cost per unit', () => {
       const lot = expectOk(
         LotBook.recordAcquisition({
-          assetClass: 'RSU',
+          assetClass: 'FOREIGN_EQUITY',
+          equityAward: { kind: 'RSU', grantRef: 'grant_test' },
           tradeDate: '2025-11-15',
           quantity: '50',
           pricePerUnit: usd('210.00'),
@@ -83,7 +84,8 @@ describe('US-1.4 foreign equity', () => {
     it('records the INR perquisite value for salary-income reporting', () => {
       const lot = expectOk(
         LotBook.recordAcquisition({
-          assetClass: 'RSU',
+          assetClass: 'FOREIGN_EQUITY',
+          equityAward: { kind: 'RSU', grantRef: 'grant_test' },
           tradeDate: '2025-11-15',
           quantity: '50',
           pricePerUnit: usd('210.00'),
@@ -98,7 +100,8 @@ describe('US-1.4 foreign equity', () => {
     it('sets cost per unit to the $170.00 discounted price', () => {
       const lot = expectOk(
         LotBook.recordAcquisition({
-          assetClass: 'ESPP',
+          assetClass: 'FOREIGN_EQUITY',
+          equityAward: { kind: 'ESPP', grantRef: 'offer_test' },
           tradeDate: '2025-11-15',
           quantity: '25',
           pricePerUnit: usd('170.00'),
@@ -112,7 +115,8 @@ describe('US-1.4 foreign equity', () => {
     it('records the $30.00 per-share discount as a perquisite', () => {
       const lot = expectOk(
         LotBook.recordAcquisition({
-          assetClass: 'ESPP',
+          assetClass: 'FOREIGN_EQUITY',
+          equityAward: { kind: 'ESPP', grantRef: 'offer_test' },
           tradeDate: '2025-11-15',
           quantity: '25',
           pricePerUnit: usd('170.00'),

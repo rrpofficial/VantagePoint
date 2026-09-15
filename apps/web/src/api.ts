@@ -132,6 +132,30 @@ export interface LedgerAsset {
   readonly folioRef?: string;
   readonly lots: readonly AcquisitionLot[];
   readonly incomeEvents: readonly IncomeEvent[];
+  /** Units still held. Summed by the server, in decimal, never in the browser. */
+  readonly heldQuantity: string;
+  /** What those units cost, in the holding's OWN currency. */
+  readonly costBasis: Money;
+  /**
+   * The same figure in rupees, at the latest published SBI TT buy rate.
+   *
+   * Absent when no rate could be resolved — a screen must then omit the holding
+   * from a rupee total rather than add its foreign amount as though it were one.
+   */
+  readonly costBasisInr?: Money;
+  /** The rate used, so a converted figure can be checked rather than trusted. */
+  readonly conversionRate?: string;
+  /**
+   * What the holding is WORTH, where a price is known. Absent for anything
+   * unpriced — property, unlisted shares, loans, chits — which is carried at
+   * cost, and must be labelled as such rather than folded into a "value" total.
+   */
+  readonly marketValue?: Money;
+  readonly marketValueInr?: Money;
+  readonly marketPricePerUnit?: Money;
+  /** When that price was recorded. Prices arrive by import, so it is not today. */
+  readonly priceAsOf?: string;
+  readonly unrealisedInr?: Money;
   /**
    * Which tab this holding belongs in, decided by the SERVER.
    *

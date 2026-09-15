@@ -495,6 +495,97 @@ export const MIGRATIONS: readonly Migration[] = [
         ON advance_tax_payments(financial_year, quarter);
     `,
   },
+  {
+    version: 14,
+    name: 'asset-prices',
+    up: `
+      -- Market prices, so a holding can be carried at what it is WORTH rather
+      -- than at what it cost.
+      --
+      -- Everything on screen was cost basis: the valuation engine looks for a
+      -- price source, finds none wired, and falls back to cost. Three screens
+      -- then labelled that cost "value" and "net worth".
+      --
+      -- There is no live feed and there will not be one — the API container sits
+      -- on a network with no gateway (ADR-010). Prices arrive the way everything
+      -- else does: inside a statement the user imports. So each price carries the
+      -- document it came from and the date it was recorded, and a figure derived
+      -- from it can always be traced back and dated.
+      --
+      -- Keyed on the INSTRUMENT, not the asset id: one symbol may be held as an
+      -- RSU and as plain foreign equity, and both are worth the same per share.
+      CREATE TABLE asset_prices (
+        instrument      TEXT NOT NULL,
+        price_date      TEXT NOT NULL,
+        source          TEXT NOT NULL,
+        -- Decimal string, never REAL (ADR-002).
+        price           TEXT NOT NULL,
+        currency        TEXT NOT NULL,
+        source_document TEXT,
+        PRIMARY KEY (instrument, price_date, source)
+      );
+
+      -- The resolver asks for the latest price at or before a date, so the index
+      -- leads with what it filters on and ends with what it ranges over.
+      CREATE INDEX idx_asset_prices_lookup ON asset_prices(instrument, price_date);
+    `,
+  },
+  {
+    version: 15,
+    name: 'fold-equity-awards-into-foreign-equity',
+    up: `
+      -- RSU and ESPP stop being asset classes and become properties of a LOT.
+      --
+      -- They split one company's shares across two holdings: the same symbol
+      -- bought outright and received as an RSU became two assets — double
+      -- counted on every screen, and matched FIFO in two separate queues when
+      -- the law treats them as one pool of one security.
+      --
+      -- Nothing justified the split. RSU, ESPP and FOREIGN_EQUITY were identical
+      -- in every tax dimension: same 24-month holding period, same jurisdiction,
+      -- same settlement lag, same bucket. What actually differs is the
+      -- ACQUISITION — which perquisite was charged, what the cost basis became —
+      -- and that already lives on the lot as award_kind/grant_ref.
+      --
+      -- Merging, not renaming. A vault may hold ast_rsu_crm AND
+      -- ast_foreign_equity_crm; both become the latter, and their lots and exits
+      -- move with them. Ordered so the destination exists before anything is
+      -- repointed at it.
+
+      -- 1. Create the FOREIGN_EQUITY destination for any symbol that lacks one.
+      INSERT INTO assets (asset_id, asset_class, jurisdiction, currency, symbol,
+                          isin, folio_ref, liquidity, position_closed)
+      SELECT DISTINCT
+             'ast_foreign_equity_' || LOWER(REPLACE(COALESCE(a.symbol, a.asset_id), '.', '_')),
+             'FOREIGN_EQUITY', 'FOREIGN', a.currency, a.symbol,
+             a.isin, a.folio_ref, a.liquidity, 0
+        FROM assets a
+       WHERE a.asset_class IN ('RSU','ESPP')
+         AND NOT EXISTS (
+               SELECT 1 FROM assets d
+                WHERE d.asset_class = 'FOREIGN_EQUITY'
+                  AND d.symbol IS a.symbol);
+
+      -- 2. Move every lot and disposal onto the destination asset.
+      UPDATE lots SET asset_id = (
+        SELECT d.asset_id FROM assets d
+          JOIN assets s ON s.asset_id = lots.asset_id
+         WHERE d.asset_class = 'FOREIGN_EQUITY' AND d.symbol IS s.symbol
+         LIMIT 1)
+      WHERE asset_id IN (SELECT asset_id FROM assets WHERE asset_class IN ('RSU','ESPP'));
+
+      UPDATE exits SET asset_id = (
+        SELECT d.asset_id FROM assets d
+          JOIN assets s ON s.asset_id = exits.asset_id
+         WHERE d.asset_class = 'FOREIGN_EQUITY' AND d.symbol IS s.symbol
+         LIMIT 1)
+      WHERE asset_id IN (SELECT asset_id FROM assets WHERE asset_class IN ('RSU','ESPP'));
+
+      -- 3. The now-empty RSU/ESPP shells go. Their lots carry award_kind, so
+      --    nothing about how those shares were acquired is lost.
+      DELETE FROM assets WHERE asset_class IN ('RSU','ESPP');
+    `,
+  },
 ];
 
 const SCHEMA_TABLE = `

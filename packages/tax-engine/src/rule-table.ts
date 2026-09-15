@@ -18,6 +18,7 @@
 import { Err, Ok, TaxRulesUnavailableError, type FinancialYear, type Result } from '@porttrack/shared-kernel';
 import { FY_2024_25 } from '../rules/fy-2024-25.js';
 import { FY_2025_26 } from '../rules/fy-2025-26.js';
+import { FY_2026_27 } from '../rules/fy-2026-27.js';
 import type { TaxRuleSet } from './types.js';
 
 /**
@@ -28,6 +29,11 @@ import type { TaxRuleSet } from './types.js';
 const REGISTRY: Readonly<Record<FinancialYear, TaxRuleSet>> = {
   '2024-25': FY_2024_25,
   '2025-26': FY_2025_26,
+  /*
+   * The first year under the Income-tax Act, 2025. Its section references are to
+   * that Act, not the 1961 Act every other year here cites — see the file.
+   */
+  '2026-27': FY_2026_27,
 };
 
 export const AVAILABLE_YEARS: readonly FinancialYear[] = Object.keys(REGISTRY).sort();

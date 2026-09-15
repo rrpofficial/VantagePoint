@@ -233,7 +233,7 @@ one could be entered, would sit at cost forever.
 
 - `scheduleFaA3` returns `Err` unconditionally (`use-cases.ts:1844-1856`).
 - `scheduleFaD` passes `accounts: []` (`use-cases.ts:1871`) — foreign bank and custodial accounts are not modelled.
-- HNI classification uses `profile.value.grossSalary` as total income (`use-cases.ts:383`), and Schedule AL does the same (`use-cases.ts:1891`). Both ignore capital gains and other sources, understating the ₹50L test that decides whether Schedule AL is required at all.
+- ~~HNI classification uses `profile.value.grossSalary` as total income (`use-cases.ts:383`), and Schedule AL does the same (`use-cases.ts:1891`). Both ignore capital gains and other sources, understating the ₹50L test that decides whether Schedule AL is required at all.~~ **Fixed 2026-09-15.** `totalIncomeFor` (`use-cases.ts:431`) sums salary, house property, other sources and the FY's realised capital gains from the ledger, and both call sites use it. Pinned by `tests/functional/tax/hni-total-income.spec.ts`. The remainder — dividend and interest *derived* from the ledger rather than typed into the profile — is still Phase 2.
 
 ---
 
@@ -261,7 +261,18 @@ and slab-taxed income stacks on top of salary. The engine then credits
 `tdsRemitted + tcsCollected + alreadyPaid`, so net payable is by construction the
 part the employer is not covering.
 
-### Phase 1 — Connect advance tax to the ledger · objective 6
+### Phase 1 — Connect advance tax to the ledger · objective 6 — ✅ DONE
+
+Delivered 2026-09-15. `ComputeAdvanceTaxUC.execute` now reads real disposals
+filtered to the financial year, asset classes keyed per transaction, and
+`alreadyPaid` from a new `advance_tax_payments` table (migration v13). Recording
+a challan is ungated; deleting one is gated, because removing a payment RAISES
+every later instalment. Unconvertible gains and excluded sell-to-cover
+disposals are surfaced beside the figure rather than silently shrinking it.
+
+The steps below are kept as the record of what was built.
+
+
 
 **Smallest change, largest objective recovered.** The engine is already correct.
 
@@ -295,8 +306,13 @@ smaller number.
    compose `ManualIncome` + `DerivedIncome` into the existing `IncomeProfile`.
    Call `OtherSourcesAggregator.aggregate` with stored income events plus
    hand-loan accrued interest from `accruals.ts:24`.
-3. Fix the total-income basis at `use-cases.ts:383` (HNI) and `use-cases.ts:1891`
-   (Schedule AL) to use full derived income, not `grossSalary`.
+3. ~~Fix the total-income basis at `use-cases.ts:383` (HNI) and `use-cases.ts:1891`
+   (Schedule AL) to use full derived income, not `grossSalary`.~~ **Done ahead of
+   this phase** — `totalIncomeFor` already composes the four heads the profile and
+   ledger can supply. What remains for this phase is widening what feeds it:
+   once `income-derivation.ts` exists, the `otherSourcesIncome` term stops being a
+   typed-in number and becomes a derived one, and `totalIncomeFor` picks that up
+   without changing.
 
 **Open rule decision — needs your call before coding:** whether accrued-but-unreceived
 hand-loan interest is taxable in the year it accrues. For most individual
@@ -456,3 +472,55 @@ All ten objectives green, and specifically:
 - Any two snapshots can be compared, filtered to an asset class.
 - A fixed deposit grows without a trade.
 - Schedule FA either generates from a real daily series, or refuses — never approximates.
+
+---
+
+## 7. Deferred — to be addressed at the end
+
+### Opening-balance lots
+
+For holdings whose acquisition history genuinely cannot be recovered — shares
+vested years ago whose statements no longer exist, or bought through an account
+that has since closed.
+
+Record an opening lot with a user-supplied acquisition date and cost, stored
+flagged as **estimated**, so every tax figure derived from it carries that flag
+through to `assertFilingReady`. That is the standard accounting answer to
+unrecoverable history: state the estimate, mark it, and never let it masquerade
+as a measured figure.
+
+**Currently moot.** After importing four years of Gains & Losses exports plus the
+holdings export, reconciliation stands at **0 discrepancies across 30 tranches,
+0 unaccounted units** — there is no gap for an opening balance to fill. The 29
+units that once looked unrecoverable turned out to be a duplicate-detection
+defect, not missing paperwork.
+
+It becomes necessary the moment a broker is added whose history does not go back
+far enough, so it stays on the list rather than being dropped. Nothing depends on
+it, which is why it sits last.
+
+### Regime-aware surcharge bands
+
+`TaxRuleSet.surchargeBands` is a single array, but the two regimes genuinely
+differ above ₹5 crore: the **default** regime (s.115BAC / s.202 of the 2025 Act)
+caps at 25%, while the **opt-out** ("old") regime reaches 37% under Paragraph A
+of the First Schedule. One array cannot express both.
+
+Every year's file therefore states the default-regime bands, because that is the
+regime that applies unless the taxpayer elects otherwise — so FY 2024-25,
+FY 2025-26 and FY 2026-27 all correctly carry **three** bands (10/15/25). The
+consequence is narrow and worth stating plainly: a taxpayer who **opts out** and
+has total income **above ₹5 crore** is understated by twelve percentage points of
+surcharge. Below ₹5 crore, or on the default regime, the figures are right.
+
+The fix is a type change — `surchargeBands: { OLD_REGIME: [...], NEW_REGIME: [...] }`,
+mirroring how `slabs` and `standardDeduction` are already keyed — plus threading
+the regime into `SlabCalculator`'s surcharge step and `RegimeComparison`. It is
+deferred rather than done because it touches every rule file and the comparison
+engine, for a case (opt-out regime, ₹5 crore-plus) that does not currently arise.
+
+**Do not "fix" this by adding a 37% band to a year's array.** That was tried on
+FY 2026-27 and was wrong: clause 3(4)(a)(ii) of the Finance Bill 2026 excludes
+s.202 taxpayers from Paragraph F, and the Table at clause 3(4)(b) Sl. No. 10 gives
+them three bands. Adding the fourth overstates the default regime — the common
+case — to fix the rare one.

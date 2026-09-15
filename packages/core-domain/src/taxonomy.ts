@@ -16,8 +16,6 @@ export const JURISDICTION: Readonly<Record<AssetClass, Jurisdiction>> = {
   DOMESTIC_MUTUAL_FUND: 'DOMESTIC',
   FOREIGN_EQUITY: 'FOREIGN',
   FOREIGN_ETF: 'FOREIGN',
-  RSU: 'FOREIGN',
-  ESPP: 'FOREIGN',
   EPF: 'DOMESTIC',
   VPF: 'DOMESTIC',
   NPS_TIER_I: 'DOMESTIC',
@@ -61,8 +59,6 @@ export const SETTLEMENT_LAG_DAYS: Readonly<Partial<Record<AssetClass, number>>> 
   DOMESTIC_MUTUAL_FUND: 1,
   FOREIGN_EQUITY: 2,
   FOREIGN_ETF: 2,
-  RSU: 2,
-  ESPP: 2,
 };
 
 export const ALL_ASSET_CLASSES = Object.keys(JURISDICTION) as readonly AssetClass[];

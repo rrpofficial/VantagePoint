@@ -70,6 +70,13 @@ afterEach(async () => {
 
 const allLots = async () => (await AssetRepository.all()).flatMap((a) => a.lots);
 
+/*
+ * Every equity-compensation lot is FOREIGN_EQUITY now; the AWARD says how it was
+ * acquired. Keyed that way so a subject map still classifies each disposal.
+ */
+const subjectsFor = (exits: readonly { txnId: string }[]) =>
+  Object.fromEntries(exits.map((exit) => [exit.txnId, 'FOREIGN_EQUITY' as const]));
+
 describe('Scenario: A lot knows the grant it came from', () => {
   it('stores grant, tranche and award kind on every equity lot', async () => {
     const lots = await allLots();
@@ -155,9 +162,7 @@ describe('Scenario: Sell-to-cover is flagged, excluded, and reported', () => {
 
   it('leaves sell-to-cover out of the gain by default, and says which', async () => {
     const exits = await ExitRepository.all();
-    const subjects = Object.fromEntries(
-      exits.map((exit) => [exit.txnId, 'RSU' as const]),
-    );
+    const subjects = subjectsFor(exits);
 
     const result = CapitalGainsEngine.compute(exits, subjects, expectOk(TaxRuleTable.rulesFor('2025-26')));
 
@@ -169,7 +174,7 @@ describe('Scenario: Sell-to-cover is flagged, excluded, and reported', () => {
 
   it('includes them when the taxpayer says to', async () => {
     const exits = await ExitRepository.all();
-    const subjects = Object.fromEntries(exits.map((exit) => [exit.txnId, 'RSU' as const]));
+    const subjects = subjectsFor(exits);
     const rules = expectOk(TaxRuleTable.rulesFor('2025-26'));
 
     const included = CapitalGainsEngine.compute(exits, subjects, rules, {
@@ -194,7 +199,7 @@ describe('Scenario: Sell-to-cover is flagged, excluded, and reported', () => {
    */
   it('reports how much was left out, and it is now genuinely small', async () => {
     const exits = await ExitRepository.all();
-    const subjects = Object.fromEntries(exits.map((exit) => [exit.txnId, 'RSU' as const]));
+    const subjects = subjectsFor(exits);
 
     const result = CapitalGainsEngine.compute(
       exits,
@@ -220,7 +225,7 @@ describe('Scenario: Sell-to-cover is flagged, excluded, and reported', () => {
    */
   it('no longer spans different basis months', async () => {
     const exits = await ExitRepository.all();
-    const subjects = Object.fromEntries(exits.map((exit) => [exit.txnId, 'RSU' as const]));
+    const subjects = subjectsFor(exits);
 
     const result = CapitalGainsEngine.compute(
       exits,

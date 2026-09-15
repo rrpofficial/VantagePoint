@@ -26,9 +26,31 @@ export function Card({ children, title, action }: {
 
 const INR = new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 });
 
+/**
+ * Symbols for the currencies this product actually holds. Anything else falls
+ * back to its ISO code, which is unambiguous even when unfamiliar.
+ */
+const SYMBOL: Readonly<Record<string, string>> = {
+  INR: '₹',
+  USD: '$',
+  GBP: '£',
+  EUR: '€',
+};
+
+/**
+ * Always marks the currency. Never a bare number.
+ *
+ * A foreign amount previously rendered with NO symbol at all, so a column of
+ * rupees ended with `88,711` that was in fact dollars — indistinguishable from
+ * the ₹ figures above it, and out by the exchange rate. An unlabelled number in
+ * a money column is read as the currency of the column.
+ */
 export function formatMoney(money: Money): string {
   const value = Number(money.amount);
-  return `${money.currency === 'INR' ? '₹' : ''}${INR.format(value)}`;
+  const symbol = SYMBOL[money.currency];
+  return symbol === undefined
+    ? `${money.currency} ${INR.format(value)}`
+    : `${symbol}${INR.format(value)}`;
 }
 
 /**

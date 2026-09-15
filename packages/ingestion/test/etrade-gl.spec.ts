@@ -91,8 +91,14 @@ describe('US-4.5b Scenario: One row is a round trip, so it becomes two transacti
   it('states one asset class on both legs, so the sale finds its lot', () => {
     const outcome = expectOk(parse(load()));
 
+    // FOREIGN_EQUITY on every leg: equity compensation is not an asset class of
+    // its own, and splitting it into one would put the same company's shares in
+    // two holdings with two FIFO queues.
+    expect(outcome.transactions.every((t) => t.assetClass === 'FOREIGN_EQUITY')).toBe(true);
+
+    // The AWARD is what distinguishes them, and it is on both legs of each row.
     for (const kind of ['RSU', 'ESPP'] as const) {
-      const legs = outcome.transactions.filter((t) => t.assetClass === kind);
+      const legs = outcome.transactions.filter((t) => t.equityAward?.kind === kind);
       expect(legs.filter((t) => t.kind === 'SELL').length).toBeGreaterThan(0);
       expect(legs.filter((t) => t.kind !== 'SELL').length).toBeGreaterThan(0);
     }

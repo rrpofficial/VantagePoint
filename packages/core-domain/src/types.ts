@@ -16,10 +16,19 @@ export type AssetClass =
   | 'DOMESTIC_EQUITY'
   | 'DOMESTIC_ETF'
   | 'DOMESTIC_MUTUAL_FUND'
+  /*
+   * Covers equity compensation too. RSU and ESPP were once asset classes of
+   * their own, which split one company's shares across two holdings: the same
+   * symbol bought outright and received as an RSU became two assets, double
+   * counted on screen and — worse — matched FIFO in two separate queues, when
+   * the law treats them as one pool of one security.
+   *
+   * They were identical to this class in every tax dimension anyway: same
+   * 24-month holding period, same jurisdiction, same settlement lag, same
+   * bucket. How a tranche was acquired now lives on the lot, as `equityAward`.
+   */
   | 'FOREIGN_EQUITY'
   | 'FOREIGN_ETF'
-  | 'RSU'
-  | 'ESPP'
   | 'EPF'
   | 'VPF'
   | 'NPS_TIER_I'
@@ -96,8 +105,35 @@ export interface DualRate {
  * cent of rounding. A grant reference plus the acquisition date is stable
  * wherever it is read from.
  */
+/**
+ * How shares of an equity-compensation award came to be held.
+ *
+ * A property of the LOT, not of the asset. Once acquired, a share received as an
+ * RSU and a share bought on the market are the same security: same holding
+ * period, same rate, same FIFO pool. What differs is the acquisition — which
+ * perquisite was charged and what the cost basis became — and that belongs to
+ * the tranche, not to the holding.
+ *
+ * Every value here is grounded in a column of the E*TRADE exports this product
+ * reads: `Plan Type` distinguishes RS from ESPP; `Exercise Date` and
+ * `Grant Price` exist for options; `83(b) Election` applies to a restricted
+ * stock AWARD rather than a unit; the unvested schedule carries
+ * `Performance Metric`, `Target %` and `% Achieved` for performance awards.
+ */
+export type EquityAwardKind =
+  /** Restricted stock unit — vests, FMV at vest is the perquisite and the basis. */
+  | 'RSU'
+  /** Employee share purchase plan — bought at a discount; the discount is the perquisite. */
+  | 'ESPP'
+  /** Exercised stock option — FMV at exercise less the exercise price. */
+  | 'ESOP'
+  /** Restricted stock award — issued up front, the 83(b) election applies to it. */
+  | 'RSA'
+  /** Performance share unit — vests on a metric rather than on time alone. */
+  | 'PSU';
+
 export interface EquityAward {
-  readonly kind: 'RSU' | 'ESPP';
+  readonly kind: EquityAwardKind;
   /**
    * The grant's own identifier.
    *

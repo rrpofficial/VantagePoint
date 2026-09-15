@@ -65,9 +65,12 @@ const importGl = () =>
     mode: 'LENIENT',
   });
 
-const lotsOf = async (assetClass: string) => {
+/** Equity-award lots, whatever the award: they all live on FOREIGN_EQUITY now. */
+const lotsOf = async (awardKind: string) => {
   const assets = await AssetRepository.all();
-  return assets.filter((a) => a.assetClass === assetClass).flatMap((a) => a.lots);
+  return assets
+    .flatMap((a) => a.lots)
+    .filter((lot) => lot.equityAward?.kind === awardKind);
 };
 
 describe('Scenario: The same G&L file imported twice', () => {
@@ -119,16 +122,83 @@ describe('Scenario: The vest is already on the ledger as an RSU', () => {
         mode: 'LENIENT',
       }),
     );
-    const before = await lotsOf('RSU');
-
     const report = expectOk(await importGl());
 
     // One acquisition recognised; the rest of the file is new.
     expect(report.duplicates).toBeGreaterThan(0);
-    const after = await lotsOf('RSU');
-    const acquiredIn2021 = after.filter((lot) => lot.acquisitionDate === '2021-02-10');
+
+    /*
+     * ONE lot for that vest. Counted by acquisition date rather than by award
+     * kind: the transaction history names no grant, so the lot it created has no
+     * `equityAward` at all — which is exactly why the natural key has to tolerate
+     * an award-less equity lot instead of assuming it was an ordinary purchase.
+     */
+    const acquiredIn2021 = (await AssetRepository.all())
+      .flatMap((asset) => asset.lots)
+      .filter((lot) => lot.acquisitionDate === '2021-02-10');
     expect(acquiredIn2021).toHaveLength(1);
-    expect(before.length).toBeGreaterThan(0);
+  });
+});
+
+describe('Scenario: One order selling equal amounts from two different vests', () => {
+  /*
+   * The most expensive bug found against real data: 29 units — 7.6% of a
+   * portfolio — recorded as still held when they had been sold.
+   *
+   * A stock-plan order routinely sells out of several vests at once, at ONE
+   * execution price, on ONE day. When two of those rows happen to sell the same
+   * quantity, every field of the duplicate key — kind, date, symbol, quantity,
+   * price — is identical, and the second row is discarded as a duplicate of the
+   * first. It is not a duplicate: it is a different tranche, with a different
+   * cost basis and a different holding period.
+   *
+   * Real instance: order 101513906 sold 6 units from a Sep-2020 vest and 6 from
+   * a Dec-2020 vest on the same day. The second disappeared, and the ledger went
+   * on reporting shares that were gone — overstating the holding and omitting
+   * the gain.
+   */
+  const TWO_VESTS = [
+    'Record Type,Symbol,Plan Type,Quantity,Date Acquired,Adjusted Cost Basis,Date Sold,Total Proceeds,Adjusted Gain/Loss,Order Type,Grant Number,Vest Date,Order Number',
+    // Identical in every respect EXCEPT which vest they came out of.
+    'Sell,ACME,RS,6,09/22/2020,"$1,200.00",04/06/2026,"$1,800.00",$600.00,Sell Restricted Stock,00085961,09/22/2020,101513906',
+    'Sell,ACME,RS,6,12/22/2020,"$1,200.00",04/06/2026,"$1,800.00",$600.00,Sell Restricted Stock,00085961,12/22/2020,101513906',
+  ].join('\n');
+
+  it('keeps both disposals, because they are different tranches', async () => {
+    const report = expectOk(
+      await ImportStatementUC.execute({
+        file: Buffer.from(TWO_VESTS, 'utf8'),
+        fileName: 'two-vests.csv',
+        parser: 'ETRADE_GL',
+        mode: 'LENIENT',
+      }),
+    );
+
+    expect(report.duplicates).toBe(0);
+    expect(await ExitRepository.all()).toHaveLength(2);
+
+    // Both tranches fully sold — neither left carrying phantom units.
+    const lots = (await AssetRepository.all()).flatMap((asset) => asset.lots);
+    expect(lots).toHaveLength(2);
+    expect(lots.every((lot) => Number(lot.remainingQuantity) === 0)).toBe(true);
+  });
+
+  /** And a genuine re-import is still recognised, tranche and all. */
+  it('still deduplicates the same file imported twice', async () => {
+    const run = () =>
+      ImportStatementUC.execute({
+        file: Buffer.from(TWO_VESTS, 'utf8'),
+        fileName: 'two-vests.csv',
+        parser: 'ETRADE_GL',
+        mode: 'LENIENT',
+      });
+
+    expectOk(await run());
+    expectOk(await run());
+
+    expect(await ExitRepository.all()).toHaveLength(2);
+    const lots = (await AssetRepository.all()).flatMap((asset) => asset.lots);
+    expect(lots.map((lot) => lot.quantity)).toEqual(['6', '6']);
   });
 });
 
@@ -236,9 +306,9 @@ describe('Scenario: The vest is on the ledger at a slightly different price', ()
 
     expectOk(await importGl());
 
-    const acquiredIn2021 = (await lotsOf('RSU')).filter(
-      (lot) => lot.acquisitionDate === '2021-02-10',
-    );
+    const acquiredIn2021 = (await AssetRepository.all())
+      .flatMap((asset) => asset.lots)
+      .filter((lot) => lot.acquisitionDate === '2021-02-10');
     expect(acquiredIn2021).toHaveLength(2);
   });
 });
@@ -257,7 +327,7 @@ describe('Scenario: The same shares are already held as plain foreign equity', (
    * perquisite basis. But the user sees their position apparently double, so the
    * behaviour is pinned here and called out in the import report.
    */
-  it('keeps them separate, so the same symbol appears under two asset classes', async () => {
+  it('merges them into one holding rather than double counting the symbol', async () => {
     expectOk(
       await TradeUC.record({
         assetClass: 'FOREIGN_EQUITY',
@@ -271,14 +341,24 @@ describe('Scenario: The same shares are already held as plain foreign equity', (
 
     const report = expectOk(await importGl());
 
-    // Nothing was recognised as a duplicate of the manual trade.
-    expect(report.created).toBe(8);
+    /*
+     * SEVEN, not eight. The hand-typed FOREIGN_EQUITY trade and the G&L's vest
+     * of the same symbol, date, quantity and price are now recognised as the same
+     * acquisition — which is the merge working. It used to be eight, because the
+     * two lived in different asset classes and could never match.
+     */
+    expect(report.created).toBe(7);
 
-    const classes = (await AssetRepository.all())
-      .filter((a) => a.symbol === 'ACME')
-      .map((a) => a.assetClass)
-      .sort();
-    expect(classes).toContain('FOREIGN_EQUITY');
-    expect(classes).toContain('RSU');
+    // ONE asset for ACME. Before, a hand-typed FOREIGN_EQUITY trade and an
+    // imported RSU vest became two holdings of the same company — double counted
+    // on every screen, and matched FIFO in two separate queues.
+    const acme = (await AssetRepository.all()).filter((a) => a.symbol === 'ACME');
+    expect(acme).toHaveLength(1);
+    expect(acme[0]?.assetClass).toBe('FOREIGN_EQUITY');
+
+    // Both sources' lots are on it: the typed trade, and the vests.
+    const lots = acme[0]?.lots ?? [];
+    expect(lots.some((lot) => lot.equityAward === undefined)).toBe(true);
+    expect(lots.some((lot) => lot.equityAward?.kind === 'RSU')).toBe(true);
   });
 });

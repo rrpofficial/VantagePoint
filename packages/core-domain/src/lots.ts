@@ -107,10 +107,22 @@ function perquisitePerUnit(
 ): MoneyValue | undefined {
   if (input.perquisiteValue) return input.perquisiteValue;
 
-  if (input.assetClass === 'RSU') {
+  /*
+   * Read from the AWARD, not from the asset class.
+   *
+   * RSU and ESPP stopped being asset classes when they were folded into
+   * FOREIGN_EQUITY — a share received as an RSU and one bought outright are the
+   * same security and belong in one FIFO pool. What differs is the acquisition,
+   * and that now travels on the lot.
+   */
+  const kind = input.equityAward?.kind;
+
+  // Nothing was paid, so the whole fair market value at vest is the perquisite.
+  if (kind === 'RSU' || kind === 'PSU' || kind === 'RSA') {
     return input.fmvPerUnit ?? input.pricePerUnit;
   }
-  if (input.assetClass === 'ESPP') {
+  // Something WAS paid: only the discount to fair market value is a perquisite.
+  if (kind === 'ESPP' || kind === 'ESOP') {
     const fmv = input.fmvPerUnit;
     if (fmv === undefined) return undefined;
     const discount = Money.subtract(fmv, input.pricePerUnit);

@@ -30,6 +30,7 @@ import {
   type AcquisitionLot,
   type Asset,
   type AssetClass,
+  type EquityAwardKind,
   type ExitTransaction,
   type IncomeEvent,
 } from '@porttrack/core-domain';
@@ -87,10 +88,19 @@ const PARSER_ASSET_CLASS: Readonly<Partial<Record<ParserName, AssetClass>>> = {
   CAMS: 'DOMESTIC_MUTUAL_FUND',
 };
 
-/** Equity compensation is its own asset class regardless of the broker. */
+/**
+ * Equity compensation is FOREIGN_EQUITY, like any other share of the company.
+ *
+ * It was once RSU and ESPP, two asset classes of their own, which split one
+ * company's shares across separate holdings — the same symbol bought outright
+ * and received as an RSU became two assets, double counted on screen and matched
+ * FIFO in two separate queues. How a tranche was acquired now lives on the lot,
+ * as `equityAward`, where it belongs: it changes the perquisite and the cost
+ * basis, not what the security is.
+ */
 const KIND_ASSET_CLASS: Readonly<Partial<Record<ParsedTransaction['kind'], AssetClass>>> = {
-  RSU_VEST: 'RSU',
-  ESPP_PURCHASE: 'ESPP',
+  RSU_VEST: 'FOREIGN_EQUITY',
+  ESPP_PURCHASE: 'FOREIGN_EQUITY',
 };
 
 const slug = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
@@ -666,10 +676,43 @@ export function projectToLedger(input: {
   return Ok({ assets, touched, exits, unapplied, reconciliation });
 }
 
-/** The acquisition kind a stored lot must have come from. */
-const ASSET_CLASS_KIND: Readonly<Partial<Record<AssetClass, ParsedTransaction['kind']>>> = {
+/**
+ * The acquisition kind a stored LOT must have come from.
+ *
+ * Read from the lot's own award rather than from its asset class. Once RSU and
+ * ESPP folded into FOREIGN_EQUITY, the class no longer says how a tranche was
+ * acquired — and one asset can now hold an RSU vest, an ESPP purchase and an
+ * ordinary buy side by side, which is the point.
+ */
+const AWARD_KIND_TO_ACQUISITION: Readonly<
+  Partial<Record<EquityAwardKind, ParsedTransaction['kind']>>
+> = {
   RSU: 'RSU_VEST',
+  RSA: 'RSU_VEST',
+  PSU: 'RSU_VEST',
   ESPP: 'ESPP_PURCHASE',
+  ESOP: 'ESPP_PURCHASE',
+};
+
+/**
+ * Every acquisition kind a stored lot could have come from.
+ *
+ * Usually one: the lot's award says so. But a source that records an RSU release
+ * WITHOUT naming a grant — the E*TRADE transaction history does exactly this —
+ * leaves a FOREIGN_EQUITY lot with no award at all, and the asset class no longer
+ * distinguishes a vest from an ordinary purchase now that equity compensation
+ * shares a class with it.
+ *
+ * Rather than guess, such a lot offers all three keys. Over-offering can only
+ * suppress a re-import whose date, symbol, quantity AND price already match an
+ * existing lot exactly — which is the duplicate case anyway — while guessing
+ * wrong would let the same vest be imported twice.
+ */
+const acquisitionKindsOf = (lot: AcquisitionLot): readonly ParsedTransaction['kind'][] => {
+  if (lot.equityAward !== undefined) {
+    return [AWARD_KIND_TO_ACQUISITION[lot.equityAward.kind] ?? 'BUY'];
+  }
+  return ['BUY', 'RSU_VEST', 'ESPP_PURCHASE'];
 };
 
 /**
@@ -688,29 +731,41 @@ export function ledgerNaturalKeys(
   const identityOf = new Map(
     assets.map((asset) => [asset.assetId, asset.isin ?? asset.symbol ?? asset.folioRef ?? '']),
   );
-  /** The acquisition kind each asset's lots were opened with. */
-  const kindOf = new Map(
-    assets.map((asset) => [asset.assetId, ASSET_CLASS_KIND[asset.assetClass] ?? 'BUY'] as const),
+  /**
+   * The acquisition kind a disposal's tranche was opened with, by lot.
+   *
+   * Per LOT, not per asset: one FOREIGN_EQUITY holding can now carry an RSU
+   * vest, an ESPP purchase and an ordinary buy at once, so the asset no longer
+   * has a single answer.
+   */
+  const kindOfLot = new Map(
+    assets.flatMap((asset) =>
+      asset.lots.map((lot) => [lot.lotId, acquisitionKindsOf(lot)[0] ?? 'BUY'] as const),
+    ),
   );
 
   for (const asset of assets) {
-    const acquisitionKind = ASSET_CLASS_KIND[asset.assetClass] ?? 'BUY';
     const identity = asset.isin ?? asset.symbol ?? asset.folioRef ?? '';
 
     for (const lot of asset.lots) {
-      keys.push(
-        [
-          acquisitionKind,
-          lot.acquisitionDate,
-          identity,
-          // The ORIGINAL quantity: `remainingQuantity` shrinks as the holding is
-          // sold, and keying on it would make an earlier buy look like a new one
-          // the moment any of it was disposed of.
-          lot.quantity,
-          lot.costPerUnit.amount,
-          lot.costPerUnit.currency,
-        ].join('|'),
-      );
+      for (const acquisitionKind of acquisitionKindsOf(lot)) {
+        keys.push(
+          [
+            acquisitionKind,
+            lot.acquisitionDate,
+            identity,
+            // The ORIGINAL quantity: `remainingQuantity` shrinks as the holding
+            // is sold, and keying on it would make an earlier buy look like a
+            // new one the moment any of it was disposed of.
+            lot.quantity,
+            lot.costPerUnit.amount,
+            lot.costPerUnit.currency,
+            // The tranche, matching `naturalKey`. See the note there: without
+            // it, two vests sold identically on one day collapse into one row.
+            lot.equityAward === undefined ? '' : lot.lotId,
+          ].join('|'),
+        );
+      }
     }
 
     /*
@@ -727,6 +782,14 @@ export function ledgerNaturalKeys(
   // depletes the holding a second time — the ledger then understates the
   // position and overstates realised gains, with nothing to show it happened.
   for (const exit of exits) {
+    /*
+     * The tranche this disposal came out of, matching `naturalKey`. Only a
+     * specific match identifies it: a FIFO allocation says which lot the ledger
+     * CHOSE, not which one the source row named.
+     */
+    const tranche =
+      exit.lotMatching === 'SPECIFIC' ? (exit.allocations[0]?.lotId ?? '') : '';
+
     keys.push(
       [
         'SELL',
@@ -735,6 +798,7 @@ export function ledgerNaturalKeys(
         exit.quantity,
         exit.pricePerUnit.amount,
         exit.pricePerUnit.currency,
+        tranche,
       ].join('|'),
     );
 
@@ -760,7 +824,7 @@ export function ledgerNaturalKeys(
     ) {
       continue;
     }
-    const acquisitionKind = kindOf.get(exit.assetId);
+    const acquisitionKind = kindOfLot.get(allocation.lotId);
     if (acquisitionKind === undefined) continue;
 
     keys.push(
@@ -771,6 +835,7 @@ export function ledgerNaturalKeys(
         exit.quantity,
         allocation.costPerUnit.amount,
         allocation.costPerUnit.currency,
+        allocation.lotId,
       ].join('|'),
     );
   }

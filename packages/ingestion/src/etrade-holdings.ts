@@ -44,7 +44,7 @@ import {
   type Result,
 } from '@porttrack/shared-kernel';
 import { Decimal } from 'decimal.js';
-import { grantRefOf, type EquityAward } from '@porttrack/core-domain';
+import { grantRefOf, type EquityAward, type EquityAwardKind } from '@porttrack/core-domain';
 import { parseCsv, columnIndex, normaliseDate } from './csv.js';
 import { deterministicImportedAt, provenanceFor } from './provenance.js';
 import type { ParsedTransaction, RowError } from './types.js';
@@ -97,12 +97,12 @@ function parseQuantity(raw: string | undefined): Decimal | undefined {
  * so an unrecognised plan is REFUSED — filing an ESPP lot as an RSU would apply
  * the wrong perquisite and the wrong cost basis.
  */
-function planOf(planType: string): { assetClass: 'RSU' | 'ESPP'; kind: 'RSU_VEST' | 'ESPP_PURCHASE' } | undefined {
+function planOf(planType: string): { award: EquityAwardKind; kind: 'RSU_VEST' | 'ESPP_PURCHASE' } | undefined {
   const value = planType.trim().toUpperCase();
   if (value.startsWith('REST') || value === 'RS' || value === 'RSU') {
-    return { assetClass: 'RSU', kind: 'RSU_VEST' };
+    return { award: 'RSU', kind: 'RSU_VEST' };
   }
-  if (value.includes('ESPP')) return { assetClass: 'ESPP', kind: 'ESPP_PURCHASE' };
+  if (value.includes('ESPP')) return { award: 'ESPP', kind: 'ESPP_PURCHASE' };
   return undefined;
 }
 
@@ -236,13 +236,13 @@ export function parseEtradeHoldings(csv: string, fileName: string): Result<Parse
     }
 
     const award: EquityAward = {
-      kind: plan.assetClass,
+      kind: plan.award,
       grantRef,
       ...(grantDate === undefined ? {} : { grantDate }),
-      ...(plan.assetClass === 'RSU'
+      ...(plan.award === 'RSU'
         ? { vestDate: vestDate ?? acquiredOn }
         : { purchaseDate: acquiredOn }),
-      ...(plan.assetClass === 'ESPP'
+      ...(plan.award === 'ESPP'
         ? (() => {
             const paid = parseUsd(cell(row, 'purchase price'));
             return paid === undefined ? {} : { purchasePrice: paid };
@@ -251,13 +251,28 @@ export function parseEtradeHoldings(csv: string, fileName: string): Result<Parse
       fmvAtAcquisition: costPerUnit,
     };
 
+    /*
+     * What the position is worth, per share, as the statement reports it.
+     *
+     * Derived from the row's total rather than read from a per-share column,
+     * because the export states `Est. Market Value` for the whole tranche and
+     * nothing per unit. Every row of one symbol yields the same figure, which is
+     * exactly the check the import applies before storing it.
+     */
+    const marketValue = parseUsd(cell(row, 'est. market value'));
+    const marketPricePerUnit =
+      marketValue === undefined || sellable.isZero()
+        ? undefined
+        : Money.of(new Decimal(marketValue.amount).dividedBy(sellable).toFixed(), USD);
+
     transactions.push({
       symbol,
-      assetClass: plan.assetClass,
+      assetClass: 'FOREIGN_EQUITY',
       kind: plan.kind,
       date: acquiredOn,
       quantity: quantity.toFixed(),
       pricePerUnit: costPerUnit,
+      ...(marketPricePerUnit === undefined ? {} : { marketPricePerUnit }),
       equityAward: award,
       // What the SOURCE says is left, for the projection to check its own
       // arithmetic against.

@@ -23,10 +23,10 @@ export type AssetBucket = 'EQUITY' | 'NON_EQUITY' | 'IMMOVABLE' | 'LOAN' | 'CHIT
 /** Classes that are equity however they are held. */
 const ALWAYS_EQUITY: ReadonlySet<AssetClass> = new Set([
   'DOMESTIC_EQUITY',
+  // Covers equity compensation: an RSU or ESPP tranche is a FOREIGN_EQUITY lot
+  // carrying an `equityAward`, not an asset class of its own.
   'FOREIGN_EQUITY',
   'FOREIGN_ETF',
-  'RSU',
-  'ESPP',
   'UNLISTED_SHARES',
 ]);
 

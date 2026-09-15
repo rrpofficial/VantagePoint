@@ -25,7 +25,12 @@ interface BucketLine {
   readonly tab: AssetTab;
   readonly label: string;
   readonly count: number;
+  /** Market value where priced, cost where not. */
   readonly value: number;
+  /** How much of `value` is cost basis because no price exists. */
+  readonly atCost: number;
+  /** Holdings left out entirely: foreign, and no exchange rate held. */
+  readonly unconverted: number;
   readonly hint: string;
 }
 
@@ -73,6 +78,8 @@ export function AssetsOverview() {
   }
 
   const total = lines.reduce((sum, line) => sum + line.value, 0);
+  const atCost = lines.reduce((sum, line) => sum + line.atCost, 0);
+  const unconverted = lines.reduce((sum, line) => sum + line.unconverted, 0);
 
   return (
     <div className="pt-stack">
@@ -134,8 +141,27 @@ export function AssetsOverview() {
         <p className="pt-display pt-numeric" data-testid="assets-total">
           {formatInr(total)}
         </p>
-        <p className="pt-muted">
-          Carried value across all five, before liabilities. Net worth is on the Dashboard.
+        {/*
+          Says which figure this actually is. Everything here used to be cost
+          basis under a heading that read "value" — the number nobody would have
+          questioned, and the one most likely to be acted on.
+        */}
+        <p className="pt-muted" data-testid="assets-basis">
+          Across all five, before liabilities. Priced holdings are at{' '}
+          <strong>market value</strong>; everything else — property, unlisted shares, loans and
+          chits — is carried at <strong>cost</strong>, which for those is the only honest figure.
+          {atCost > 0 && <> {formatInr(atCost)} of this total is at cost.</>}
+          {unconverted > 0 && (
+            <>
+              {' '}
+              <strong>
+                {unconverted} foreign holding{unconverted === 1 ? ' is' : 's are'} excluded
+              </strong>{' '}
+              — no exchange rate is held for {unconverted === 1 ? 'it' : 'them'}, and adding a
+              foreign amount into a rupee total would be worse than leaving it out.
+            </>
+          )}{' '}
+          Net worth is on the Dashboard.
         </p>
       </Card>
 
@@ -190,24 +216,48 @@ const INR = new Intl.NumberFormat('en-IN', {
 });
 const formatInr = (value: number) => INR.format(value);
 
-/** Cost of what is still held: remaining units, plus the charges on them. */
-function carriedValue(assets: Ledger['assets'], bucket: AssetBucket): number {
-  return assets
-    .filter((asset) => asset.bucket === bucket)
-    .reduce(
-      (sum, asset) =>
-        sum +
-        asset.lots.reduce(
-          (lotSum, lot) =>
-            lotSum +
-            Number(lot.remainingQuantity) * Number(lot.costPerUnit.amount) +
-            Number(lot.fees?.amount ?? 0) +
-            Number(lot.stt?.amount ?? 0) +
-            Number(lot.otherCharges?.amount ?? 0),
-          0,
-        ),
-      0,
-    );
+/**
+ * Cost of what is still held, in RUPEES.
+ *
+ * Reads `costBasisInr`, which the server computes — it used to sum
+ * `costPerUnit` across every lot regardless of currency and label the result
+ * `₹`, so a $88,711 foreign holding was added straight into a rupee total as
+ * though a dollar were a rupee.
+ *
+ * A holding whose rupee value could not be established is EXCLUDED and counted
+ * separately, rather than folded in at its face value in another currency.
+ */
+function carriedValue(
+  assets: Ledger['assets'],
+  bucket: AssetBucket,
+): { value: number; atCost: number; unconverted: number } {
+  let value = 0;
+  let atCost = 0;
+  let unconverted = 0;
+
+  for (const asset of assets.filter((candidate) => candidate.bucket === bucket)) {
+    /*
+     * Market value where one is known, cost where it is not — and the two are
+     * counted separately so the screen can say how much of the total is which.
+     * A flat and an unlisted holding have no price and never will; carrying them
+     * at cost is correct, and silently blending them into a figure called
+     * "market value" would not be.
+     */
+    if (asset.marketValueInr !== undefined) {
+      value += Number(asset.marketValueInr.amount);
+      continue;
+    }
+    if (asset.costBasisInr === undefined) {
+      // Neither priced nor convertible: excluded entirely rather than added in
+      // a foreign currency.
+      if (Number(asset.costBasis.amount) > 0) unconverted++;
+      continue;
+    }
+    value += Number(asset.costBasisInr.amount);
+    atCost += Number(asset.costBasisInr.amount);
+  }
+
+  return { value, atCost, unconverted };
 }
 
 const countIn = (assets: Ledger['assets'], bucket: AssetBucket) =>
@@ -223,21 +273,21 @@ function summarise(
       tab: 'Equity',
       label: 'Equity',
       count: countIn(ledger.assets, 'EQUITY'),
-      value: carriedValue(ledger.assets, 'EQUITY'),
+      ...carriedValue(ledger.assets, 'EQUITY'),
       hint: 'Listed and unlisted shares, equity funds and ETFs, RSUs and ESPP',
     },
     {
       tab: 'Non-Equity',
       label: 'Non-equity',
       count: countIn(ledger.assets, 'NON_EQUITY'),
-      value: carriedValue(ledger.assets, 'NON_EQUITY'),
+      ...carriedValue(ledger.assets, 'NON_EQUITY'),
       hint: 'Deposits, retirement schemes, bullion, crypto, cash and debt funds',
     },
     {
       tab: 'Immovable',
       label: 'Immovable property',
       count: countIn(ledger.assets, 'IMMOVABLE'),
-      value: carriedValue(ledger.assets, 'IMMOVABLE'),
+      ...carriedValue(ledger.assets, 'IMMOVABLE'),
       hint: 'Carried at what was paid, including stamp duty and registration',
     },
     {
@@ -247,6 +297,8 @@ function summarise(
       // The register's own total, computed server-side: summing decimal strings
       // in the browser reintroduces the drift ADR-002 exists to prevent.
       value: Number(loans?.totals.totalOutstanding.amount ?? 0),
+      atCost: Number(loans?.totals.totalOutstanding.amount ?? 0),
+      unconverted: 0,
       hint: 'Money lent to people, at principal outstanding',
     },
     {
@@ -256,6 +308,8 @@ function summarise(
       // Active chits only. A drawn chit's money is cash in a bank account and is
       // counted there; carrying it here too would count it twice.
       value: Number(chits?.totals.activeCarryingValue.amount ?? 0),
+      atCost: Number(chits?.totals.activeCarryingValue.amount ?? 0),
+      unconverted: 0,
       hint: 'Carried at instalments paid in, not at the pot’s face value',
     },
   ];

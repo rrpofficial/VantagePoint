@@ -97,12 +97,23 @@ describe('Scenario: The G&L export reaches the ledger', () => {
     expect(exits).toHaveLength(4);
   });
 
-  it('files RSUs and ESPP as their own asset classes, not as generic foreign equity', async () => {
+  /*
+   * ONE holding for one symbol, whatever the award. RSU and ESPP were once asset
+   * classes of their own, which split a company's shares across two assets —
+   * double counted, and matched FIFO in two separate queues.
+   */
+  it('files every award under one FOREIGN_EQUITY holding per symbol', async () => {
     expectOk(await seedRates());
     expectOk(await importGl());
 
-    const classes = (await AssetRepository.all()).map((asset) => asset.assetClass).sort();
-    expect(classes).toEqual(['ESPP', 'RSU']);
+    const assets = await AssetRepository.all();
+    expect(assets).toHaveLength(1);
+    expect(assets[0]?.assetClass).toBe('FOREIGN_EQUITY');
+
+    // Both award kinds live on the lots of that single holding.
+    const kinds = new Set(assets[0]?.lots.map((lot) => lot.equityAward?.kind));
+    expect(kinds.has('RSU')).toBe(true);
+    expect(kinds.has('ESPP')).toBe(true);
   });
 
   /*
@@ -123,8 +134,8 @@ describe('Scenario: Each leg carries the rate for its own Rule 115 basis month',
     expectOk(await seedRates());
     expectOk(await importGl());
 
-    const rsu = (await AssetRepository.all()).find((a) => a.assetClass === 'RSU');
-    const vested2021 = rsu?.lots.find((lot) => lot.acquisitionDate === '2021-02-10');
+    const lots = (await AssetRepository.all()).flatMap((a) => a.lots);
+    const vested2021 = lots.find((lot) => lot.acquisitionDate === '2021-02-10');
 
     // Basis date 2021-01-31. Compared numerically: the store normalises a
     // decimal string, so `73.10` comes back as `73.1` and both are the rate.
@@ -150,8 +161,8 @@ describe('Scenario: Each leg carries the rate for its own Rule 115 basis month',
     expectOk(await seedRates());
     expectOk(await importGl());
 
-    const rsu = (await AssetRepository.all()).find((a) => a.assetClass === 'RSU');
-    const vest = rsu?.lots.find((lot) => lot.acquisitionDate === '2021-02-10');
+    const lots = (await AssetRepository.all()).flatMap((a) => a.lots);
+    const vest = lots.find((lot) => lot.acquisitionDate === '2021-02-10');
     const sale = (await ExitRepository.all()).find((exit) => exit.exitDate === '2026-05-20');
 
     expect(vest?.fx?.taxRate).not.toBe(sale?.fx?.taxRate);

@@ -8,7 +8,7 @@
  */
 import { Money, type Clock } from '@porttrack/shared-kernel';
 import type { Asset, FxSource, Liability, PriceSource } from '@porttrack/core-domain';
-import { AssetRepository, LiabilityRepository } from '@porttrack/persistence';
+import { AssetRepository, LiabilityRepository, vaultPriceSource } from '@porttrack/persistence';
 import { createLogger, type Logger } from '@porttrack/platform';
 
 export interface AppContext {
@@ -57,6 +57,17 @@ function vaultBackedPorts(): Ports {
     logger: createLogger({ sink: NO_SINK, now: () => systemClock.now() }),
     assets: () => AssetRepository.all(),
     liabilities: () => LiabilityRepository.all(),
+    /*
+     * Wired at last. This port existed from the start and nothing ever supplied
+     * it, so `marketValueOf` looked for a quote, found none, and fell back to
+     * cost basis — for every holding, everywhere. Three screens then labelled
+     * that cost "value" and "net worth".
+     *
+     * A locked vault returns no quote rather than throwing, so this is safe to
+     * call before unlock; valuation then carries everything at cost, which is
+     * what it did before and is still the correct answer for an unpriced asset.
+     */
+    prices: vaultPriceSource,
   };
 }
 

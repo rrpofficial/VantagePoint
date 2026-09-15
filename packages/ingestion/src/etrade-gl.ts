@@ -61,7 +61,12 @@ import {
   type Result,
 } from '@porttrack/shared-kernel';
 import { Decimal } from 'decimal.js';
-import { grantRefOf, isSellToCover, type EquityAward } from '@porttrack/core-domain';
+import {
+  grantRefOf,
+  isSellToCover,
+  type EquityAward,
+  type EquityAwardKind,
+} from '@porttrack/core-domain';
 import { parseCsv, columnIndex } from './csv.js';
 import { deterministicImportedAt, provenanceFor } from './provenance.js';
 import type { ParsedTransaction, RowError } from './types.js';
@@ -156,10 +161,10 @@ function perUnit(total: MoneyValue, quantity: Decimal): MoneyValue {
 function planOf(
   planType: string,
   orderType: string,
-): { assetClass: 'RSU' | 'ESPP'; kind: 'RSU_VEST' | 'ESPP_PURCHASE' } | undefined {
+): { award: EquityAwardKind; kind: 'RSU_VEST' | 'ESPP_PURCHASE' } | undefined {
   const plan = planType.trim().toUpperCase();
-  if (plan === 'RS' || plan === 'RSU') return { assetClass: 'RSU', kind: 'RSU_VEST' };
-  if (plan === 'ESPP') return { assetClass: 'ESPP', kind: 'ESPP_PURCHASE' };
+  if (plan === 'RS' || plan === 'RSU') return { award: 'RSU', kind: 'RSU_VEST' };
+  if (plan === 'ESPP') return { award: 'ESPP', kind: 'ESPP_PURCHASE' };
 
   /*
    * Plan Type is occasionally blank on an older export while Order Type is not,
@@ -168,8 +173,8 @@ function planOf(
    * ESPP row would apply the wrong perquisite and the wrong holding-period rule.
    */
   const order = orderType.trim().toUpperCase();
-  if (order.includes('ESPP')) return { assetClass: 'ESPP', kind: 'ESPP_PURCHASE' };
-  if (order.includes('RS')) return { assetClass: 'RSU', kind: 'RSU_VEST' };
+  if (order.includes('ESPP')) return { award: 'ESPP', kind: 'ESPP_PURCHASE' };
+  if (order.includes('RS')) return { award: 'RSU', kind: 'RSU_VEST' };
   return undefined;
 }
 
@@ -331,7 +336,7 @@ export function parseEtradeGainsLosses(csv: string, fileName: string): Result<Pa
      * reported as unapplied. The file states the plan type, so this is read, not
      * guessed.
      */
-    const identity = { symbol, assetClass: plan.assetClass } as const;
+    const identity = { symbol, assetClass: 'FOREIGN_EQUITY' } as const;
 
     // Per-share ordinary income is the perquisite already taxed as salary: the
     // whole vest value for an RSU, the discount to FMV for an ESPP.
@@ -360,10 +365,10 @@ export function parseEtradeGainsLosses(csv: string, fileName: string): Result<Pa
       grantRef === undefined
         ? undefined
         : {
-            kind: plan.assetClass,
+            kind: plan.award,
             grantRef,
             ...(grantDate === undefined ? {} : { grantDate }),
-            ...(plan.assetClass === 'RSU'
+            ...(plan.award === 'RSU'
               ? { vestDate: vestDate ?? acquiredOn }
               : { purchaseDate: purchaseDate ?? acquiredOn }),
             // What was actually PAID, which for an ESPP is below the cost basis

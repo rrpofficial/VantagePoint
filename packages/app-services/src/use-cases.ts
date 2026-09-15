@@ -5,6 +5,8 @@
  * business rule lives here — if a calculation appears in this file it is in the
  * wrong layer, and the API's "thin shell" test exists to keep it that way.
  */
+import { Decimal } from 'decimal.js';
+import { DualRateConverter } from '@porttrack/fx-itbr';
 import {
   DuplicateLoanError,
   DuplicateTradeError,
@@ -76,6 +78,7 @@ import {
 } from '@porttrack/snapshot';
 import {
   AdvanceTaxEngine,
+  CapitalGainsEngine,
   HniClassifier,
   SlabCalculator,
   TaxRuleTable,
@@ -83,6 +86,7 @@ import {
   type HniClassification,
   type IncomeProfile,
   type RegimeComparison,
+  type TaxRuleSet,
 } from '@porttrack/tax-engine';
 import {
   LedgerProjector,
@@ -91,6 +95,7 @@ import {
   TemplateRegistry,
   type ImportMode,
   type ImportReport,
+  type ParsedTransaction,
   type ParserName,
 } from '@porttrack/ingestion';
 import {
@@ -100,7 +105,9 @@ import {
   LiabilityRepository,
   LoanAuditRepository,
   AdvanceTaxPaymentRepository,
+  PriceRepository,
   SettingsRepository,
+  type AssetPrice,
   SnapshotRepository,
   Vault,
   type SnapshotSummary,
@@ -409,6 +416,42 @@ async function advanceTaxInputsFor(financialYear: FinancialYear): Promise<{
   };
 }
 
+/**
+ * Total income for the ₹50 lakh tests — salary AND everything else.
+ *
+ * Both the HNI classification and the Schedule AL requirement turn on total
+ * income, and both were passed `grossSalary` alone. A taxpayer on ₹40 lakh of
+ * salary with ₹15 lakh of capital gains has ₹55 lakh of total income and was
+ * being told they were under the threshold — so Schedule AL read as not required
+ * when it was. That is a filing omission, not a display rounding.
+ *
+ * Capital gains come from the ledger, which is what Phase 1 made available. A
+ * disposal whose rupee value could not be established is EXCLUDED rather than
+ * guessed at, exactly as it is in the tax computation — so the answer can be
+ * understated when rates are missing, never invented.
+ */
+async function totalIncomeFor(
+  financialYear: FinancialYear,
+  income: IncomeProfile,
+  rules: TaxRuleSet,
+): Promise<MoneyValue> {
+  const ledger = await advanceTaxInputsFor(financialYear);
+  const gains = CapitalGainsEngine.compute(ledger.exits, ledger.assetClasses, rules, {
+    includeSellToCover: incomeInclusionsOf().sellToCoverGains,
+  });
+
+  return Money.sum(
+    [
+      income.grossSalary,
+      income.housePropertyIncome,
+      income.otherSourcesIncome,
+      gains.taxableStcg,
+      gains.taxableLtcg,
+    ],
+    'INR',
+  );
+}
+
 export const ComputeAdvanceTaxUC = {
   async execute(input: {
     financialYear: FinancialYear;
@@ -523,7 +566,9 @@ export const ComputeAdvanceTaxUC = {
 
     return Ok(
       HniClassifier.classify({
-        totalIncome: profile.value.grossSalary,
+        // Salary plus house property, other sources and capital gains — not
+        // salary alone, which under-reported the ₹50 lakh test.
+        totalIncome: await totalIncomeFor(financialYear, profile.value, rules.value),
         netWorth,
         rules: rules.value,
       }),
@@ -532,6 +577,52 @@ export const ComputeAdvanceTaxUC = {
 };
 
 /* --------------------------------------------------------------- ingestion */
+
+/**
+ * Distinct market prices a statement stated, one per instrument.
+ *
+ * Every row of a holdings export carries the same price for a given symbol, so
+ * they collapse to one. Where two rows DISAGREE the price is dropped rather than
+ * picked between — a statement contradicting itself about what a share is worth
+ * is not a source to guess from, and valuing at cost is the safe answer.
+ */
+function marketPricesFrom(
+  transactions: readonly ParsedTransaction[],
+  sourceDocument: string,
+): readonly AssetPrice[] {
+  const seen = new Map<string, { price: string; currency: string; conflicting: boolean }>();
+
+  for (const txn of transactions) {
+    const instrument = txn.isin ?? txn.symbol;
+    if (instrument === undefined || txn.marketPricePerUnit === undefined) continue;
+
+    const existing = seen.get(instrument);
+    if (existing === undefined) {
+      seen.set(instrument, {
+        price: txn.marketPricePerUnit.amount,
+        currency: txn.marketPricePerUnit.currency,
+        conflicting: false,
+      });
+      continue;
+    }
+    // Compared numerically: `259.43` and `259.430` are the same price.
+    if (!new Decimal(existing.price).equals(txn.marketPricePerUnit.amount)) {
+      existing.conflicting = true;
+    }
+  }
+
+  const today = currentPorts().clock.today();
+  return [...seen.entries()]
+    .filter(([, value]) => !value.conflicting)
+    .map(([instrument, value]) => ({
+      instrument,
+      priceDate: today,
+      price: value.price,
+      currency: value.currency as 'USD',
+      source: 'STATEMENT',
+      sourceDocument,
+    }));
+}
 
 export const ImportStatementUC = {
   /**
@@ -583,6 +674,21 @@ export const ImportStatementUC = {
       assets: projected.value.assets,
       exits: projected.value.exits,
     });
+
+    /*
+     * Market prices the statement stated, recorded so holdings can be carried at
+     * what they are WORTH rather than at what they cost.
+     *
+     * Dated with today, and that is a deliberate compromise: the export does not
+     * state its own as-of date anywhere, so the honest reading is "this is what
+     * the statement said when it was imported". Every screen showing a value
+     * derived from it shows that date, rather than implying the figure is live.
+     */
+    const prices = marketPricesFrom(report.value.transactions ?? [], input.fileName);
+    if (prices.length > 0) {
+      const stored = await PriceRepository.save(prices);
+      if (!stored.ok) return stored;
+    }
 
     const saved = await AssetRepository.saveAll(stamped.assets);
     if (!saved.ok) return saved;
@@ -1158,6 +1264,16 @@ export const TradeUC = {
       quantity.value.amount,
       price.value.amount,
       price.value.currency,
+      /*
+       * The tranche field, empty for a hand-typed trade.
+       *
+       * Present so this key has the SAME shape as the ones `ledgerNaturalKeys`
+       * builds — it gained a trailing tranche segment so that one stock-plan
+       * order selling equal amounts out of two vests is not read as one sale.
+       * Omitting it here compares `…|INR` against `…|INR|` and nothing ever
+       * matches, which silently turns duplicate detection off.
+       */
+      '',
     ].join('|');
     const existingKeys = LedgerProjector.naturalKeys(existing, existingExits);
     const occurrences = existingKeys.filter((key) => key === naturalKey).length;
@@ -1891,12 +2007,155 @@ export const TemplateUC = {
  */
 export interface BucketedAsset extends Asset {
   readonly bucket: AssetBucket;
+  /**
+   * What the units still held cost, in the holding's OWN currency, with the
+   * charges that formed the basis.
+   *
+   * Computed here rather than in the browser, for the reason the loan and chit
+   * registers already are: summing decimal strings as JavaScript numbers
+   * reintroduces exactly the drift ADR-002 exists to prevent.
+   */
+  readonly costBasis: MoneyValue;
+  /**
+   * The same figure in rupees, at the most recent published SBI TT buy rate.
+   *
+   * ABSENT when no rate could be resolved — never silently equal to the native
+   * amount. A screen adding an unconverted dollar figure into a rupee total is
+   * how `$88,711` came to be added to a column of rupees and labelled `₹`.
+   *
+   * This is the VALUATION rate (ADR-003) — the latest working day's — because
+   * this figure is what a holding is carried at today. The Rule 115 rate, from
+   * the month-end before a transaction, belongs to tax computations only.
+   */
+  readonly costBasisInr?: MoneyValue;
+  /** The rate used, so the rupee figure can be checked rather than trusted. */
+  readonly conversionRate?: string;
+  readonly heldQuantity: string;
+
+  /**
+   * What the holding is WORTH, where a price is known — native and in rupees.
+   *
+   * Absent when no price has ever been recorded for the instrument, which is the
+   * permanent state for a flat, an unlisted holding, a hand loan or a chit.
+   * Those are carried at cost, deliberately: inventing a market value for an
+   * illiquid asset corrupts net worth.
+   *
+   * A screen must therefore never assume this exists, and must say which of the
+   * two it is showing — a total that silently mixes priced and unpriced holdings
+   * is a hybrid, not a valuation.
+   */
+  readonly marketValue?: MoneyValue;
+  readonly marketValueInr?: MoneyValue;
+  readonly marketPricePerUnit?: MoneyValue;
+  /**
+   * When that price was recorded. Shown wherever the value is, because prices
+   * arrive by import: the figure is as at the last statement loaded, not today.
+   */
+  readonly priceAsOf?: string;
+  /** `marketValueInr − costBasisInr`, where both are known. */
+  readonly unrealisedInr?: MoneyValue;
+}
+
+/** Cost of the units still held, plus the charges on them. Decimal throughout. */
+function heldCostBasis(asset: Asset): { cost: MoneyValue; quantity: string } {
+  let cost = new Decimal(0);
+  let quantity = new Decimal(0);
+
+  for (const lot of asset.lots) {
+    const remaining = new Decimal(lot.remainingQuantity);
+    if (remaining.lessThanOrEqualTo(0)) continue;
+    quantity = quantity.plus(remaining);
+
+    // Charges are apportioned to the units still held, so a partly-sold lot
+    // does not carry the whole purchase's brokerage.
+    const proportion = remaining.dividedBy(lot.quantity);
+    cost = cost
+      .plus(remaining.times(lot.costPerUnit.amount))
+      .plus(new Decimal(lot.fees.amount).times(proportion))
+      .plus(new Decimal(lot.stt.amount).times(proportion))
+      .plus(new Decimal(lot.otherCharges.amount).times(proportion));
+  }
+
+  return {
+    cost: Money.of(cost.toFixed(2), asset.currency),
+    quantity: quantity.toFixed(),
+  };
 }
 
 export const LedgerUC = {
   async assets(): Promise<readonly BucketedAsset[]> {
     const assets = await AssetRepository.all();
-    return assets.map((asset) => ({ ...asset, bucket: bucketOf(asset) }));
+    const today = currentPorts().clock.today();
+
+    return assets.map((asset) => {
+      const { cost, quantity } = heldCostBasis(asset);
+
+      /*
+       * `ratesFor` walks back from today over non-publishing days, so this is the
+       * last WORKING day's rate — which is what "what is it worth now" means for
+       * a holding. A currency with no rate yields no rupee figure at all.
+       */
+      const rates =
+        asset.currency === 'INR' ? undefined : DualRateConverter.ratesFor(asset.currency, today);
+      const inr =
+        asset.currency === 'INR'
+          ? cost
+          : rates?.ok === true
+            ? DualRateConverter.convert(cost, rates.value).valuationInr
+            : undefined;
+
+      /*
+       * What it is worth, where a price exists. Same conversion path as the cost
+       * so the two figures are comparable — a value in rupees against a cost in
+       * dollars would make the difference between them meaningless.
+       */
+      const recorded =
+        new Decimal(quantity).lessThanOrEqualTo(0)
+          ? undefined
+          : PriceRepository.latest(asset.isin ?? asset.symbol ?? '', today);
+
+      const marketValue =
+        recorded === undefined
+          ? undefined
+          : Money.of(
+              new Decimal(recorded.price).times(quantity).toFixed(2),
+              recorded.currency,
+            );
+
+      const marketValueInr =
+        marketValue === undefined
+          ? undefined
+          : marketValue.currency === 'INR'
+            ? marketValue
+            : rates?.ok === true
+              ? DualRateConverter.convert(marketValue, rates.value).valuationInr
+              : undefined;
+
+      const unrealisedInr =
+        marketValueInr === undefined || inr === undefined
+          ? undefined
+          : Money.of(new Decimal(marketValueInr.amount).minus(inr.amount).toFixed(2), 'INR');
+
+      return {
+        ...asset,
+        bucket: bucketOf(asset),
+        costBasis: cost,
+        heldQuantity: quantity,
+        ...(inr === undefined ? {} : { costBasisInr: inr }),
+        ...(asset.currency === 'INR' || rates?.ok !== true
+          ? {}
+          : { conversionRate: rates.value.valuationRate }),
+        ...(marketValue === undefined ? {} : { marketValue }),
+        ...(marketValueInr === undefined ? {} : { marketValueInr }),
+        ...(recorded === undefined
+          ? {}
+          : {
+              marketPricePerUnit: Money.of(recorded.price, recorded.currency),
+              priceAsOf: recorded.priceDate,
+            }),
+        ...(unrealisedInr === undefined ? {} : { unrealisedInr }),
+      };
+    });
   },
   liabilities(): Promise<readonly Liability[]> {
     return LiabilityRepository.all();
@@ -2063,6 +2322,11 @@ export const GenerateComplianceUC: GenerateComplianceUCOps = {
     const profile = profileFor(financialYear);
     if (!profile.ok) return profile;
 
+    // The AL threshold is read from the rule set, so the year's rules have to
+    // resolve before the total income that is tested against them.
+    const rules = TaxRuleTable.rulesFor(financialYear);
+    if (!rules.ok) return rules;
+
     const [assets, liabilities] = await Promise.all([
       AssetRepository.all(),
       LiabilityRepository.all(),
@@ -2070,7 +2334,9 @@ export const GenerateComplianceUC: GenerateComplianceUCOps = {
 
     return ScheduleAlGenerator.generate({
       domesticSnapshot: snapshot,
-      totalIncome: profile.value.grossSalary,
+      // Schedule AL is required on TOTAL income above the threshold. Passing
+      // salary alone told a taxpayer with large gains that they need not file it.
+      totalIncome: await totalIncomeFor(financialYear, profile.value, rules.value),
       // Schedule AL is filed with the return for the ASSESSMENT year (FY + 1).
       assessmentYear: FyCalendar.assessmentYearOf(financialYear),
       items: ScheduleAlGenerator.itemsFrom({ assets, liabilities }),

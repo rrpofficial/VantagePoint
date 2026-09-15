@@ -70,16 +70,37 @@ describe('Scenario: The assessment year is the year AFTER the financial year', (
 });
 
 describe('Scenario: Years without a rule set are offered but flagged', () => {
+  /*
+   * Asserted against a year that genuinely ships no rule set, rather than
+   * against "the current year". It used to name 2026-27, which stopped being an
+   * example the moment that year was added — and a test that only passes while a
+   * gap exists is a test that expires.
+   */
   it('marks a year with no rates as unavailable rather than hiding it', () => {
     on('2026-08-04');
     const periods = ReferenceUC.periods();
 
-    const current = periods.financialYears.find((year) => year.financialYear === '2026-27');
-    // Rule sets ship for 2024-25 and 2025-26 only. Hiding 2026-27 would leave a
-    // user hunting for the year they are actually in; flagging it explains why
-    // nothing computes.
-    expect(current?.rulesAvailable).toBe(false);
-    expect(current?.rulesStatus).toBeUndefined();
+    const unsupported = periods.financialYears.find((year) => year.financialYear === '2023-24');
+    // Hiding it would leave a user hunting for the year they want; flagging it
+    // explains why nothing computes.
+    expect(unsupported?.rulesAvailable).toBe(false);
+    expect(unsupported?.rulesStatus).toBeUndefined();
+  });
+
+  /*
+   * FY 2026-27 is the first year under the Income-tax Act 2025, and its rates
+   * are transcribed from Bills rather than from enacted text — so it is offered,
+   * computes, and still carries PROVISIONAL.
+   */
+  it('offers the first Income-tax Act 2025 year, flagged provisional', () => {
+    on('2026-08-04');
+
+    const current = ReferenceUC.periods().financialYears.find(
+      (year) => year.financialYear === '2026-27',
+    );
+
+    expect(current?.rulesAvailable).toBe(true);
+    expect(current?.rulesStatus).toBe('PROVISIONAL');
   });
 
   it('reports the status of a year that does have rates', () => {
@@ -115,14 +136,18 @@ describe('Scenario: The current calendar year is offered for Schedule FA', () =>
 });
 
 describe('Scenario: Offering a period and defaulting to it are separate decisions', () => {
+  /*
+   * Now that FY 2026-27 ships a rule set, the current year IS computable and the
+   * default follows it. The rule being asserted is unchanged — default to the
+   * most recent year that can actually be computed — but the answer moved when
+   * the rates arrived, which is the behaviour working rather than breaking.
+   */
   it('defaults to the most recent year that can actually be computed', () => {
     on('2026-08-04');
     const periods = ReferenceUC.periods();
 
-    // FY 2026-27 is current but has no rule set: opening the tax screen on it
-    // would show an error the user cannot act on and did not cause.
     expect(periods.currentFinancialYear).toBe('2026-27');
-    expect(periods.defaultFinancialYear).toBe('2025-26');
+    expect(periods.defaultFinancialYear).toBe('2026-27');
   });
 
   it('still offers the current year even when it is not the default', () => {

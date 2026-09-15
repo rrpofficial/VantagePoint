@@ -88,3 +88,4 @@ export {
 export { LoanAuditRepository } from './loan-audit-repository.js';
 export { ChitScheduleRepository } from './chit-schedule-repository.js';
 export { RateRepository, type StoredRate } from './rate-repository.js';
+export { PriceRepository, vaultPriceSource, type AssetPrice } from './price-repository.js';

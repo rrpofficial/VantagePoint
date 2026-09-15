@@ -29,6 +29,13 @@ export default defineConfig({
     include: ['packages/**/test/**/*.spec.ts', 'tests/**/*.spec.ts'],
     exclude: ['**/node_modules/**', 'tests/e2e/**', 'tests/container/**', 'tests/manual/**'],
     setupFiles: ['tests/test-kit/setup.ts'],
+    /*
+     * Deletes the temporary vaults the suite opens. Without it every run leaves
+     * a directory per test behind, and they accumulate until the disk fills —
+     * which surfaces as `VAULT_UNLOCK_FAILED` from unrelated tests rather than
+     * as the ENOSPC it actually is.
+     */
+    globalSetup: ['tests/test-kit/teardown.ts'],
     coverage: {
       provider: 'v8',
       include: ['packages/*/src/**'],

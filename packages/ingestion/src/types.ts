@@ -141,6 +141,15 @@ export interface ParsedTransaction {
    * — the one gap a user cannot otherwise find.
    */
   readonly statedRemainingQuantity?: Quantity;
+  /**
+   * The market price per unit the SOURCE stated, where it states one.
+   *
+   * A holdings statement reports what the position is worth today as well as
+   * what it cost. Carried through so the import can record it: with no outbound
+   * network (ADR-010) this is the only way a market price ever reaches the
+   * product, and without it every holding is valued at cost.
+   */
+  readonly marketPricePerUnit?: Money;
   /** Set on a SELL. Flags the block sold on vest day to fund withholding. */
   readonly disposalKind?: 'SALE' | 'SELL_TO_COVER';
   /** The broker's order identifier, where the source states one. */
